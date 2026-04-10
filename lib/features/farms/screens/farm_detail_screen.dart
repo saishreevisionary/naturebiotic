@@ -4,6 +4,8 @@ import 'package:nature_biotic/services/supabase_service.dart';
 import 'package:nature_biotic/features/crops/screens/add_crop_screen.dart';
 import 'package:nature_biotic/features/crops/screens/crop_detail_screen.dart';
 
+import 'package:nature_biotic/core/call_tracker.dart';
+
 class FarmDetailScreen extends StatefulWidget {
   final Map<String, dynamic> farm;
 
@@ -13,18 +15,60 @@ class FarmDetailScreen extends StatefulWidget {
   State<FarmDetailScreen> createState() => _FarmDetailScreenState();
 }
 
-class _FarmDetailScreenState extends State<FarmDetailScreen> {
+class _FarmDetailScreenState extends State<FarmDetailScreen> with WidgetsBindingObserver {
   late Map<String, dynamic> _farm;
   List<Map<String, dynamic>> _crops = [];
   Map<String, dynamic>? _farmer;
   bool _isAdmin = false;
   bool _isLoading = true;
 
+  // Tracking
+  DateTime? _callStartTime;
+  String? _dialedNumber;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _farm = widget.farm;
     _checkAdminStatus();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _callStartTime != null && _dialedNumber != null) {
+      final startTime = _callStartTime!;
+      final dialedNumber = _dialedNumber!;
+      
+      _callStartTime = null;
+      _dialedNumber = null;
+
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          CallTracker.processCallResult(
+            context, 
+            dialedNumber, 
+            startTime, 
+            farmerId: _farm['farmer_id'].toString()
+          );
+        }
+      });
+    }
+  }
+
+  void _initiateCall() {
+    final number = _farmer?['mobile']?.toString();
+    if (number == null || number.isEmpty) return;
+
+    _callStartTime = DateTime.now();
+    _dialedNumber = number;
+    CallTracker.makeCall(context, number, farmerId: _farm['farmer_id'].toString());
   }
 
   Future<void> _checkAdminStatus() async {
@@ -226,6 +270,14 @@ class _FarmDetailScreenState extends State<FarmDetailScreen> {
                         ],
                       ),
                     ),
+                    if (_farmer?['mobile'] != null)
+                      IconButton(
+                        onPressed: _initiateCall,
+                        icon: const Icon(Icons.call, size: 20, color: Colors.green),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    const SizedBox(width: 8),
                     const Icon(Icons.verified_user_rounded, size: 16, color: Colors.blue),
                   ],
                 ),

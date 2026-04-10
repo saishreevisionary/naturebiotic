@@ -575,6 +575,35 @@ class SupabaseService {
     await client.from('leaves').update({'status': status}).eq('id', id);
   }
 
+  // Call Log Methods
+  static Future<void> addCallLog(Map<String, dynamic> logData) async {
+    // Convert 'null' string or empty string to actual null for farmer_id
+    final farmerId = (logData['farmer_id'] == null || logData['farmer_id'].toString().isEmpty || logData['farmer_id'] == 'null')
+      ? null 
+      : logData['farmer_id'];
+
+    await client.from('call_logs').insert({
+      ...logData,
+      'farmer_id': farmerId,
+      'executive_id': client.auth.currentUser?.id,
+      'created_at': DateTime.now().toIso8601String(),
+    });
+  }
+
+  static Future<List<Map<String, dynamic>>> getCallLogs({String? userId}) async {
+    final profile = await getProfile();
+    var query = client.from('call_logs').select('*, profiles(full_name), farmers(name)');
+    
+    if (userId != null) {
+      query = query.eq('executive_id', userId);
+    } else if (profile?['role'] == 'executive') {
+      query = query.eq('executive_id', client.auth.currentUser!.id);
+    }
+    
+    final response = await query.order('created_at', ascending: false);
+    return List<Map<String, dynamic>>.from(response);
+  }
+
   // Sign out
   static Future<void> signOut() async {
     await client.auth.signOut();

@@ -5,6 +5,8 @@ import 'package:nature_biotic/features/farmers/screens/add_farmer_screen.dart';
 import 'package:nature_biotic/features/farms/screens/add_farm_screen.dart';
 import 'package:nature_biotic/features/farms/screens/farm_detail_screen.dart';
 
+import 'package:nature_biotic/core/call_tracker.dart';
+
 class FarmerDetailScreen extends StatefulWidget {
   final Map<String, dynamic> farmer;
 
@@ -14,16 +16,58 @@ class FarmerDetailScreen extends StatefulWidget {
   State<FarmerDetailScreen> createState() => _FarmerDetailScreenState();
 }
 
-class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
+class _FarmerDetailScreenState extends State<FarmerDetailScreen> with WidgetsBindingObserver {
   late Map<String, dynamic> _farmer;
   List<Map<String, dynamic>> _farms = [];
   bool _isLoading = true;
 
+  // Tracking
+  DateTime? _callStartTime;
+  String? _dialedNumber;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _farmer = widget.farmer;
     _loadFarms();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _callStartTime != null && _dialedNumber != null) {
+      final startTime = _callStartTime!;
+      final dialedNumber = _dialedNumber!;
+      
+      _callStartTime = null;
+      _dialedNumber = null;
+
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          CallTracker.processCallResult(
+            context, 
+            dialedNumber, 
+            startTime, 
+            farmerId: _farmer['id'].toString()
+          );
+        }
+      });
+    }
+  }
+
+  void _initiateCall() {
+    final number = _farmer['mobile']?.toString();
+    if (number == null || number.isEmpty) return;
+
+    _callStartTime = DateTime.now();
+    _dialedNumber = number;
+    CallTracker.makeCall(context, number, farmerId: _farmer['id'].toString());
   }
 
   Future<void> _loadFarms() async {
@@ -166,7 +210,7 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
                   ),
                 ),
                 const SizedBox(height: 32),
-                _infoSection(Icons.phone_outlined, 'Mobile Number', _farmer['mobile'] ?? 'N/A'),
+                _phoneNumberSection(),
                 _infoSection(Icons.location_on_outlined, 'Village', _farmer['village'] ?? 'N/A'),
                 _infoSection(Icons.home_outlined, 'Address', _farmer['address'] ?? 'N/A'),
                 const SizedBox(height: 32),
@@ -250,6 +294,41 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> {
             MaterialPageRoute(builder: (context) => FarmDetailScreen(farm: farm)),
           );
         },
+      ),
+    );
+  }
+
+  Widget _phoneNumberSection() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24.0),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.phone_outlined, color: AppColors.primary, size: 24),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Mobile Number', style: TextStyle(color: AppColors.textGray, fontSize: 13)),
+                const SizedBox(height: 4),
+                Text(_farmer['mobile'] ?? 'N/A', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+              ],
+            ),
+          ),
+          if (_farmer['mobile'] != null)
+            IconButton.filled(
+              onPressed: _initiateCall,
+              icon: const Icon(Icons.call, size: 20),
+              style: IconButton.styleFrom(backgroundColor: Colors.green),
+            ),
+        ],
       ),
     );
   }

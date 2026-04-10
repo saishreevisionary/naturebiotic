@@ -8,6 +8,8 @@ import 'package:nature_biotic/features/attendance/screens/leave_request_screen.d
 import 'package:nature_biotic/features/attendance/screens/attendance_history_screen.dart';
 import 'package:nature_biotic/features/attendance/screens/admin_attendance_screen.dart';
 import 'package:nature_biotic/features/attendance/screens/admin_leave_approval_screen.dart';
+import 'package:nature_biotic/features/calls/screens/executive_dialer_screen.dart';
+import 'package:nature_biotic/features/calls/screens/admin_call_logs_screen.dart';
 import 'package:intl/intl.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -262,6 +264,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 16),
+                _workActionCard(
+                  context,
+                  title: 'Executive Call Logs',
+                  subtitle: 'Monitor Phone Activities',
+                  icon: Icons.phone_callback_rounded,
+                  color: Colors.green,
+                  fullWidth: true,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const AdminCallLogsScreen()),
+                  ),
+                ),
               ],
               const SizedBox(height: 32),
               
@@ -322,6 +337,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   onTap: () => Navigator.push(
                     context, 
                     MaterialPageRoute(builder: (context) => const AttendanceHistoryScreen())
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _workActionCard(
+                  context,
+                  title: 'Nature Biotic Dialer',
+                  subtitle: 'Call Farmers & Contacts',
+                  icon: Icons.call_rounded,
+                  color: Colors.green,
+                  fullWidth: true,
+                  onTap: () => Navigator.push(
+                    context, 
+                    MaterialPageRoute(builder: (context) => const ExecutiveDialerScreen())
                   ),
                 ),
               ],
