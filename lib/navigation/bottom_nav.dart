@@ -3,7 +3,7 @@ import 'package:nature_biotic/core/theme.dart';
 import 'package:nature_biotic/features/dashboard/screens/dashboard_screen.dart';
 import 'package:nature_biotic/features/farmers/screens/farmer_list_screen.dart';
 import 'package:nature_biotic/features/farms/screens/farm_list_screen.dart';
-import 'package:nature_biotic/features/reports/screens/report_generator_screen.dart';
+import 'package:nature_biotic/features/reports/screens/reports_list_screen.dart';
 import 'package:nature_biotic/features/profile/screens/profile_screen.dart';
 
 class BottomNav extends StatefulWidget {
@@ -20,7 +20,7 @@ class _BottomNavState extends State<BottomNav> {
     const DashboardScreen(),
     const FarmerListScreen(),
     const FarmListScreen(),
-    const ReportGeneratorScreen(),
+    const ReportsListScreen(),
     const ProfileScreen(),
   ];
 

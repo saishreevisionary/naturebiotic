@@ -31,7 +31,57 @@ class _FarmListScreenState extends State<FarmListScreen> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+      debugPrint('Error loading farms: $e');
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load farms: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _editFarm(Map<String, dynamic> farm) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => AddFarmScreen(farm: farm)),
+    );
+    _loadFarms();
+  }
+
+  Future<void> _deleteFarm(Map<String, dynamic> farm) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Farm'),
+        content: Text('Are you sure you want to delete ${farm['name']}?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await SupabaseService.deleteFarm(farm['id']);
+        _loadFarms();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Farm deleted successfully')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error deleting farm: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
     }
   }
 
@@ -59,6 +109,8 @@ class _FarmListScreenState extends State<FarmListScreen> {
                   place: farm['place'] ?? 'N/A',
                   area: '${farm['area'] ?? '0'} Acres',
                   soilType: farm['soil_type'] ?? 'N/A',
+                  onEdit: () => _editFarm(farm),
+                  onDelete: () => _deleteFarm(farm),
                   onViewDetails: () {
                     debugPrint('Opening farm details for: ${farm['name']}');
                     Navigator.push(
@@ -72,6 +124,7 @@ class _FarmListScreenState extends State<FarmListScreen> {
               },
             ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'add_farm_fab',
         onPressed: () async {
           await Navigator.push(
             context,
@@ -92,6 +145,8 @@ class FarmCard extends StatelessWidget {
   final String area;
   final String soilType;
   final VoidCallback? onViewDetails;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
 
   const FarmCard({
     super.key,
@@ -100,6 +155,8 @@ class FarmCard extends StatelessWidget {
     required this.area,
     required this.soilType,
     this.onViewDetails,
+    this.onEdit,
+    this.onDelete,
   });
 
   @override
@@ -132,7 +189,17 @@ class FarmCard extends StatelessWidget {
                 ),
                 child: const Icon(Icons.agriculture_rounded, color: AppColors.primary),
               ),
-              const Icon(Icons.more_vert_rounded, color: AppColors.textGray),
+              PopupMenuButton<String>(
+                onSelected: (value) {
+                  if (value == 'edit') onEdit?.call();
+                  if (value == 'delete') onDelete?.call();
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                  const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
+                ],
+                icon: const Icon(Icons.more_vert_rounded, color: AppColors.textGray),
+              ),
             ],
           ),
           const SizedBox(height: 16),

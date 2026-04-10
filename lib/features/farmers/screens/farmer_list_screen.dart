@@ -14,6 +14,14 @@ class FarmerListScreen extends StatefulWidget {
 class _FarmerListScreenState extends State<FarmerListScreen> {
   List<Map<String, dynamic>> _farmers = [];
   bool _isLoading = true;
+  String? _selectedCategory;
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -52,58 +60,115 @@ class _FarmerListScreenState extends State<FarmerListScreen> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
                 child: TextField(
+                  controller: _searchController,
+                  onChanged: (v) => setState(() {}),
                   decoration: InputDecoration(
                     hintText: 'Search Farmers...',
                     prefixIcon: const Icon(Icons.search_rounded),
                     fillColor: AppColors.secondary.withOpacity(0.3),
+                    suffixIcon: _searchController.text.isNotEmpty 
+                        ? IconButton(
+                            icon: const Icon(Icons.clear_rounded),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() {});
+                            },
+                          )
+                        : null,
                   ),
                 ),
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
-                child: Row(
-                  children: [
-                    const FilterChipWidget(label: 'Hot', color: Colors.red),
-                    const SizedBox(width: 8),
-                    const FilterChipWidget(label: 'Warm', color: Colors.orange),
-                    const SizedBox(width: 8),
-                    const FilterChipWidget(label: 'Cold', color: Colors.blue),
-                    const Spacer(),
-                    TextButton(
-                      onPressed: () {},
-                      child: const Text('Clear All', style: TextStyle(color: AppColors.primary)),
-                    ),
-                  ],
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      FilterChipWidget(
+                        label: 'Hot', 
+                        color: Colors.red,
+                        isSelected: _selectedCategory == 'Hot',
+                        onTap: () => setState(() => _selectedCategory = _selectedCategory == 'Hot' ? null : 'Hot'),
+                      ),
+                      const SizedBox(width: 8),
+                      FilterChipWidget(
+                        label: 'Warm', 
+                        color: Colors.orange,
+                        isSelected: _selectedCategory == 'Warm',
+                        onTap: () => setState(() => _selectedCategory = _selectedCategory == 'Warm' ? null : 'Warm'),
+                      ),
+                      const SizedBox(width: 8),
+                      FilterChipWidget(
+                        label: 'Cold', 
+                        color: Colors.blue,
+                        isSelected: _selectedCategory == 'Cold',
+                        onTap: () => setState(() => _selectedCategory = _selectedCategory == 'Cold' ? null : 'Cold'),
+                      ),
+                      const SizedBox(width: 16),
+                      TextButton(
+                        onPressed: () {
+                          setState(() {
+                            _selectedCategory = null;
+                            _searchController.clear();
+                          });
+                        },
+                        child: const Text('Clear All', style: TextStyle(color: AppColors.primary)),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               Expanded(
-                child: _farmers.isEmpty 
-                  ? const Center(child: Text('No farmers found.'))
-                  : ListView.builder(
+                child: Builder(
+                  builder: (context) {
+                    final query = _searchController.text.toLowerCase();
+                    final filtered = _farmers.where((f) {
+                      final name = (f['name'] ?? '').toString().toLowerCase();
+                      final village = (f['village'] ?? '').toString().toLowerCase();
+                      final mobile = (f['mobile'] ?? '').toString().toLowerCase();
+                      final category = f['category'];
+                      
+                      final matchesQuery = name.contains(query) || village.contains(query) || mobile.contains(query);
+                      final matchesCategory = _selectedCategory == null || category == _selectedCategory;
+                      
+                      return matchesQuery && matchesCategory;
+                    }).toList();
+
+                    if (filtered.isEmpty) {
+                      return const Center(child: Text('No farmers found.'));
+                    }
+
+                    return ListView.builder(
                       padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
-                      itemCount: _farmers.length,
+                      itemCount: filtered.length,
                       itemBuilder: (context, index) {
-                        final farmer = _farmers[index];
+                        final farmer = filtered[index];
                         return FarmerCard(
                           name: farmer['name'] ?? 'N/A',
                           village: farmer['village'] ?? 'N/A',
                           category: farmer['category'] ?? 'Warm',
                           categoryColor: _getCategoryColor(farmer['category']),
-                          onTap: () {
-                            Navigator.push(
+                          onTap: () async {
+                            final result = await Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (context) => FarmerDetailScreen(farmer: farmer),
                               ),
                             );
+                            if (result == true) {
+                              _loadFarmers();
+                            }
                           },
                         );
                       },
-                    ),
+                    );
+                  }
+                ),
               ),
             ],
           ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'add_farmer_fab',
         onPressed: () async {
           await Navigator.push(
             context,
@@ -130,24 +195,42 @@ class _FarmerListScreenState extends State<FarmerListScreen> {
 class FilterChipWidget extends StatelessWidget {
   final String label;
   final Color color;
+  final bool isSelected;
+  final VoidCallback onTap;
 
-  const FilterChipWidget({super.key, required this.label, required this.color});
+  const FilterChipWidget({
+    super.key, 
+    required this.label, 
+    required this.color,
+    required this.isSelected,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.5)),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? color : color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.withOpacity(0.5)),
+          boxShadow: isSelected ? [
+            BoxShadow(
+              color: color.withOpacity(0.3),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            )
+          ] : null,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : color,
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ),
     );

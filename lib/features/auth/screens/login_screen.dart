@@ -56,39 +56,88 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<void> _handleForgotPassword() async {
+    final email = _identifierController.text.trim();
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter your email address to reset password'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      await SupabaseService.resetPasswordForEmail(email);
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Reset Link Sent'),
+            content: Text('A password reset link has been sent to $email. Please check your inbox.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 48),
-              const Center(
-                child: Icon(
-                  Icons.eco,
-                  size: 64,
-                  color: AppColors.primary,
+              Center(
+                child: Image.asset(
+                  'assets/logo.png',
+                  width: 150,
                 ),
               ),
               const SizedBox(height: 24),
-              const Text(
-                'Welcome Back',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textBlack,
+              const Center(
+                child: Text(
+                  'Welcome Back',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textBlack,
+                  ),
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Sign in to manage your farming activities',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: AppColors.textGray,
+              const Center(
+                child: Text(
+                  'Sign in to manage your farming activities',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: AppColors.textGray,
+                  ),
                 ),
               ),
               const SizedBox(height: 40),
@@ -142,7 +191,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ],
               ),
-              const Spacer(),
+              const SizedBox(height: 32),
               ElevatedButton(
                 onPressed: _isLoading ? null : _handleLogin,
                 child: _isLoading 
@@ -154,18 +203,19 @@ class _LoginScreenState extends State<LoginScreen> {
                     : const Text('Login'),
               ),
               const SizedBox(height: 16),
-              Center(
-                child: TextButton(
-                  onPressed: () {},
-                  child: const Text(
-                    'Forgot Password?',
-                    style: TextStyle(
-                      color: AppColors.primary,
-                      fontWeight: FontWeight.bold,
+              if (_isAdmin)
+                Center(
+                  child: TextButton(
+                    onPressed: _isLoading ? null : _handleForgotPassword,
+                    child: const Text(
+                      'Forgot Password?',
+                      style: TextStyle(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ),
-              ),
               const SizedBox(height: 16),
             ],
           ),

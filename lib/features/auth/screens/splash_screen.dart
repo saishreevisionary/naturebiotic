@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:nature_biotic/core/theme.dart';
 import 'package:nature_biotic/features/auth/screens/login_screen.dart';
+import 'package:nature_biotic/navigation/bottom_nav.dart';
+import 'package:nature_biotic/services/supabase_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -13,16 +15,35 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    _navigateToLogin();
+    _checkSession();
   }
 
-  _navigateToLogin() async {
+  _checkSession() async {
     await Future.delayed(const Duration(seconds: 2));
-    if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
-      );
+    if (!mounted) return;
+
+    try {
+      final session = SupabaseService.client.auth.currentSession;
+      
+      if (session != null) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const BottomNav()),
+        );
+      } else {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginScreen()),
+        );
+      }
+    } catch (e) {
+      debugPrint('Session check error: $e');
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginScreen()),
+        );
+      }
     }
   }
 
@@ -34,29 +55,9 @@ class _SplashScreenState extends State<SplashScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.eco,
-              size: 100,
-              color: AppColors.primary,
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Nature Biotic',
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                color: AppColors.primary,
-                letterSpacing: 1.2,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Agriculture CRM',
-              style: TextStyle(
-                fontSize: 16,
-                color: AppColors.textGray,
-                letterSpacing: 2.0,
-              ),
+            Image.asset(
+              'assets/logo.png',
+              width: 250,
             ),
           ],
         ),
