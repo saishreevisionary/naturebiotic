@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:nature_biotic/core/theme.dart';
 import 'package:nature_biotic/services/supabase_service.dart';
-import 'package:intl/intl.dart';
+import 'package:nature_biotic/features/calls/screens/executive_call_details_screen.dart';
 
 class AdminCallLogsScreen extends StatefulWidget {
   const AdminCallLogsScreen({super.key});
@@ -11,25 +11,38 @@ class AdminCallLogsScreen extends StatefulWidget {
 }
 
 class _AdminCallLogsScreenState extends State<AdminCallLogsScreen> {
-  List<Map<String, dynamic>> _allLogs = [];
-  List<Map<String, dynamic>> _filteredLogs = [];
+  List<Map<String, dynamic>> _executives = [];
+  Map<String, int> _talkTimeToday = {};
   bool _isLoading = true;
-  String? _selectedExecutiveId;
-  DateTimeRange? _dateRange;
 
   @override
   void initState() {
     super.initState();
-    _loadLogs();
+    _loadExecutives();
   }
 
-  Future<void> _loadLogs() async {
+  Future<void> _loadExecutives() async {
     setState(() => _isLoading = true);
     try {
-      final logs = await SupabaseService.getCallLogs();
+      final execs = await SupabaseService.getExecutives();
+      
+      // Fetch all today's logs to calculate duration
+      final today = DateTime.now();
+      final logs = await SupabaseService.getCallLogs(
+        startDate: today,
+        endDate: today,
+      );
+
+      final Map<String, int> talkTime = {};
+      for (var log in logs) {
+        final execId = log['executive_id'];
+        final duration = (log['duration_seconds'] as num? ?? 0).toInt();
+        talkTime[execId] = (talkTime[execId] ?? 0) + duration;
+      }
+
       setState(() {
-        _allLogs = logs;
-        _applyFilters();
+        _executives = execs;
+        _talkTimeToday = talkTime;
         _isLoading = false;
       });
     } catch (_) {
@@ -37,173 +50,148 @@ class _AdminCallLogsScreenState extends State<AdminCallLogsScreen> {
     }
   }
 
-  void _applyFilters() {
-    setState(() {
-      _filteredLogs = _allLogs.where((log) {
-        bool matchesExec = _selectedExecutiveId == null || log['executive_id'] == _selectedExecutiveId;
-        bool matchesDate = true;
-        if (_dateRange != null) {
-          final logDate = DateTime.parse(log['created_at']);
-          matchesDate = logDate.isAfter(_dateRange!.start) && 
-                        logDate.isBefore(_dateRange!.end.add(const Duration(days: 1)));
-        }
-        return matchesExec && matchesDate;
-      }).toList();
-    });
-  }
-
-  String _formatDuration(int seconds) {
-    if (seconds < 60) return '${seconds}s';
-    final minutes = seconds ~/ 60;
-    final remainingSeconds = seconds % 60;
-    return '${minutes}m ${remainingSeconds}s';
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Executive Call Logs'),
+        title: const Text('Executive Monitoring'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
-            onPressed: _loadLogs,
+            onPressed: _loadExecutives,
           ),
         ],
       ),
-      body: Column(
-        children: [
-          _buildFilters(),
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _filteredLogs.isEmpty
-                    ? const Center(child: Text('No call logs found'))
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _filteredLogs.length,
-                        itemBuilder: (context, index) {
-                          final log = _filteredLogs[index];
-                          return _buildLogCard(log);
-                        },
-                      ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(24, 24, 24, 16),
+                child: Text(
+                  'Select an executive to view their call history and analytics',
+                  style: TextStyle(color: AppColors.textGray, fontSize: 13),
+                ),
+              ),
+              Expanded(
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _executives.isEmpty
+                        ? const Center(child: Text('No executives found'))
+                        : ListView.builder(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            itemCount: _executives.length,
+                            itemBuilder: (context, index) {
+                              final exec = _executives[index];
+                              return _buildExecutiveCard(exec);
+                            },
+                          ),
+              ),
+            ],
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFilters() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      color: Colors.white,
-      child: Row(
-        children: [
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: () async {
-                final range = await showDateRangePicker(
-                  context: context,
-                  firstDate: DateTime(2024),
-                  lastDate: DateTime.now(),
-                  initialDateRange: _dateRange,
-                );
-                if (range != null) {
-                  setState(() => _dateRange = range);
-                  _applyFilters();
-                }
-              },
-              icon: const Icon(Icons.calendar_today_rounded, size: 16),
-              label: Text(_dateRange == null ? 'All Time' : 
-                '${DateFormat('dd MMM').format(_dateRange!.start)} - ${DateFormat('dd MMM').format(_dateRange!.end)}'),
-            ),
-          ),
-          const SizedBox(width: 12),
-          if (_dateRange != null || _selectedExecutiveId != null)
-            IconButton(
-              onPressed: () {
-                setState(() {
-                  _dateRange = null;
-                  _selectedExecutiveId = null;
-                });
-                _applyFilters();
-              },
-              icon: const Icon(Icons.clear_all_rounded, color: Colors.red),
-            ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildLogCard(Map<String, dynamic> log) {
-    final execName = log['profiles']?['full_name'] ?? 'Unknown Exec';
-    final farmerName = log['farmers']?['name'] ?? 'Direct Call';
-    final startTime = DateTime.parse(log['created_at']);
-    final dateStr = DateFormat('dd MMM yyyy, hh:mm a').format(startTime);
-    
+  Widget _buildExecutiveCard(Map<String, dynamic> exec) {
+    final name = exec['full_name'] ?? 'Unknown';
+    final username = exec['username'] ?? 'N/A';
+    final avatarUrl = exec['avatar_url'] ?? '';
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.secondary),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(execName, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
-              Text(_formatDuration(log['duration_seconds'] ?? 0), 
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              const Icon(Icons.phone_in_talk_rounded, size: 14, color: Colors.green),
-              const SizedBox(width: 8),
-              Text(log['phone_number'] ?? 'N/A', style: const TextStyle(fontSize: 13)),
-              const Spacer(),
-              Text(dateStr, style: const TextStyle(fontSize: 11, color: AppColors.textGray)),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.secondary.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.person_outline_rounded, size: 12),
-                    const SizedBox(width: 4),
-                    Text('Farmer: $farmerName', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  log['summary'] != null && log['summary'].isNotEmpty 
-                    ? log['summary'] 
-                    : 'No summary provided by executive.',
-                  style: TextStyle(
-                    fontSize: 12, 
-                    fontStyle: log['summary'] == null ? FontStyle.italic : FontStyle.normal,
-                    color: log['summary'] == null ? AppColors.textGray : AppColors.textBlack,
-                  ),
-                ),
-              ],
-            ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
+      ),
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ExecutiveCallDetailsScreen(
+                executiveId: exec['id'],
+                executiveName: name,
+              ),
+            ),
+          );
+        },
+        borderRadius: BorderRadius.circular(24),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.primary.withOpacity(0.2), width: 2),
+                ),
+                child: CircleAvatar(
+                  radius: 28,
+                  backgroundColor: AppColors.secondary,
+                  backgroundImage: avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
+                  child: avatarUrl.isEmpty ? const Icon(Icons.person, color: AppColors.primary) : null,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '@$username',
+                      style: const TextStyle(color: AppColors.textGray, fontSize: 12),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Icon(Icons.timer_outlined, size: 12, color: AppColors.primary),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Talk Time today: ${((_talkTimeToday[exec['id']] ?? 0) / 60).toStringAsFixed(1)} mins',
+                          style: const TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w500),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Row(
+                  children: [
+                    Text(
+                      'Logs',
+                      style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
+                    SizedBox(width: 4),
+                    Icon(Icons.chevron_right_rounded, color: AppColors.primary, size: 16),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

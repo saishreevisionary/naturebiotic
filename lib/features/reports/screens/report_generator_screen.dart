@@ -79,9 +79,12 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final currentHistory = widget.report?['previous_inputs'] ?? '';
+    final report = widget.report;
+    if (report == null) return const Scaffold(body: Center(child: Text('No report data.')));
+
+    final currentHistory = report['previous_inputs'] ?? '';
     
-    // Aggregate all history entries into a formatted string for the PDF
+    // Aggregate all history entries into a formatted string for the PDF export button logic
     String combinedHistory = currentHistory;
     if (_history.isNotEmpty) {
       combinedHistory += '\n\nHistorical Records:';
@@ -93,123 +96,403 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
     }
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: const Color(0xFFF5F5F5), // Slightly grayish to make the "paper" pop
       appBar: AppBar(
         title: const Text('Report Analysis'),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Column(
-                children: [
-                  const Icon(Icons.check_circle_rounded, size: 60, color: AppColors.primary),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Analysis Complete',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  Text(
-                    'Generated on ${_formatDate(widget.report?['created_at'])}',
-                    style: const TextStyle(color: AppColors.textGray),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 32),
-            _reportSection(
-              title: 'Problem Identified',
-              content: widget.report?['problem'] ?? 'No problem description provided.',
-              icon: Icons.bug_report_rounded,
-            ),
-            const SizedBox(height: 20),
-            _buildHistorySection(currentHistory),
-            const SizedBox(height: 20),
-            _reportSection(
-              title: 'Recommended Products',
-              content: widget.report?['recommendations'] ?? 'No recommendations yet.',
-              icon: Icons.shopping_bag_rounded,
-              isList: true,
-            ),
-            const SizedBox(height: 20),
-            _reportSection(
-              title: 'Estimated Cost',
-              content: 'Total Budget: ${widget.report?['estimated_cost'] ?? '0.00'}',
-              icon: Icons.payments_rounded,
-              accent: true,
-            ),
-            const SizedBox(height: 20),
-            if (widget.report?['signature_url'] != null)
-              _reportSection(
-                title: 'Executive Signature',
-                content: '',
-                icon: Icons.gesture_rounded,
-                customContent: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 900),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                // The "Paper" Report
+                Card(
+                  elevation: 4,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)), // Sharp but soft edges like paper
+                  child: Container(
+                    padding: const EdgeInsets.all(16.0), // Further reduced for mobile
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.secondary.withOpacity(0.5)),
-                  ),
-                  child: Image.network(
-                    widget.report!['signature_url'],
-                    height: 100,
-                    width: 200,
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) => const Icon(Icons.error_outline),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildBrandedHeader(report['created_at']),
+                        const SizedBox(height: 24),
+                        _buildInfoSection(
+                          widget.farmerName ?? 'N/A', 
+                          widget.farmName ?? 'N/A', 
+                          widget.cropName ?? 'N/A'
+                        ),
+                        const SizedBox(height: 24),
+                        _buildSectionTitle('Problem Analysis'),
+                        _buildProblemSection(report['problem'] ?? ''),
+                        
+                        if (currentHistory.isNotEmpty || _history.isNotEmpty) ...[
+                          const SizedBox(height: 24),
+                          _buildSectionTitle('Previous Inputs History'),
+                          _buildHistorySection(currentHistory),
+                        ],
+                        
+                        const SizedBox(height: 24),
+                        _buildSectionTitle('Recommended Products & Treatments'),
+                        _buildRecommendationsTable(report['recommendations'] ?? ''),
+                        
+                        const SizedBox(height: 24),
+                        _buildSectionTitle('Product Requirements & Estimations'),
+                        _buildCostTable(report['estimated_cost'] ?? ''),
+                        
+                        const SizedBox(height: 48),
+                        _buildFooter(report['signature_url']),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            const SizedBox(height: 48),
-            ElevatedButton(
-              onPressed: () async {
-                if (widget.report == null) return;
+                const SizedBox(height: 32),
                 
-                // Construct a modified report map that includes the combined history for the PDF
-                final reportForPdf = Map<String, dynamic>.from(widget.report!);
-                reportForPdf['previous_inputs'] = combinedHistory;
+                // Action Buttons
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    // Construct a modified report map that includes the combined history for the PDF
+                    final reportForPdf = Map<String, dynamic>.from(report);
+                    reportForPdf['previous_inputs'] = combinedHistory;
+    
+                    await PdfService.generateAndShare(
+                      report: reportForPdf,
+                      farmName: widget.farmName ?? 'Unknown Farm',
+                      cropName: widget.cropName ?? 'Unknown Crop',
+                      farmerName: widget.farmerName ?? 'Valued Farmer',
+                    );
+                  },
+                  icon: const Icon(Icons.picture_as_pdf_rounded),
+                  label: const Text('Share PDF Report'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: AppColors.primary,
+                    side: const BorderSide(color: AppColors.primary),
+                    minimumSize: const Size(double.infinity, 54),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ElevatedButton.icon(
+                  onPressed: () => Navigator.popUntil(context, (route) => route.isFirst),
+                  icon: const Icon(Icons.home_rounded),
+                  label: const Text('Back to Dashboard'),
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 54),
+                  ),
+                ),
+                const SizedBox(height: 48),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
-                await PdfService.generateAndShare(
-                  report: reportForPdf,
-                  farmName: widget.farmName ?? 'Unknown Farm',
-                  cropName: widget.cropName ?? 'Unknown Crop',
-                  farmerName: widget.farmerName ?? 'Valued Farmer',
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: AppColors.primary,
-                side: const BorderSide(color: AppColors.primary),
+  Widget _buildBrandedHeader(dynamic createdAt) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 400;
+        
+        if (isNarrow) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'NATURE BIOTIC', 
+                style: TextStyle(
+                  fontSize: 24, 
+                  fontWeight: FontWeight.bold, 
+                  color: Colors.green,
+                  letterSpacing: 1.2,
+                )
               ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+              const SizedBox(height: 2),
+              Text(
+                'Agricultural Analysis & Recommendation Report', 
+                style: TextStyle(fontSize: 11, color: Colors.grey[700], fontWeight: FontWeight.w500)
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Date: ${_formatDate(createdAt)}', 
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.grey)
+              ),
+            ],
+          );
+        }
+
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.picture_as_pdf_rounded),
-                  SizedBox(width: 12),
-                  Text('Export PDF Report'),
+                  const Text(
+                    'NATURE BIOTIC', 
+                    style: TextStyle(
+                      fontSize: 26, 
+                      fontWeight: FontWeight.bold, 
+                      color: Colors.green,
+                      letterSpacing: 1.2,
+                    )
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Agricultural Analysis & Recommendation Report', 
+                    style: TextStyle(fontSize: 12, color: Colors.grey[700], fontWeight: FontWeight.w500)
+                  ),
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.popUntil(context, (route) => route.isFirst);
-              },
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.check_rounded, color: Colors.white),
-                  SizedBox(width: 12),
-                  Text('Finish & Return Home'),
-                ],
-              ),
+            const SizedBox(width: 12),
+            Text(
+              'Date: ${_formatDate(createdAt)}', 
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)
             ),
-            const SizedBox(height: 40),
+          ],
+        );
+      }
+    );
+  }
+
+  Widget _buildInfoSection(String farmer, String farm, String crop) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey[300]!),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(child: _infoItem('Farmer Name', farmer)),
+          const SizedBox(width: 8),
+          Expanded(child: _infoItem('Farm Name', farm)),
+          const SizedBox(width: 8),
+          Expanded(child: _infoItem('Crop Name', crop)),
+        ],
+      ),
+    );
+  }
+
+  Widget _infoItem(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: TextStyle(fontSize: 9, color: Colors.grey[600], fontWeight: FontWeight.bold)),
+        const SizedBox(height: 2),
+        Text(
+          value, 
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 1,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: const BoxDecoration(color: Color(0xFFE8F5E9)), // Light Green 100
+      child: Text(
+        title.toUpperCase(), 
+        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF1B5E20), letterSpacing: 0.5)
+      ),
+    );
+  }
+
+  Widget _buildProblemSection(String problem) {
+    final parts = problem.split(', ');
+    List<Widget> widgets = [];
+    
+    for (var part in parts) {
+      if (part.contains('{img:')) {
+        final problemName = part.split('{img:')[0].trim();
+        final imageUrl = part.split('{img:')[1].replaceAll('}', '').trim();
+        widgets.add(
+          Container(
+            width: 260,
+            margin: const EdgeInsets.only(bottom: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(problemName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.network(
+                    imageUrl,
+                    height: 160,
+                    width: 260,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      height: 150, width: 250, color: Colors.grey[100], 
+                      child: const Icon(Icons.image_not_supported_rounded, color: Colors.grey)
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      } else {
+        widgets.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text('• $part', style: const TextStyle(fontSize: 14)),
+          ),
+        );
+      }
+    }
+
+    return Wrap(spacing: 20, runSpacing: 10, children: widgets);
+  }
+
+  Widget _buildRecommendationsTable(String recommendations) {
+    final lines = recommendations.split('\n').where((l) => l.isNotEmpty).toList();
+    if (lines.isEmpty) return const Text('No recommendations provided.');
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minWidth: MediaQuery.of(context).size.width - 64),
+        child: Table(
+          border: TableBorder.all(color: Colors.grey[300]!),
+          columnWidths: const {
+            0: FlexColumnWidth(2.5),
+            1: FlexColumnWidth(2),
+            2: FlexColumnWidth(1),
+            3: FlexColumnWidth(1),
+          },
+          children: [
+            // Header
+            TableRow(
+              decoration: const BoxDecoration(color: Color(0xFF2E7D32)),
+              children: ['Product', 'Application', 'Dose', 'Filler'].map((h) => Padding(
+                padding: const EdgeInsets.all(10),
+                child: Text(h, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+              )).toList(),
+            ),
+            // Rows
+            ...lines.map((line) {
+              final parts = line.split(' - ');
+              if (parts.length < 2) return TableRow(children: [Padding(padding: const EdgeInsets.all(8), child: Text(line)), const SizedBox(), const SizedBox(), const SizedBox()]);
+              
+              final prodPart = parts[0]; 
+              final detailsPart = parts[1]; 
+              
+              final prodName = prodPart.contains('(') ? prodPart.split('(')[0].trim() : prodPart;
+              final app = prodPart.contains('(') ? prodPart.split('(')[1].replaceAll(')', '').trim() : '';
+              
+              final detailParts = detailsPart.split(', ');
+              final dose = detailParts[0].replaceAll('Dose: ', '').trim();
+              final filler = detailParts.length > 1 ? detailParts[1].replaceAll('Filler: ', '').trim() : '';
+              
+              return TableRow(
+                children: [prodName, app, dose, filler].map((t) => Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Text(t, style: const TextStyle(fontSize: 12)),
+                )).toList(),
+              );
+            }),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildCostTable(String costs) {
+    final lines = costs.split('\n').where((l) => l.isNotEmpty).toList();
+    if (lines.isEmpty) return const Text('No estimation provided.');
+
+    String grandTotal = '0';
+    String nextVisit = 'N/A';
+    List<List<String>> tableData = [];
+
+    for (var line in lines) {
+      if (line.startsWith('Grand Total:')) {
+        grandTotal = line.split(': ')[1];
+        continue;
+      }
+      if (line.startsWith('Next Visit:')) {
+        nextVisit = line.split(': ')[1];
+        continue;
+      }
+
+      final parts = line.split(' - ');
+      if (parts.length < 2) continue;
+
+      final prodPart = parts[0]; 
+      final detailsPart = parts[1]; 
+
+      final prodName = prodPart.contains('(Pkg:') ? prodPart.split('(Pkg:')[0].trim() : prodPart;
+      final pkg = prodPart.contains('(Pkg:') ? prodPart.split('(Pkg:')[1].replaceAll(')', '').trim() : '';
+
+      final detailParts = detailsPart.split(', ');
+      final qty = detailParts.length > 0 ? detailParts[0].replaceAll('Qty: ', '').trim() : '';
+      final mrp = detailParts.length > 1 ? detailParts[1].replaceAll('MRP: ', '').trim() : '';
+      final offer = detailParts.length > 2 ? detailParts[2].replaceAll('Offer: ', '').trim() : '';
+      final total = detailParts.length > 3 ? detailParts[3].replaceAll('Total: ', '').trim() : '';
+
+      tableData.add([prodName, pkg, qty, mrp, offer, total]);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Table(
+            border: TableBorder.all(color: Colors.grey[300]!),
+            defaultColumnWidth: const IntrinsicColumnWidth(),
+            columnWidths: const {
+              0: FixedColumnWidth(100),
+              1: FixedColumnWidth(40),
+              2: FixedColumnWidth(30),
+            },
+            children: [
+              // Header
+              TableRow(
+                decoration: const BoxDecoration(color: Color(0xFF2E7D32)),
+                children: ['Product', 'Size', 'Qty', 'MRP', 'Price', 'Value'].map((h) => Padding(
+                  padding: const EdgeInsets.all(6),
+                  child: Text(h, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10)),
+                )).toList(),
+              ),
+              // Rows
+              ...tableData.map((row) => TableRow(
+                children: row.map((t) => Padding(
+                  padding: const EdgeInsets.all(6),
+                  child: Text(t, style: const TextStyle(fontSize: 10)),
+                )).toList(),
+              )),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Text(
+                'Next Visit Date: $nextVisit', 
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF2E7D32))
+              ),
+            ),
+            Text(
+              'GRAND TOTAL: $grandTotal', 
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1B5E20))
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -228,19 +511,15 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
               Icon(Icons.history_rounded, color: AppColors.primary, size: 24),
               SizedBox(width: 12),
               Text(
-                'Previous Inputs History',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textBlack,
-                ),
+                'Current Visit Observations',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textBlack),
               ),
             ],
           ),
           const SizedBox(height: 12),
           Text(
-            currentHistory.isEmpty ? 'No data provided in current report.' : currentHistory,
-            style: TextStyle(fontSize: 14, color: AppColors.textBlack.withOpacity(0.8), height: 1.5),
+            currentHistory.isEmpty ? 'No data provided.' : currentHistory,
+            style: TextStyle(fontSize: 13, color: AppColors.textBlack.withOpacity(0.8), height: 1.5),
           ),
           if (_isLoadingHistory)
             const Padding(
@@ -248,165 +527,56 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
               child: LinearProgressIndicator(minHeight: 2),
             )
           else if (_history.isNotEmpty) ...[
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
-              child: Divider(),
-            ),
-            const Text(
-              'Historical Logs',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primary),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: _history.map((h) {
-                return Container(
-                  width: 250, // Fixed width for each history card
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.6),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _formatDate(h['created_at']),
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: AppColors.textGray),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        h['previous_inputs'] ?? 'No data',
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
+            const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider()),
+            const Text('Historical Logs', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.primary)),
+            const SizedBox(height: 12),
+            ..._history.map((h) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(_formatDate(h['created_at']), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: AppColors.textGray)),
+                  const SizedBox(height: 4),
+                  Text(h['previous_inputs'] ?? 'No data', style: const TextStyle(fontSize: 12)),
+                ],
+              ),
+            )),
           ],
         ],
       ),
     );
   }
 
-  Widget _reportSection({
-    required String title,
-    required String content,
-    required IconData icon,
-    bool isList = false,
-    bool accent = false,
-    Widget? customContent,
-  }) {
-    List<Widget> contentWidgets = [];
-
-    if (title == 'Problem Identified') {
-      final parts = content.split(', ');
-      return Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: accent ? AppColors.primary.withOpacity(0.05) : AppColors.secondary.withOpacity(0.5),
-          borderRadius: BorderRadius.circular(24),
-          border: accent ? Border.all(color: AppColors.primary.withOpacity(0.2)) : null,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildFooter(String? signatureUrl) {
+    return Column(
+      children: [
+        const Divider(thickness: 1),
+        const SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(icon, color: AppColors.primary, size: 24),
-                const SizedBox(width: 12),
-                Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textBlack)),
+                const Text('Nature Biotic Executive Signature', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                if (signatureUrl != null)
+                  Image.network(signatureUrl, height: 50, width: 150, fit: BoxFit.contain)
+                else
+                  const SizedBox(height: 50),
+                Container(width: 150, height: 1, color: Colors.grey[400]),
               ],
             ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 16,
-              runSpacing: 16,
-              children: parts.map((part) {
-                if (part.contains('{img:')) {
-                  final problemName = part.split('{img:')[0].trim();
-                  final imageUrl = part.split('{img:')[1].replaceAll('}', '').trim();
-                  return Container(
-                    width: 250, // Fixed width to allow wrapping
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(problemName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                        const SizedBox(height: 6),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
-                          child: Image.network(
-                            imageUrl,
-                            height: 150,
-                            width: 250,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) => Container(
-                              height: 150,
-                              width: 250,
-                              color: Colors.grey[200],
-                              child: const Icon(Icons.image_not_supported_rounded, color: Colors.grey),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                } else {
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Text(part, style: const TextStyle(fontSize: 14)),
-                  );
-                }
-              }).toList(),
+            const Expanded(
+              child: Text(
+                'Thank you for choosing Nature Biotic for a sustainable future.', 
+                style: TextStyle(fontSize: 10, fontStyle: FontStyle.italic, color: Colors.grey),
+                textAlign: TextAlign.right,
+              ),
             ),
           ],
         ),
-      );
-    }
- else {
-      contentWidgets.add(
-        Text(
-          content,
-          style: TextStyle(
-            fontSize: 14,
-            color: AppColors.textBlack.withOpacity(0.8),
-            height: 1.5,
-            fontWeight: accent ? FontWeight.bold : FontWeight.normal,
-          ),
-        ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: accent ? AppColors.primary.withOpacity(0.05) : AppColors.secondary.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(24),
-        border: accent ? Border.all(color: AppColors.primary.withOpacity(0.2)) : null,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: AppColors.primary, size: 24),
-              const SizedBox(width: 12),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textBlack,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (customContent != null) customContent else ...contentWidgets,
-        ],
-      ),
+      ],
     );
   }
 }

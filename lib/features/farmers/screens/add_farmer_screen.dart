@@ -2,8 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:nature_biotic/core/theme.dart';
 import 'package:nature_biotic/services/supabase_service.dart';
+import 'package:nature_biotic/services/local_database_service.dart';
+import 'package:nature_biotic/services/sync_manager.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:file_picker/file_picker.dart';
 import 'package:csv/csv.dart';
 
@@ -21,7 +25,7 @@ class _AddFarmerScreenState extends State<AddFarmerScreen> {
   final _villageController = TextEditingController();
   final _mobileController = TextEditingController();
   final _addressController = TextEditingController();
-  String _selectedCategory = 'Warm';
+  String? _selectedCategory;
   List<String> _categories = ['Hot', 'Warm', 'Cold'];
   bool _isLoading = false;
 
@@ -34,7 +38,7 @@ class _AddFarmerScreenState extends State<AddFarmerScreen> {
       _villageController.text = widget.farmer!['village'] ?? '';
       _mobileController.text = widget.farmer!['mobile'] ?? '';
       _addressController.text = widget.farmer!['address'] ?? '';
-      _selectedCategory = widget.farmer!['category'] ?? 'Warm';
+      _selectedCategory = widget.farmer!['category'];
     }
   }
 
@@ -44,7 +48,7 @@ class _AddFarmerScreenState extends State<AddFarmerScreen> {
       if (options.isNotEmpty) {
         setState(() {
           _categories = options.map((e) => e['label'].toString()).toList();
-          if (!_categories.contains(_selectedCategory)) {
+          if (_selectedCategory != null && !_categories.contains(_selectedCategory)) {
             _selectedCategory = _categories.first;
           }
         });
@@ -63,12 +67,30 @@ class _AddFarmerScreenState extends State<AddFarmerScreen> {
         'mobile': _mobileController.text.trim(),
         'address': _addressController.text.trim(),
         'category': _selectedCategory,
+        'created_at': DateTime.now().toIso8601String(),
       };
 
-      if (widget.farmer != null) {
-        await SupabaseService.updateFarmer(widget.farmer!['id'].toString(), data);
+      // NEW OFFLINE-FIRST LOGIC
+      final String op = widget.farmer != null ? 'UPDATE' : 'INSERT';
+      final Map<String, dynamic> offlineData = {
+        ...data,
+        if (widget.farmer != null) 'id': widget.farmer!['id'].toString(),
+      };
+
+      if (kIsWeb) {
+        if (widget.farmer != null) {
+          await SupabaseService.updateFarmer(widget.farmer!['id'].toString(), data);
+        } else {
+          await SupabaseService.addFarmer(data);
+        }
       } else {
-        await SupabaseService.addFarmer(data);
+        await LocalDatabaseService.saveAndQueue(
+          tableName: 'farmers',
+          data: offlineData,
+          operation: op,
+        );
+        // Attempt to sync in background
+        SyncManager().sync();
       }
 
       if (mounted) {
@@ -151,8 +173,21 @@ class _AddFarmerScreenState extends State<AddFarmerScreen> {
             }
           }
           
-          // Basic validation: name is required
-          if (farmer['name'] != null && farmer['name'].toString().isNotEmpty) {
+          // Basic validation: name is required and mobile must be 10 digits
+          final nameStr = farmer['name']?.toString() ?? '';
+          final mobileStr = farmer['mobile']?.toString() ?? '';
+          
+          // Clean mobile number (keep only digits)
+          final cleanMobile = mobileStr.replaceAll(RegExp(r'\D'), '');
+          
+          if (nameStr.isNotEmpty) {
+            if (cleanMobile.isNotEmpty && cleanMobile.length != 10) {
+              // Optionally skip or throw error. Let's throw for clarity in bulk upload.
+              throw 'Invalid mobile number for "$nameStr": $mobileStr (Must be 10 digits)';
+            }
+            
+            farmer['mobile'] = cleanMobile;
+            
             // Ensure all recognized keys exist in every map to maintain consistent schema
             for (var k in ['mobile', 'village', 'address', 'category']) {
               farmer[k] ??= (k == 'category' ? 'Warm' : null);
@@ -194,18 +229,40 @@ class _AddFarmerScreenState extends State<AddFarmerScreen> {
       const exampleRow = ['John Doe', '9876543210', 'Greenfield', '123 Main St', 'Warm'];
       
       String csvContent = const ListToCsvConverter().convert([headers, exampleRow]);
+      final Uint8List bytes = Uint8List.fromList(utf8.encode(csvContent));
       
-      final String? outputPath = await FilePicker.platform.saveFile(
-        dialogTitle: 'Save CSV Template',
-        fileName: 'farmer_template.csv',
-        type: FileType.custom,
-        allowedExtensions: ['csv'],
-        bytes: utf8.encode(csvContent),
-      );
+      if (kIsWeb) {
+        await FilePicker.platform.saveFile(
+          fileName: 'farmer_template.csv',
+          bytes: bytes,
+        );
+      } else if (Platform.isAndroid || Platform.isIOS) {
+        // For mobile, passing bytes to saveFile handles the write operation
+        // safely via the system's storage APIs. Manual writing via File() 
+        // fails on Android due to virtual paths (URIs).
+        await FilePicker.platform.saveFile(
+          dialogTitle: 'Save CSV Template',
+          fileName: 'farmer_template.csv',
+          type: FileType.custom,
+          allowedExtensions: ['csv'],
+          bytes: bytes,
+        );
+      } else {
+        // Desktop handling (Windows/macOS/Linux)
+        final String? outputPath = await FilePicker.platform.saveFile(
+          dialogTitle: 'Save CSV Template',
+          fileName: 'farmer_template.csv',
+          type: FileType.custom,
+          allowedExtensions: ['csv'],
+          bytes: bytes,
+        );
 
-      if (outputPath != null && !kIsWeb) {
-        final file = File(outputPath);
-        await file.writeAsString(csvContent);
+        // On desktop, we still do a manual write to ensure compatibility 
+        // as some versions of the plugin on desktop only pick the path.
+        if (outputPath != null) {
+          final file = File(outputPath);
+          await file.writeAsBytes(bytes);
+        }
       }
 
       if (mounted) {
@@ -247,120 +304,141 @@ class _AddFarmerScreenState extends State<AddFarmerScreen> {
           const SizedBox(width: 8),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Farmer Information',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textBlack,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppColors.secondary.withOpacity(0.5),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Column(
-                  children: [
-                    TextFormField(
-                      controller: _nameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Full Name',
-                        hintText: 'Enter farmer name',
-                        fillColor: Colors.white,
-                      ),
-                      validator: (v) => v!.isEmpty ? 'Required' : null,
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Farmer Information',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textBlack,
                     ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _mobileController,
-                      decoration: const InputDecoration(
-                        labelText: 'Mobile Number',
-                        hintText: 'Enter mobile number',
-                        fillColor: Colors.white,
-                      ),
-                      keyboardType: TextInputType.phone,
-                      validator: (v) => v!.isEmpty ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: AppColors.secondary.withOpacity(0.5),
+                      borderRadius: BorderRadius.circular(20),
                     ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _villageController,
-                      decoration: const InputDecoration(
-                        labelText: 'Village',
-                        hintText: 'Enter village name',
-                        fillColor: Colors.white,
-                      ),
-                      validator: (v) => v!.isEmpty ? 'Required' : null,
+                    child: Column(
+                      children: [
+                        TextFormField(
+                          controller: _nameController,
+                          decoration: const InputDecoration(
+                            labelText: 'Full Name',
+                            hintText: 'Enter farmer name',
+                            fillColor: Colors.white,
+                          ),
+                          validator: (v) => v!.isEmpty ? 'Required' : null,
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _mobileController,
+                          decoration: const InputDecoration(
+                            labelText: 'Mobile Number',
+                            hintText: 'Enter 10 digit mobile number',
+                            fillColor: Colors.white,
+                          ),
+                          keyboardType: TextInputType.phone,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(10),
+                          ],
+                          validator: (v) {
+                            if (v == null || v.isEmpty) return 'Required';
+                            if (v.length != 10) return 'Enter exactly 10 digits';
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _villageController,
+                          decoration: const InputDecoration(
+                            labelText: 'Village',
+                            hintText: 'Enter village name',
+                            fillColor: Colors.white,
+                          ),
+                          validator: (v) => v!.isEmpty ? 'Required' : null,
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                'Other Details',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textBlack,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppColors.secondary.withOpacity(0.5),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Column(
-                  children: [
-                    TextFormField(
-                      controller: _addressController,
-                      maxLines: 3,
-                      decoration: const InputDecoration(
-                        labelText: 'Address',
-                        hintText: 'Enter complete address',
-                        fillColor: Colors.white,
-                      ),
+                  ),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Other Details',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textBlack,
                     ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      value: _selectedCategory,
-                      decoration: const InputDecoration(
-                        labelText: 'Category',
-                        fillColor: Colors.white,
-                      ),
-                       items: _categories.map((String category) {
-                        return DropdownMenuItem(
-                          value: category,
-                          child: Text(category),
-                        );
-                      }).toList(),
-                      onChanged: (String? value) {
-                        setState(() {
-                          _selectedCategory = value!;
-                        });
-                      },
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: AppColors.secondary.withOpacity(0.5),
+                      borderRadius: BorderRadius.circular(20),
                     ),
-                  ],
-                ),
+                    child: Column(
+                      children: [
+                        TextFormField(
+                          controller: _addressController,
+                          maxLines: 3,
+                          decoration: const InputDecoration(
+                            labelText: 'Address',
+                            hintText: 'Enter complete address',
+                            fillColor: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        DropdownButtonFormField<String>(
+                          value: _selectedCategory,
+                          decoration: const InputDecoration(
+                            labelText: 'Category',
+                            fillColor: Colors.white,
+                          ),
+                           items: _categories.map((String category) {
+                            return DropdownMenuItem(
+                              value: category,
+                              child: Text(category),
+                            );
+                          }).toList(),
+                          onChanged: (String? value) {
+                            setState(() {
+                              _selectedCategory = value;
+                            });
+                          },
+                          validator: (v) => (v == null || v.isEmpty) ? 'Selection required' : null,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 40),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _isLoading ? null : _handleSubmit,
+                      child: _isLoading 
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                            )
+                          : Text(widget.farmer != null ? 'Update Farmer Details' : 'Submit Farmer Details'),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 40),
-              ElevatedButton(
-                onPressed: _isLoading ? null : _handleSubmit,
-                child: _isLoading 
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : Text(widget.farmer != null ? 'Update Farmer Details' : 'Submit Farmer Details'),
-              ),
-            ],
+            ),
           ),
         ),
       ),

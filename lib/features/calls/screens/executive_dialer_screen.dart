@@ -99,45 +99,50 @@ class _ExecutiveDialerScreenState extends State<ExecutiveDialerScreen> with Widg
       appBar: AppBar(
         title: const Text('Nature Biotic Dialer'),
       ),
-      body: Column(
-        children: [
-          // Display Area
-          Container(
-            padding: const EdgeInsets.all(24),
-            alignment: Alignment.center,
-            child: Text(
-              _phoneNumber.isEmpty ? 'Enter Number' : _phoneNumber,
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                color: _phoneNumber.isEmpty ? Colors.grey[400] : AppColors.primary,
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: Column(
+            children: [
+              // Display Area
+              Container(
+                padding: const EdgeInsets.all(24),
+                alignment: Alignment.center,
+                child: Text(
+                  _phoneNumber.isEmpty ? 'Enter Number' : _phoneNumber,
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    color: _phoneNumber.isEmpty ? Colors.grey[400] : AppColors.primary,
+                  ),
+                ),
               ),
-            ),
+              
+              // Contact Suggestions
+              if (_phoneNumber.isNotEmpty)
+                Expanded(
+                  child: ListView(
+                    children: _farmers
+                        .where((f) => f['phone']?.toString().contains(_phoneNumber) ?? false)
+                        .map((f) => ListTile(
+                              leading: const CircleAvatar(backgroundColor: AppColors.secondary, child: Icon(Icons.person, color: AppColors.primary)),
+                              title: Text(f['name'] ?? ''),
+                              subtitle: Text(f['phone'] ?? ''),
+                              onTap: () => _initiateCall(f['phone'] ?? '', farmerId: f['id'].toString()),
+                            ))
+                        .toList(),
+                  ),
+                )
+              else
+                const Expanded(child: SizedBox()),
+    
+              // Dial Pad
+              _buildDialPad(),
+              
+              const SizedBox(height: 40),
+            ],
           ),
-          
-          // Contact Suggestions
-          if (_phoneNumber.isNotEmpty)
-            Expanded(
-              child: ListView(
-                children: _farmers
-                    .where((f) => f['phone']?.toString().contains(_phoneNumber) ?? false)
-                    .map((f) => ListTile(
-                          leading: const CircleAvatar(backgroundColor: AppColors.secondary, child: Icon(Icons.person, color: AppColors.primary)),
-                          title: Text(f['name'] ?? ''),
-                          subtitle: Text(f['phone'] ?? ''),
-                          onTap: () => _initiateCall(f['phone'] ?? '', farmerId: f['id'].toString()),
-                        ))
-                    .toList(),
-              ),
-            )
-          else
-            const Expanded(child: SizedBox()),
-
-          // Dial Pad
-          _buildDialPad(),
-          
-          const SizedBox(height: 40),
-        ],
+        ),
       ),
     );
   }
@@ -183,6 +188,7 @@ class _ExecutiveDialerScreenState extends State<ExecutiveDialerScreen> with Widg
           children: [
             const SizedBox(width: 64), // Balance for backspace
             FloatingActionButton(
+              heroTag: 'dialer_fab',
               onPressed: () => _initiateCall(_phoneNumber),
               backgroundColor: Colors.green,
               child: const Icon(Icons.call, color: Colors.white),

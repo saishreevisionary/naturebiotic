@@ -1,6 +1,11 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:nature_biotic/services/device_service.dart';
+import 'package:flutter/foundation.dart';
+import 'package:nature_biotic/services/local_database_service.dart';
+import 'package:nature_biotic/services/sync_manager.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 class SupabaseService {
   static final client = Supabase.instance.client;
@@ -64,13 +69,80 @@ class SupabaseService {
 
       final response = await client
           .from('profiles')
-          .select()
+          .select('*, registered_device_id') // Ensure we fetch this
           .eq('id', user.id)
-          .maybeSingle(); // Use maybeSingle to avoid throwing when row is missing
+          .maybeSingle();
       
       return response;
     } catch (e) {
       return null;
+    }
+  }
+
+  static Future<void> updateRegisteredDevice(String deviceId) async {
+    final user = client.auth.currentUser;
+    if (user == null) return;
+    
+    await client.from('profiles').update({
+      'registered_device_id': deviceId,
+    }).eq('id', user.id);
+  }
+
+  static Future<void> resetUserDevice(String userId) async {
+    await client.from('profiles').update({
+      'registered_device_id': null,
+    }).eq('id', userId);
+  }
+
+  static Future<bool> isDeviceAuthorized() async {
+    final user = client.auth.currentUser;
+    if (user == null) return false;
+
+    try {
+      final profile = await getProfile();
+      // Admin bypass - If no profile found or if the role is admin, they can login from anywhere
+      if (profile == null || profile['role'] == 'admin') return true;
+
+      final registeredId = profile['registered_device_id'];
+      if (registeredId == null || registeredId.isEmpty) return true;
+
+      final deviceInfo = await DeviceService.getDeviceInfo();
+      return registeredId == deviceInfo['id'];
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<void> logLoginActivity({
+    required String deviceId,
+    required String deviceName,
+    required String osVersion,
+    required String status,
+  }) async {
+    final user = client.auth.currentUser;
+    if (user == null) return;
+
+    await client.from('login_logs').insert({
+      'user_id': user.id,
+      'device_id': deviceId,
+      'device_name': deviceName,
+      'os_version': osVersion,
+      'status': status,
+    });
+  }
+
+  static Future<List<Map<String, dynamic>>> getLoginLogs() async {
+    try {
+      final response = await client
+          .from('login_logs')
+          .select('*, profiles:user_id(full_name, username)')
+          .order('created_at', ascending: false);
+      
+      print('DEBUG: Fetched ${response.length} login logs');
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      print('DEBUG: Error fetching login logs: $e');
+      rethrow;
     }
   }
 
@@ -108,8 +180,26 @@ class SupabaseService {
     await client.from('farmers').update(farmerData).eq('id', id);
   }
 
-  static Future<void> deleteFarmer(dynamic id) async {
-    await client.from('farmers').delete().eq('id', id);
+  static Future<void> deleteFarmer(String id) async {
+    final hasInternet = await Connectivity().checkConnectivity().then((res) => !res.every((r) => r == ConnectivityResult.none));
+    
+    if (!kIsWeb && !hasInternet) {
+      await LocalDatabaseService.deleteAndQueue(tableName: 'farmers', id: id);
+      SyncManager().sync();
+    } else {
+      await deleteRecord('farmers', id);
+      if (!kIsWeb) {
+        // Also clean up local db immediately if it was stored
+        await LocalDatabaseService.database.then((db) {
+          db?.delete('farmers', where: 'id = ?', whereArgs: [id]);
+        });
+      }
+    }
+  }
+
+  // Generic Delete Record
+  static Future<void> deleteRecord(String tableName, String id) async {
+    await client.from(tableName).delete().eq('id', id);
   }
 
   // Farm CRUD
@@ -201,12 +291,16 @@ class SupabaseService {
       // Executives see crops for farms assigned to them
       final response = await client
           .from('crops')
-          .select('*, farms!inner(assigned_to)')
-          .eq('farms.assigned_to', user.id);
+          .select('*, farms!inner(name, assigned_to, farmers(name))')
+          .eq('farms.assigned_to', user.id)
+          .order('created_at', ascending: false);
       return List<Map<String, dynamic>>.from(response);
     } else {
       // Admins see all crops
-      final response = await client.from('crops').select();
+      final response = await client
+          .from('crops')
+          .select('*, farms(name, farmers(name))')
+          .order('created_at', ascending: false);
       return List<Map<String, dynamic>>.from(response);
     }
   }
@@ -215,12 +309,47 @@ class SupabaseService {
     await client.from('crops').insert(cropData);
   }
 
-  // Report CRUD
-  static Future<void> addReport(Map<String, dynamic> reportData) async {
-    await client.from('reports').insert({
-      ...reportData,
-      'created_by': client.auth.currentUser?.id,
+  static Future<void> updateCrop(String id, Map<String, dynamic> cropData) async {
+    await client.from('crops').update(cropData).eq('id', id);
+  }
+
+  // Stock Transaction Methods
+  static Future<void> addStockTransaction(Map<String, dynamic> data) async {
+    await client.from('stock_transactions').insert({
+      ...data,
+      'executive_id': client.auth.currentUser?.id,
     });
+  }
+
+  static Future<List<Map<String, dynamic>>> getStockTransactions(String farmId) async {
+    final response = await client
+        .from('stock_transactions')
+        .select()
+        .eq('farm_id', farmId)
+        .order('created_at', ascending: false);
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  static Future<List<Map<String, dynamic>>> getAllStockTransactions() async {
+    final response = await client
+        .from('stock_transactions')
+        .select()
+        .order('created_at', ascending: false);
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  static Future<void> addReport(Map<String, dynamic> reportData) async {
+    debugPrint('DEBUG: addReport - Inserting report with ID: ${reportData['id']}');
+    try {
+      await client.from('reports').insert({
+        ...reportData,
+        'created_by': client.auth.currentUser?.id,
+      });
+      debugPrint('DEBUG: addReport - Successfully inserted report with ID: ${reportData['id']}');
+    } catch (e) {
+      debugPrint('DEBUG: addReport - ERROR inserting report: $e');
+      rethrow;
+    }
   }
 
   static Future<Map<String, dynamic>?> getLastReportForCrop(String farmId, String cropId) async {
@@ -239,6 +368,15 @@ class SupabaseService {
     }
   }
 
+  static Future<List<Map<String, dynamic>>> getReportsForCrop(String cropId) async {
+    final response = await client
+        .from('reports')
+        .select()
+        .eq('crop_id', cropId)
+        .order('created_at', ascending: false);
+    return List<Map<String, dynamic>>.from(response);
+  }
+
   static Future<List<Map<String, dynamic>>> getReportsForFarm(String farmId) async {
     final response = await client
         .from('reports')
@@ -248,23 +386,27 @@ class SupabaseService {
     return List<Map<String, dynamic>>.from(response);
   }
 
-  static Future<List<Map<String, dynamic>>> getReports() async {
+  static Future<List<Map<String, dynamic>>> getReports({String? columns}) async {
     final user = client.auth.currentUser;
     final profile = await getProfile();
     
     if (profile?['role'] == 'executive' && user != null) {
       // Executives only see reports for farms assigned to them
+      // Fallback: Just get all reports created by this executive
       final response = await client
           .from('reports')
-          .select('*, farms!inner(name, assigned_to, farmers(name)), crops(name)')
-          .eq('farms.assigned_to', user.id)
+          .select(columns ?? '*, farms(name, assigned_to, farmers(name)), crops(name)')
+          .eq('created_by', user.id)
           .order('created_at', ascending: false);
-      return List<Map<String, dynamic>>.from(response);
+      
+      final reportsList = List<Map<String, dynamic>>.from(response);
+      debugPrint('DEBUG: getReports - FALLBACK fetch by created_by returned ${reportsList.length} reports');
+      return reportsList;
     } else {
       // Admins see all reports
       final response = await client
           .from('reports')
-          .select('*, farms(name, farmers(name)), crops(name)')
+          .select(columns ?? '*, farms(name, farmers(name)), crops(name)')
           .order('created_at', ascending: false);
       return List<Map<String, dynamic>>.from(response);
     }
@@ -408,23 +550,55 @@ class SupabaseService {
     if (parentId != null) {
       query = query.eq('parent_id', parentId);
     }
-    return await query.order('label');
+    
+    final response = await query.order('label');
+    final List<Map<String, dynamic>> options = List<Map<String, dynamic>>.from(response);
+
+    // Reorder to keep 'Others' or 'Other' at the last
+    final otherIndex = options.indexWhere((opt) {
+      final label = opt['label'].toString().toLowerCase();
+      return label == 'others' || label == 'other';
+    });
+
+    if (otherIndex != -1) {
+      final otherItem = options.removeAt(otherIndex);
+      options.add(otherItem);
+    }
+
+    return options;
   }
 
-  static Future<void> addDropdownOption(String type, String label, {int? parentId}) async {
-    await client.from('dropdown_options').insert({
+  static Future<Map<String, dynamic>> addDropdownOption(String type, String label, {int? parentId, double? mrp, double? offerPrice}) async {
+    final response = await client.from('dropdown_options').insert({
       'type': type,
       'label': label,
       'parent_id': parentId,
-    });
+      'mrp': mrp,
+      'offer_price': offerPrice,
+    }).select().single();
+    return response;
   }
 
-  static Future<void> updateDropdownOption(int id, String label) async {
-    await client.from('dropdown_options').update({'label': label}).eq('id', id);
+  static Future<void> updateDropdownOption(int id, String label, {double? mrp, double? offerPrice}) async {
+    await client.from('dropdown_options').update({
+      'label': label,
+      'mrp': mrp,
+      'offer_price': offerPrice,
+    }).eq('id', id);
   }
 
   static Future<void> deleteDropdownOption(int id) async {
     await client.from('dropdown_options').delete().eq('id', id);
+  }
+
+  static Future<List<Map<String, dynamic>>> getHierarchicalDropdownOptions(String type) async {
+    final response = await client
+        .from('dropdown_options')
+        .select('*, variants:dropdown_options(*)')
+        .eq('type', type)
+        .filter('parent_id', 'is', null)
+        .order('label');
+    return List<Map<String, dynamic>>.from(response);
   }
 
   // Master Crop CRUD
@@ -461,6 +635,37 @@ class SupabaseService {
 
   static Future<void> deleteMasterVariety(int id) async {
     await client.from('master_crop_varieties').delete().eq('id', id);
+  }
+
+  // Crop-Problem Mapping Methods
+  static Future<List<Map<String, dynamic>>> getCropProblemMappings(int problemId) async {
+    final response = await client
+        .from('crop_problem_mapping')
+        .select('*, master_crops(*)')
+        .eq('problem_id', problemId);
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  static Future<List<Map<String, dynamic>>> getProblemsByCrop(int cropId) async {
+    final response = await client
+        .from('crop_problem_mapping')
+        .select('*, dropdown_options(*)')
+        .eq('crop_id', cropId);
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  static Future<void> updateCropProblemMappings(int problemId, List<int> cropIds) async {
+    // 1. Delete existing mappings for this problem
+    await client.from('crop_problem_mapping').delete().eq('problem_id', problemId);
+    
+    // 2. Insert new mappings
+    if (cropIds.isNotEmpty) {
+      final List<Map<String, dynamic>> inserts = cropIds.map((cropId) => {
+        'problem_id': problemId,
+        'crop_id': cropId,
+      }).toList();
+      await client.from('crop_problem_mapping').insert(inserts);
+    }
   }
 
   // Attendance Methods
@@ -512,7 +717,6 @@ class SupabaseService {
     return List<Map<String, dynamic>>.from(response);
   }
 
-  // Leave Methods
   static Future<void> requestLeave(Map<String, dynamic> leaveData) async {
     final userId = client.auth.currentUser?.id;
     if (userId == null) throw 'User not authenticated';
@@ -522,6 +726,75 @@ class SupabaseService {
       'user_id': userId,
       'status': 'Pending',
     });
+  }
+
+  // --- Attendance Analytics ---
+
+  static Future<Map<String, int>> getPersonalMonthlyStats() async {
+    final userId = client.auth.currentUser?.id;
+    if (userId == null) return {'present': 0, 'absent': 0};
+
+    final now = DateTime.now();
+    final startOfMonth = DateTime(now.year, now.month, 1);
+    
+    // 1. Get present days (distinct days with check-ins)
+    final response = await client
+        .from('attendance')
+        .select('created_at')
+        .eq('user_id', userId)
+        .gte('created_at', startOfMonth.toIso8601String());
+    
+    final List<Map<String, dynamic>> logs = List<Map<String, dynamic>>.from(response);
+    final Set<String> distinctDays = logs.map((log) {
+      final date = DateTime.parse(log['created_at']);
+      return '${date.year}-${date.month}-${date.day}';
+    }).toSet();
+    
+    final presentCount = distinctDays.length;
+
+    // 2. Calculate working days passed in month (excluding Sundays)
+    int workingDaysPassed = 0;
+    for (int i = 1; i <= now.day; i++) {
+        final day = DateTime(now.year, now.month, i);
+        if (day.weekday != DateTime.sunday) {
+            workingDaysPassed++;
+        }
+    }
+
+    return {
+      'present': presentCount,
+      'absent': (workingDaysPassed - presentCount).clamp(0, workingDaysPassed),
+    };
+  }
+
+  static Future<Map<String, int>> getTeamTodayStats() async {
+    final now = DateTime.now();
+    final startOfToday = DateTime(now.year, now.month, now.day);
+    
+    // 1. Get total executives
+    final execResponse = await client
+        .from('profiles')
+        .select('id')
+        .eq('role', 'executive');
+    final totalExecutives = (execResponse as List).length;
+
+    if (totalExecutives == 0) return {'present': 0, 'absent': 0};
+
+    // 2. Get distinct users who checked in today
+    final attendanceResponse = await client
+        .from('attendance')
+        .select('user_id')
+        .gte('created_at', startOfToday.toIso8601String());
+    
+    final List<Map<String, dynamic>> logs = List<Map<String, dynamic>>.from(attendanceResponse);
+    final Set<String> distinctUserIds = logs.map((log) => log['user_id'].toString()).toSet();
+    
+    final presentToday = distinctUserIds.length;
+
+    return {
+      'present': presentToday,
+      'absent': (totalExecutives - presentToday).clamp(0, totalExecutives),
+    };
   }
 
   static Future<List<Map<String, dynamic>>> getMyLeaves({String? userId}) async {
@@ -590,7 +863,11 @@ class SupabaseService {
     });
   }
 
-  static Future<List<Map<String, dynamic>>> getCallLogs({String? userId}) async {
+  static Future<List<Map<String, dynamic>>> getCallLogs({
+    String? userId,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
     final profile = await getProfile();
     var query = client.from('call_logs').select('*, profiles(full_name), farmers(name)');
     
@@ -598,6 +875,16 @@ class SupabaseService {
       query = query.eq('executive_id', userId);
     } else if (profile?['role'] == 'executive') {
       query = query.eq('executive_id', client.auth.currentUser!.id);
+    }
+
+    if (startDate != null) {
+      final startOfDate = DateTime(startDate.year, startDate.month, startDate.day);
+      query = query.gte('start_time', startOfDate.toIso8601String());
+    }
+    if (endDate != null) {
+      // End of the selected day
+      final endOfDate = endDate.copyWith(hour: 23, minute: 59, second: 59);
+      query = query.lte('start_time', endOfDate.toIso8601String());
     }
     
     final response = await query.order('created_at', ascending: false);

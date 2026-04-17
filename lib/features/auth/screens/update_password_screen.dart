@@ -73,50 +73,55 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('New Password')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Set Your New Password',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Please enter a strong password to protect your admin account.',
-              style: TextStyle(color: AppColors.textGray),
-            ),
-            const SizedBox(height: 40),
-            TextField(
-              controller: _passwordController,
-              obscureText: !_isVisible,
-              decoration: InputDecoration(
-                hintText: 'New Password',
-                prefixIcon: const Icon(Icons.lock_outline),
-                suffixIcon: IconButton(
-                  icon: Icon(_isVisible ? Icons.visibility_outlined : Icons.visibility_off_outlined),
-                  onPressed: () => setState(() => _isVisible = !_isVisible),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Set Your New Password',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                 ),
-              ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Please enter a strong password to protect your admin account.',
+                  style: TextStyle(color: AppColors.textGray),
+                ),
+                const SizedBox(height: 40),
+                TextField(
+                  controller: _passwordController,
+                  obscureText: !_isVisible,
+                  decoration: InputDecoration(
+                    hintText: 'New Password',
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    suffixIcon: IconButton(
+                      icon: Icon(_isVisible ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                      onPressed: () => setState(() => _isVisible = !_isVisible),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: _confirmController,
+                  obscureText: !_isVisible,
+                  decoration: const InputDecoration(
+                    hintText: 'Confirm Password',
+                    prefixIcon: Icon(Icons.lock_outline),
+                  ),
+                ),
+                const SizedBox(height: 40),
+                ElevatedButton(
+                  onPressed: _isLoading ? null : _handleUpdate,
+                  child: _isLoading 
+                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : const Text('Reset Password'),
+                ),
+              ],
             ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _confirmController,
-              obscureText: !_isVisible,
-              decoration: const InputDecoration(
-                hintText: 'Confirm Password',
-                prefixIcon: Icon(Icons.lock_outline),
-              ),
-            ),
-            const SizedBox(height: 40),
-            ElevatedButton(
-              onPressed: _isLoading ? null : _handleUpdate,
-              child: _isLoading 
-                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                : const Text('Reset Password'),
-            ),
-          ],
+          ),
         ),
       ),
     );

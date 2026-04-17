@@ -3,6 +3,8 @@ import 'package:nature_biotic/core/theme.dart';
 import 'package:nature_biotic/features/reports/screens/create_report_screen.dart';
 import 'package:nature_biotic/features/reports/screens/report_generator_screen.dart';
 import 'package:nature_biotic/services/supabase_service.dart';
+import 'package:nature_biotic/services/local_database_service.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:intl/intl.dart';
 
 class ReportsListScreen extends StatefulWidget {
@@ -25,8 +27,62 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
   Future<void> _loadReports() async {
     setState(() => _isLoading = true);
     try {
-      final reports = await SupabaseService.getReports();
-      setState(() => _reports = reports);
+      final remoteReports = await SupabaseService.getReports();
+      List<Map<String, dynamic>> allReports = [];
+
+      if (!kIsWeb) {
+        final localReports = await LocalDatabaseService.getData(
+          'reports',
+          columns: ['id', 'farm_id', 'crop_id', 'problem', 'previous_inputs', 'recommendations', 'estimated_cost', 'signature_url', 'created_by', 'created_at']
+        );
+        final localFarms = await LocalDatabaseService.getData('farms');
+        final localCrops = await LocalDatabaseService.getData('crops');
+        final localFarmers = await LocalDatabaseService.getData('farmers');
+
+        // Create mapping for fast lookup
+        final farmMap = {for (var f in localFarms) f['id'].toString(): f};
+        final cropMap = {for (var c in localCrops) c['id'].toString(): c};
+        final farmerMap = {for (var f in localFarmers) f['id'].toString(): f};
+
+        // Transform local reports to match Supabase structure
+        final transformedLocal = localReports.map((report) {
+          final farmId = report['farm_id']?.toString();
+          final cropId = report['crop_id']?.toString();
+          final farm = farmMap[farmId] ?? {};
+          final farmerId = farm['farmer_id']?.toString();
+          final farmer = farmerMap[farmerId] ?? {};
+          
+          return {
+            ...report,
+            'is_local': true,
+            'farms': {
+              'name': farm['name'],
+              'farmers': {
+                'name': farmer['name'],
+              }
+            },
+            'crops': {
+              'name': cropMap[cropId]?['name'],
+            }
+          };
+        }).toList();
+
+        // Merge and De-duplicate using 'id'
+        final Map<String, Map<String, dynamic>> combined = {};
+        for (var r in transformedLocal) combined[r['id'].toString()] = r;
+        for (var r in remoteReports) combined[r['id'].toString()] = r;
+        
+        allReports = combined.values.toList();
+      } else {
+        allReports = remoteReports;
+      }
+
+      // Sort by date descending
+      allReports.sort((a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''));
+
+      if (mounted) {
+        setState(() => _reports = allReports);
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -67,6 +123,7 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
               ? _buildEmptyState()
               : _buildReportsList(),
       floatingActionButton: _reports.isNotEmpty ? FloatingActionButton(
+        heroTag: 'reports_fab',
         onPressed: () => Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => const CreateReportScreen()),
@@ -118,52 +175,78 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
   }
 
   Widget _buildReportsList() {
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _reports.length,
-      itemBuilder: (context, index) {
-        final report = _reports[index];
-        final farmName = report['farms']?['name'] ?? 'Unknown Farm';
-        final cropName = report['crops']?['name'] ?? 'Unknown Crop';
-        final farmerName = report['farms']?['farmers']?['name'] ?? 'Valued Farmer';
-        final date = _formatDate(report['created_at']);
-
-        return Card(
-          margin: const EdgeInsets.only(bottom: 12),
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            leading: const CircleAvatar(
-              backgroundColor: AppColors.secondary,
-              child: Icon(Icons.description_rounded, color: AppColors.primary, size: 20),
-            ),
-            title: Text(
-              farmName,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('$cropName • $date', style: const TextStyle(fontSize: 12)),
-                Text('Farmer: $farmerName', style: const TextStyle(fontSize: 11, color: AppColors.textGray)),
-              ],
-            ),
-            trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.primary),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ReportGeneratorScreen(
-                    report: report,
-                    farmName: farmName,
-                    cropName: cropName,
-                    farmerName: farmerName,
-                  ),
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 800),
+        child: ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: _reports.length,
+          itemBuilder: (context, index) {
+            final report = _reports[index];
+            final farmName = report['farms']?['name'] ?? 'Unknown Farm';
+            final cropName = report['crops']?['name'] ?? 'Unknown Crop';
+            final farmerName = report['farms']?['farmers']?['name'] ?? 'Valued Farmer';
+            final date = _formatDate(report['created_at']);
+    
+            return Card(
+              margin: const EdgeInsets.only(bottom: 12),
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                leading: const CircleAvatar(
+                  backgroundColor: AppColors.secondary,
+                  child: Icon(Icons.description_rounded, color: AppColors.primary, size: 20),
                 ),
-              );
-            },
-          ),
-        );
-      },
+                title: Text(
+                  farmName,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('$cropName • $date', style: const TextStyle(fontSize: 12)),
+                    Row(
+                      children: [
+                        Expanded(child: Text('Farmer: $farmerName', style: const TextStyle(fontSize: 11, color: AppColors.textGray))),
+                        if (report['is_local'] == true)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: Colors.orange.withOpacity(0.5), width: 0.5),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.sync_rounded, size: 10, color: Colors.orange),
+                                SizedBox(width: 4),
+                                Text('Pending Sync', style: TextStyle(fontSize: 9, color: Colors.orange, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+                trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.primary),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ReportGeneratorScreen(
+                        report: report,
+                        farmName: farmName,
+                        cropName: cropName,
+                        farmerName: farmerName,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 }

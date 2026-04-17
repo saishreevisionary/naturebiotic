@@ -105,7 +105,7 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> with WidgetsBin
       setState(() => _isLoading = true);
       try {
         debugPrint('Attempting to delete farmer with ID: ${_farmer['id']} (type: ${_farmer['id'].runtimeType})');
-        await SupabaseService.deleteFarmer(_farmer['id']);
+        await SupabaseService.deleteFarmer(_farmer['id'].toString());
         
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -173,93 +173,101 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen> with WidgetsBin
       ),
       body: _isLoading 
         ? const Center(child: CircularProgressIndicator())
-        : SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    height: 100,
-                    width: 100,
-                    decoration: BoxDecoration(
-                      color: AppColors.secondary,
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: const Icon(Icons.person, size: 60, color: AppColors.primary),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  _farmer['name'] ?? 'N/A',
-                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: _getCategoryColor(_farmer['category']).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    _farmer['category'] ?? 'Warm',
-                    style: TextStyle(
-                      color: _getCategoryColor(_farmer['category']),
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 32),
-                _phoneNumberSection(),
-                _infoSection(Icons.location_on_outlined, 'Village', _farmer['village'] ?? 'N/A'),
-                _infoSection(Icons.home_outlined, 'Address', _farmer['address'] ?? 'N/A'),
-                const SizedBox(height: 32),
-            const Text(
-              'Farms & Crops',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            if (_farms.isEmpty)
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppColors.secondary),
-                ),
-                child: const Row(
+        : Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 800),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                     Icon(Icons.agriculture_rounded, color: AppColors.primary),
-                     SizedBox(width: 16),
-                     Text('No farms added yet'),
-                  ],
+                    Center(
+                      child: Hero(
+                        tag: 'farmer_icon_${_farmer['id']}',
+                        child: Container(
+                          height: 100,
+                          width: 100,
+                          decoration: BoxDecoration(
+                            color: AppColors.secondary,
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                          child: const Icon(Icons.person, size: 60, color: AppColors.primary),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      _farmer['name'] ?? 'N/A',
+                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: _getCategoryColor(_farmer['category']).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        _farmer['category'] ?? 'Warm',
+                        style: TextStyle(
+                          color: _getCategoryColor(_farmer['category']),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    _phoneNumberSection(),
+                    _infoSection(Icons.location_on_outlined, 'Village', _farmer['village'] ?? 'N/A'),
+                    _infoSection(Icons.home_outlined, 'Address', _farmer['address'] ?? 'N/A'),
+                    const SizedBox(height: 32),
+                const Text(
+                  'Farms & Crops',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
-              )
-            else
-              Column(
-                children: _farms.map((farm) => _farmItem(farm)).toList(),
-              ),
-            
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => AddFarmScreen(farmerId: _farmer['id'])),
-                );
-                _loadFarms();
-              },
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Add Farm for this Farmer'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: AppColors.primary,
-                side: const BorderSide(color: AppColors.primary),
-                minimumSize: const Size(double.infinity, 54),
-              ),
+                const SizedBox(height: 16),
+                if (_farms.isEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: AppColors.secondary),
+                    ),
+                    child: const Row(
+                      children: [
+                         Icon(Icons.agriculture_rounded, color: AppColors.primary),
+                         SizedBox(width: 16),
+                         Text('No farms added yet'),
+                      ],
+                    ),
+                  )
+                else
+                  Column(
+                    children: _farms.map((farm) => _farmItem(farm)).toList(),
+                  ),
+                
+                const SizedBox(height: 24),
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => AddFarmScreen(farmerId: _farmer['id'])),
+                    );
+                    _loadFarms();
+                  },
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Add Farm for this Farmer'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: AppColors.primary,
+                    side: const BorderSide(color: AppColors.primary),
+                    minimumSize: const Size(double.infinity, 54),
+                  ),
+                ),
+                const SizedBox(height: 40),
+              ],
             ),
-            const SizedBox(height: 40),
-          ],
+          ),
         ),
       ),
     );

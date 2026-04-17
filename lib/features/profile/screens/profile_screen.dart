@@ -171,151 +171,162 @@ class _ProfileScreenState extends State<ProfileScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Profile'),
+        actions: [
+          IconButton(onPressed: _fetchData, icon: const Icon(Icons.refresh_rounded)),
+        ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20),
-        child: Column(
-          children: [
-            Center(
-              child: Stack(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: AppColors.secondary, width: 2),
-                    ),
-                    child: CircleAvatar(
-                      radius: 50,
-                      backgroundColor: const Color(0xFFE8F5E9),
-                      backgroundImage: _profile?['avatar_url'] != null 
-                        ? NetworkImage(_profile!['avatar_url']) 
-                        : null,
-                      child: _profile?['avatar_url'] == null 
-                        ? const Icon(Icons.person, size: 50, color: AppColors.primary)
-                        : null,
-                    ),
-                  ),
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
-                    child: GestureDetector(
-                      onTap: _uploadAvatar,
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: const BoxDecoration(
-                          color: AppColors.primary,
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20),
+            child: Column(
+              children: [
+                Center(
+                  child: Stack(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
                           shape: BoxShape.circle,
+                          border: Border.all(color: AppColors.secondary, width: 2),
                         ),
-                        child: const Icon(Icons.camera_alt_rounded, color: Colors.white, size: 18),
+                        child: Hero(
+                          tag: 'profile_avatar',
+                          child: CircleAvatar(
+                            radius: 50,
+                            backgroundColor: const Color(0xFFE8F5E9),
+                            backgroundImage: _profile?['avatar_url'] != null 
+                              ? NetworkImage(_profile!['avatar_url']) 
+                              : null,
+                            child: _profile?['avatar_url'] == null 
+                              ? const Icon(Icons.person, size: 50, color: AppColors.primary)
+                              : null,
+                          ),
+                        ),
                       ),
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: GestureDetector(
+                          onTap: _uploadAvatar,
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: const BoxDecoration(
+                              color: AppColors.primary,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.camera_alt_rounded, color: Colors.white, size: 18),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  fullName,
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  identity,
+                  style: const TextStyle(color: AppColors.textGray, fontSize: 14),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F4F1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    role,
+                    style: const TextStyle(
+                      fontSize: 12, 
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.1,
+                      color: AppColors.textGray,
                     ),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              fullName,
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-            ),
-            Text(
-              identity,
-              style: const TextStyle(color: AppColors.textGray, fontSize: 14),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF1F4F1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                role,
-                style: const TextStyle(
-                  fontSize: 12, 
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.1,
-                  color: AppColors.textGray,
                 ),
-              ),
-            ),
-            const SizedBox(height: 32),
-            // Statistics Card
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.shadow.withOpacity(0.05),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
+                const SizedBox(height: 32),
+                // Statistics Card
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.shadow.withOpacity(0.05),
+                        blurRadius: 20,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _statItem(_stats['farmers'].toString(), 'Farmers'),
-                  _divider(),
-                  _statItem(_stats['farms'].toString(), 'Farms'),
-                  _divider(),
-                  _statItem(_stats['reports'].toString(), 'Reports'),
-                ],
-              ),
-            ),
-            const SizedBox(height: 32),
-            _profileOption(Icons.person_outline, 'Account Settings', onTap: _updateName),
-            _profileOption(Icons.lock_outline_rounded, 'Change Password', onTap: _changePassword),
-            _profileOption(Icons.help_outline_rounded, 'Help & Support', onTap: () {
-              showModalBottomSheet(
-                context: context,
-                backgroundColor: Colors.transparent,
-                builder: (context) => _supportSheet(),
-              );
-            }),
-            if (_profile?['role'] == 'admin')
-              _profileOption(
-                Icons.settings_suggest_rounded, 
-                'Drop down Creator', 
-                onTap: () => Navigator.push(
-                  context, 
-                  MaterialPageRoute(builder: (context) => const DropdownCreatorScreen())
-                )
-              ),
-            const SizedBox(height: 32),
-            ElevatedButton(
-              onPressed: () async {
-                await SupabaseService.signOut();
-                if (mounted) {
-                  Navigator.pushAndRemoveUntil(
-                    context,
-                    MaterialPageRoute(builder: (context) => const LoginScreen()),
-                    (route) => false,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _statItem(_stats['farmers'].toString(), 'Farmers'),
+                      _divider(),
+                      _statItem(_stats['farms'].toString(), 'Farms'),
+                      _divider(),
+                      _statItem(_stats['reports'].toString(), 'Reports'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 32),
+                _profileOption(Icons.person_outline, 'Account Settings', onTap: _updateName),
+                _profileOption(Icons.lock_outline_rounded, 'Change Password', onTap: _changePassword),
+                _profileOption(Icons.help_outline_rounded, 'Help & Support', onTap: () {
+                  showModalBottomSheet(
+                    context: context,
+                    backgroundColor: Colors.transparent,
+                    builder: (context) => _supportSheet(),
                   );
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFFF5F5),
-                foregroundColor: Colors.red,
-                elevation: 0,
-                side: const BorderSide(color: Color(0xFFFFDADA)),
-                minimumSize: const Size(double.infinity, 54),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.logout_rounded, size: 20),
-                  SizedBox(width: 12),
-                  Text('Logout', style: TextStyle(fontWeight: FontWeight.bold)),
-                ],
-              ),
+                }),
+                if (_profile?['role'] == 'admin')
+                  _profileOption(
+                    Icons.settings_suggest_rounded, 
+                    'Drop down Creator', 
+                    onTap: () => Navigator.push(
+                      context, 
+                      MaterialPageRoute(builder: (context) => const DropdownCreatorScreen())
+                    )
+                  ),
+                const SizedBox(height: 32),
+                ElevatedButton(
+                  onPressed: () async {
+                    await SupabaseService.signOut();
+                    if (mounted) {
+                      Navigator.pushAndRemoveUntil(
+                        context,
+                        MaterialPageRoute(builder: (context) => const LoginScreen()),
+                        (route) => false,
+                      );
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFFF5F5),
+                    foregroundColor: Colors.red,
+                    elevation: 0,
+                    side: const BorderSide(color: Color(0xFFFFDADA)),
+                    minimumSize: const Size(double.infinity, 54),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.logout_rounded, size: 20),
+                      SizedBox(width: 12),
+                      Text('Logout', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 40),
+              ],
             ),
-            const SizedBox(height: 40),
-          ],
+          ),
         ),
       ),
     );

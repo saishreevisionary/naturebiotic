@@ -4,6 +4,9 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:call_log/call_log.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:nature_biotic/services/supabase_service.dart';
+import 'package:nature_biotic/services/local_database_service.dart';
+import 'package:nature_biotic/services/sync_manager.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class CallTracker {
   static Future<void> makeCall(BuildContext context, String phoneNumber, {String? farmerId}) async {
@@ -58,19 +61,34 @@ class CallTracker {
 
     if (summary != null) {
       try {
-        await SupabaseService.addCallLog({
-          'farmer_id': farmerId,
-          'phone_number': phoneNumber,
-          'start_time': startTime.toIso8601String(),
-          'duration_seconds': durationSeconds,
-          'summary': summary,
-        });
+      final callLogData = {
+        'farmer_id': farmerId,
+        'phone_number': phoneNumber,
+        'start_time': startTime.toIso8601String(),
+        'duration_seconds': durationSeconds,
+        'summary': summary,
+      };
 
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Call log synchronized successfully'), backgroundColor: Colors.green),
-          );
-        }
+      if (kIsWeb) {
+        await SupabaseService.addCallLog(callLogData);
+      } else {
+        await LocalDatabaseService.saveAndQueue(
+          tableName: 'call_logs',
+          data: callLogData,
+          operation: 'INSERT',
+        );
+        // Attempt sync
+        SyncManager().sync();
+      }
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(kIsWeb ? 'Call log synchronized successfully' : 'Call log saved locally and syncing...'), 
+            backgroundColor: Colors.green
+          ),
+        );
+      }
       } catch (e) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

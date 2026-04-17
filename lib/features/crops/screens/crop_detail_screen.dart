@@ -1,112 +1,316 @@
 import 'package:flutter/material.dart';
 import 'package:nature_biotic/core/theme.dart';
+import 'package:nature_biotic/services/supabase_service.dart';
+import 'package:nature_biotic/services/local_database_service.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:nature_biotic/features/reports/screens/report_generator_screen.dart';
+import 'package:intl/intl.dart';
+import 'package:nature_biotic/features/crops/screens/add_crop_screen.dart';
 
-class CropDetailScreen extends StatelessWidget {
+class CropDetailScreen extends StatefulWidget {
   final Map<String, dynamic> crop;
+  final String? farmName;
+  final String? farmerName;
 
-  const CropDetailScreen({super.key, required this.crop});
+  const CropDetailScreen({
+    super.key, 
+    required this.crop,
+    this.farmName,
+    this.farmerName,
+  });
+
+  @override
+  State<CropDetailScreen> createState() => _CropDetailScreenState();
+}
+
+class __CropDetailScreenState extends State<CropDetailScreen> {
+  List<Map<String, dynamic>> _reports = [];
+  bool _isLoadingReports = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadReports();
+  }
+
+  Future<void> _loadReports() async {
+    try {
+      final remoteReports = await SupabaseService.getReportsForCrop(widget.crop['id'].toString());
+      List<Map<String, dynamic>> localReports = [];
+      
+      if (!kIsWeb) {
+        localReports = await LocalDatabaseService.getData(
+          'reports', 
+          where: 'crop_id = ?', 
+          whereArgs: [widget.crop['id'].toString()],
+          columns: ['id', 'farm_id', 'crop_id', 'problem', 'previous_inputs', 'recommendations', 'estimated_cost', 'signature_url', 'created_by', 'created_at']
+        );
+      }
+
+      if (mounted) {
+        setState(() {
+          // Merge and De-duplicate
+          final Map<String, Map<String, dynamic>> combinedMap = {};
+          
+          for (var report in localReports) {
+            combinedMap[report['id'].toString()] = report;
+          }
+          for (var report in remoteReports) {
+            combinedMap[report['id'].toString()] = report;
+          }
+
+          _reports = combinedMap.values.toList();
+          _reports.sort((a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''));
+          _isLoadingReports = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingReports = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: Text(crop['name'] ?? 'Crop Details'),
+        title: Text(widget.crop['name'] ?? 'Crop Details'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit_rounded),
+            tooltip: 'Edit Crop Details',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => AddCropScreen(
+                    crop: widget.crop,
+                    farmId: widget.crop['farm_id']?.toString(),
+                  ),
+                ),
+              ).then((value) {
+                if (value == true) {
+                  // Refresh data if needed, but since we pass crop in constructor, 
+                  // it might need a re-fetch or pop-back-with-true
+                  Navigator.pop(context, true);
+                }
+              });
+            },
+          ),
+        ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header Info
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppColors.secondary,
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: const Icon(Icons.eco_rounded, size: 28, color: Colors.green),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(crop['variety'] ?? 'Unknown Variety', 
-                          style: const TextStyle(color: AppColors.textGray, fontSize: 11)),
-                        Text(crop['name'] ?? 'N/A', 
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            
-            const SizedBox(height: 24),
-            const Text('Crop Metrics', 
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textBlack)),
-            const SizedBox(height: 16),
-            
-            // Grid for Growth and Scale
-            GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 2,
-              mainAxisSpacing: 16,
-              crossAxisSpacing: 16,
-              childAspectRatio: 2.2,
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 900),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _infoCard(Icons.history_rounded, 'Current Age', crop['age'] ?? 'N/A'),
-                _infoCard(Icons.timer_rounded, 'Total Life', crop['life'] ?? 'N/A'),
-                _infoCard(Icons.straighten_rounded, 'Acres', crop['acre'] ?? 'N/A'),
-                _infoCard(Icons.numbers_rounded, 'Count', crop['count'] ?? 'N/A'),
-              ],
-            ),
-
-            const SizedBox(height: 24),
-            const Text('Yield Expectations', 
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textBlack)),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.shadow.withOpacity(0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
+                // Header Info
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: AppColors.secondary,
+                    borderRadius: BorderRadius.circular(24),
                   ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.show_chart_rounded, color: AppColors.primary, size: 24),
-                  const SizedBox(width: 16),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Row(
                     children: [
-                      const Text('Expected Yield', 
-                        style: TextStyle(color: AppColors.textGray, fontSize: 11)),
-                      Text(crop['expected_yield'] ?? 'N/A', 
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.primary)),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: const Icon(Icons.eco_rounded, size: 28, color: Colors.green),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(widget.crop['variety'] ?? 'Unknown Variety', 
+                              style: const TextStyle(color: AppColors.textGray, fontSize: 11)),
+                            Text(widget.crop['name'] ?? 'N/A', 
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
-                ],
-              ),
+                ),
+                
+                const SizedBox(height: 24),
+                const Text('Crop Metrics', 
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textBlack)),
+                const SizedBox(height: 16),
+                
+                // Grid for Growth and Scale
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isWide = constraints.maxWidth > 600;
+                    return GridView.count(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisCount: isWide ? 4 : 2,
+                      mainAxisSpacing: 16,
+                      crossAxisSpacing: 16,
+                      childAspectRatio: isWide ? 1.5 : 2.2,
+                      children: [
+                        _infoCard(Icons.history_rounded, 'Current Age', widget.crop['age'] ?? 'N/A'),
+                        _infoCard(Icons.timer_rounded, 'Total Life', widget.crop['life'] ?? 'N/A'),
+                        _infoCard(Icons.straighten_rounded, 'Acres', widget.crop['acre'] ?? 'N/A'),
+                        _infoCard(Icons.numbers_rounded, 'Count', widget.crop['count'] ?? 'N/A'),
+                      ],
+                    );
+                  }
+                ),
+    
+                const SizedBox(height: 24),
+                const Text('Yield Expectations', 
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textBlack)),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.shadow.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.show_chart_rounded, color: AppColors.primary, size: 24),
+                      const SizedBox(width: 16),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Expected Yield', 
+                            style: TextStyle(color: AppColors.textGray, fontSize: 11)),
+                          Text(widget.crop['expected_yield'] ?? 'N/A', 
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.primary)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                
+                const SizedBox(height: 32),
+                const Text('Report History', 
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textBlack)),
+                const SizedBox(height: 16),
+                _buildReportHistoryTable(),
+                const SizedBox(height: 40),
+              ],
             ),
-            const SizedBox(height: 40),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReportHistoryTable() {
+    if (_isLoadingReports) {
+      return const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()));
+    }
+    
+    if (_reports.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: AppColors.secondary.withOpacity(0.3),
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: const Column(
+          children: [
+            Icon(Icons.assignment_outlined, size: 40, color: AppColors.textGray),
+            SizedBox(height: 12),
+            Text('No report history available', style: TextStyle(color: AppColors.textGray)),
           ],
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.shadow.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DataTable(
+            horizontalMargin: 16,
+            columnSpacing: 24,
+            headingRowColor: MaterialStateProperty.all(AppColors.secondary.withOpacity(0.5)),
+            columns: const [
+              DataColumn(label: Text('Date', style: TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text('Problem Identified', style: TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text('', style: TextStyle(fontWeight: FontWeight.bold))),
+            ],
+            rows: _reports.map((report) {
+              final date = DateTime.parse(report['created_at']);
+              
+              // Clean up problem text (remove image metadata if present)
+              String problemDisplay = report['problem'] ?? 'N/A';
+              if (problemDisplay.contains('{img:')) {
+                problemDisplay = problemDisplay.split('{img:')[0].trim();
+              }
+
+              return DataRow(cells: [
+                DataCell(Text(DateFormat('MMM dd, yyyy').format(date), style: const TextStyle(fontSize: 13))),
+                DataCell(
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 180),
+                    child: Text(
+                      problemDisplay, 
+                      overflow: TextOverflow.ellipsis, 
+                      maxLines: 1,
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  ),
+                ),
+                DataCell(
+                  TextButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ReportGeneratorScreen(
+                            report: report,
+                            farmName: widget.farmName,
+                            cropName: widget.crop['name'],
+                            farmerName: widget.farmerName,
+                          ),
+                        ),
+                      );
+                    },
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 0),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text('View More', 
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                  ),
+                ),
+              ]);
+            }).toList(),
+          ),
         ),
       ),
     );
@@ -150,3 +354,5 @@ class CropDetailScreen extends StatelessWidget {
     );
   }
 }
+
+class _CropDetailScreenState extends __CropDetailScreenState {}

@@ -4,6 +4,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show DateTimeRange;
 
 class PdfService {
   static Future<void> generateAndShare({
@@ -326,10 +327,279 @@ class PdfService {
     );
   }
 
+  static Future<void> generateCallLogReport({
+    required List<Map<String, dynamic>> logs,
+    required String executiveName,
+    required DateTimeRange dateRange,
+  }) async {
+    final pdf = pw.Document();
+    final font = await PdfGoogleFonts.robotoRegular();
+    final boldFont = await PdfGoogleFonts.robotoBold();
+
+    final dateFormat = DateFormat('dd MMM yyyy');
+    final startStr = dateFormat.format(dateRange.start);
+    final endStr = dateFormat.format(dateRange.end);
+    
+    int totalSeconds = 0;
+    for (var log in logs) {
+      totalSeconds += (log['duration_seconds'] as int? ?? 0);
+    }
+
+    String formatDuration(int seconds) {
+      if (seconds < 60) return '${seconds}s';
+      final minutes = seconds ~/ 60;
+      final remainingSeconds = seconds % 60;
+      return '${minutes}m ${remainingSeconds}s';
+    }
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        theme: pw.ThemeData.withFont(base: font, bold: boldFont),
+        header: (context) => pw.Column(
+          children: [
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text('NATURE BIOTIC', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: PdfColors.green)),
+                    pw.Text('Executive Performance Report - Call Logs', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text('Date range: $startStr - $endStr', style: const pw.TextStyle(fontSize: 8)),
+                    pw.Text('Generated: ${DateFormat('dd MMM yyyy HH:mm').format(DateTime.now())}', style: const pw.TextStyle(fontSize: 8)),
+                  ],
+                ),
+              ],
+            ),
+            pw.Divider(thickness: 1, color: PdfColors.grey300),
+            pw.SizedBox(height: 10),
+          ],
+        ),
+        build: (context) => [
+          pw.Container(
+            padding: const pw.EdgeInsets.all(10),
+            decoration: const pw.BoxDecoration(
+              color: PdfColors.grey100,
+              borderRadius: pw.BorderRadius.all(pw.Radius.circular(8)),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+              children: [
+                pw.Column(
+                  children: [
+                    pw.Text('EXECUTIVE NAME', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                    pw.Text(executiveName, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                  ],
+                ),
+                pw.Column(
+                  children: [
+                    pw.Text('TOTAL CALLS', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                    pw.Text(logs.length.toString(), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                  ],
+                ),
+                pw.Column(
+                  children: [
+                    pw.Text('TOTAL DURATION', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                    pw.Text(formatDuration(totalSeconds), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.green900)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 20),
+          pw.TableHelper.fromTextArray(
+            headerStyle: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.green700),
+            cellStyle: const pw.TextStyle(fontSize: 8),
+            columnWidths: {
+              0: const pw.FixedColumnWidth(80),
+              1: const pw.FixedColumnWidth(80),
+              2: const pw.FixedColumnWidth(40),
+            },
+            data: <List<String>>[
+              ['Date & Time', 'Farmer / Number', 'Duration', 'Call Summary'],
+              ...logs.map((log) {
+                final date = DateTime.parse(log['created_at']);
+                final farmerName = log['farmers']?['name'] ?? 'Direct Call';
+                final number = log['phone_number'] ?? 'N/A';
+                return [
+                  DateFormat('dd MMM, hh:mm a').format(date),
+                  '$farmerName\n$number',
+                  formatDuration(log['duration_seconds'] ?? 0),
+                  log['summary'] ?? 'No summary',
+                ];
+              }),
+            ],
+          ),
+        ],
+        footer: (context) => pw.Column(
+          children: [
+            pw.Divider(thickness: 1, color: PdfColors.grey300),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text('Nature Biotic Management Report', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey500)),
+                pw.Text('Page ${context.pageNumber} of ${context.pagesCount}', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey500)),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+
+    await Printing.sharePdf(
+      bytes: await pdf.save(),
+      filename: 'CallLogReport_${executiveName.replaceAll(' ', '_')}_${startStr}_to_${endStr}.pdf',
+    );
+  }
+
+  static Future<void> generateStockChallan({
+    required List<Map<String, dynamic>> items,
+    required String farmName,
+    required String transactionType,
+    required DateTime date,
+  }) async {
+    final pdf = pw.Document();
+    final font = await PdfGoogleFonts.robotoRegular();
+    final boldFont = await PdfGoogleFonts.robotoBold();
+
+    final dateStr = DateFormat('dd MMM yyyy, hh:mm a').format(date);
+    double grandTotal = 0;
+    for (var item in items) {
+      grandTotal += (item['price'] as double? ?? 0) * (item['quantity'] as double? ?? 0);
+    }
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        theme: pw.ThemeData.withFont(base: font, bold: boldFont),
+        header: (context) => pw.Column(
+          children: [
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text('NATURE BIOTIC', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: PdfColors.green)),
+                    pw.Text('Stock Movement Challan', style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text('Date: $dateStr', style: const pw.TextStyle(fontSize: 9)),
+                    pw.Text('Type: ${transactionType.toUpperCase()}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: transactionType == 'RECEIVED' ? PdfColors.green900 : PdfColors.orange900)),
+                  ],
+                ),
+              ],
+            ),
+            pw.Divider(thickness: 1, color: PdfColors.grey300),
+            pw.SizedBox(height: 10),
+          ],
+        ),
+        build: (context) => [
+          pw.Row(
+            children: [
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text('RECIPIENT / FARM:', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                  pw.Text(farmName, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                ],
+              ),
+            ],
+          ),
+          pw.SizedBox(height: 20),
+          pw.TableHelper.fromTextArray(
+            headerStyle: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.green700),
+            cellStyle: const pw.TextStyle(fontSize: 9),
+            columnWidths: {
+              0: const pw.FixedColumnWidth(30),
+              1: const pw.FlexColumnWidth(3),
+              2: const pw.FlexColumnWidth(1),
+              3: const pw.FlexColumnWidth(1),
+              4: const pw.FlexColumnWidth(1),
+              5: const pw.FlexColumnWidth(1),
+            },
+            data: <List<String>>[
+              ['S.No', 'Item Name', 'Size', 'Qty', 'Rate', 'Amount'],
+              ...items.asMap().entries.map((entry) {
+                final idx = entry.key + 1;
+                final item = entry.value;
+                final qty = item['quantity'] as double? ?? 0;
+                final price = item['price'] as double? ?? 0;
+                return [
+                  idx.toString(),
+                  item['name'] ?? 'Unknown',
+                  item['unit'] ?? 'N/A',
+                  qty.toString(),
+                  'Rs.${price.toStringAsFixed(2)}',
+                  'Rs.${(qty * price).toStringAsFixed(2)}',
+                ];
+              }),
+            ],
+          ),
+          pw.SizedBox(height: 20),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.end,
+            children: [
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text('TOTAL VALUE:', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600)),
+                  pw.Text('Rs.${grandTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.green900)),
+                ],
+              ),
+            ],
+          ),
+          pw.Spacer(),
+          pw.Container(
+            padding: const pw.EdgeInsets.all(10),
+            decoration: const pw.BoxDecoration(
+              color: PdfColors.grey50,
+              borderRadius: pw.BorderRadius.all(pw.Radius.circular(8)),
+            ),
+            child: pw.Text(
+              'Declaration: This is a computer generated document. It confirms that the above mentioned items have been ${transactionType.toLowerCase()} by the farm representative.',
+              style: const pw.TextStyle(fontSize: 8, fontStyle: pw.FontStyle.italic),
+            ),
+          ),
+        ],
+        footer: (context) => pw.Column(
+          children: [
+            pw.Divider(thickness: 1, color: PdfColors.grey300),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text('Nature Biotic Stock Management System', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey500)),
+                pw.Text('Page ${context.pageNumber} of ${context.pagesCount}', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey500)),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+
+    await Printing.sharePdf(
+      bytes: await pdf.save(),
+      filename: 'NatureBiotic_Challan_${farmName.replaceAll(' ', '_')}_${DateFormat('ddMMMyy').format(date)}.pdf',
+    );
+  }
+
   static pw.Widget _buildFooter(pw.Widget? signature) {
     return pw.Column(
       children: [
-        pw.Divider(color: PdfColors.grey),
+        pw.Divider(thickness: 1, color: PdfColors.grey),
         pw.SizedBox(height: 10),
         pw.Row(
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -339,12 +609,12 @@ class PdfService {
               children: [
                 pw.Text('Nature Biotic Executive Signature', style: const pw.TextStyle(fontSize: 8)),
                 pw.SizedBox(height: 5),
-                if (signature != null) 
+                if (signature != null)
                   pw.Container(
                     height: 30,
                     child: signature,
                   )
-                else 
+                else
                   pw.SizedBox(height: 30),
                 pw.Container(width: 150, decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey300)))),
               ],
@@ -353,6 +623,102 @@ class PdfService {
           ],
         ),
       ],
+    );
+  }
+
+  static Future<void> generateMultiFarmStockReport({
+    required List<Map<String, dynamic>> farmData,
+    required DateTime date,
+  }) async {
+    final pdf = pw.Document();
+    final font = await PdfGoogleFonts.robotoRegular();
+    final boldFont = await PdfGoogleFonts.robotoBold();
+
+    final dateStr = DateFormat('dd MMM yyyy, hh:mm a').format(date);
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        theme: pw.ThemeData.withFont(base: font, bold: boldFont),
+        header: (context) => pw.Column(
+          children: [
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text('NATURE BIOTIC', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: PdfColors.green)),
+                    pw.Text('Consolidated Farm Stock Report', style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
+                  ],
+                ),
+                pw.Text('Generated: $dateStr', style: const pw.TextStyle(fontSize: 9)),
+              ],
+            ),
+            pw.Divider(thickness: 1, color: PdfColors.grey300),
+            pw.SizedBox(height: 10),
+          ],
+        ),
+        build: (context) => [
+          for (var farm in farmData) ...[
+            pw.Container(
+              width: double.infinity,
+              padding: const pw.EdgeInsets.all(8),
+              decoration: const pw.BoxDecoration(color: PdfColors.green50),
+              child: pw.Text(
+                'FARM: ${farm['farmName'].toString().toUpperCase()}',
+                style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.green900),
+              ),
+            ),
+            pw.SizedBox(height: 10),
+            if ((farm['balances'] as List).isEmpty)
+              pw.Padding(
+                padding: const pw.EdgeInsets.only(left: 8, bottom: 20),
+                child: pw.Text('No stock in hand for this farm.', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600)),
+              )
+            else ...[
+              pw.TableHelper.fromTextArray(
+                headerStyle: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+                headerDecoration: const pw.BoxDecoration(color: PdfColors.green700),
+                cellStyle: const pw.TextStyle(fontSize: 9),
+                columnWidths: {
+                  0: const pw.FlexColumnWidth(3),
+                  1: const pw.FlexColumnWidth(1),
+                  2: const pw.FlexColumnWidth(1),
+                },
+                data: <List<String>>[
+                  ['Item Name', 'Packet Size', 'Balance Qty'],
+                  ...(farm['balances'] as List).map((b) => [
+                    b['item'].toString(),
+                    b['unit'].toString(),
+                    b['balance'].toString().replaceAll(RegExp(r'\.0$'), ''),
+                  ]),
+                ],
+              ),
+              pw.SizedBox(height: 25),
+            ],
+          ],
+        ],
+        footer: (context) => pw.Column(
+          children: [
+            pw.Divider(thickness: 1, color: PdfColors.grey300),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text('Nature Biotic Stock Management System', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey500)),
+                pw.Text('Page ${context.pageNumber} of ${context.pagesCount}', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey500)),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final filename = 'NatureBiotic_StockReport_${DateFormat('ddMMMyy').format(date)}.pdf';
+    await Printing.sharePdf(
+      bytes: await pdf.save(),
+      filename: filename,
     );
   }
 }

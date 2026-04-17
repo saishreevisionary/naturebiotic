@@ -61,60 +61,65 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen> {
           ? const Center(child: CircularProgressIndicator())
           : _executives.isEmpty
               ? const Center(child: Text('No executives found'))
-              : ListView.builder(
-                  padding: const EdgeInsets.all(24),
-                  itemCount: _executives.length,
-                  itemBuilder: (context, index) {
-                    final exec = _executives[index];
-                    final attendance = exec['today_attendance'];
-                    final bool isCheckedIn = attendance != null;
-                    final bool isCheckedOut = attendance != null && attendance['check_out_time'] != null;
-
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                      child: InkWell(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => AttendanceHistoryScreen(userId: exec['id']),
-                            ),
-                          );
-                        },
-                        borderRadius: BorderRadius.circular(20),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 24,
-                                backgroundColor: AppColors.secondary,
-                                backgroundImage: exec['avatar_url'] != null ? NetworkImage(exec['avatar_url']) : null,
-                                child: exec['avatar_url'] == null 
-                                  ? Text(exec['full_name']?[0] ?? 'E', 
-                                      style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold))
-                                  : null,
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(exec['full_name'] ?? 'Unknown', 
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                                    const SizedBox(height: 4),
-                                    _statusIndicator(isCheckedIn, isCheckedOut, attendance),
-                                  ],
+              : Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 800),
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(24),
+                      itemCount: _executives.length,
+                      itemBuilder: (context, index) {
+                        final exec = _executives[index];
+                        final attendance = exec['today_attendance'];
+                        final bool isCheckedIn = attendance != null;
+                        final bool isCheckedOut = attendance != null && attendance['check_out_time'] != null;
+    
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          child: InkWell(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => AttendanceHistoryScreen(userId: exec['id']),
                                 ),
+                              );
+                            },
+                            borderRadius: BorderRadius.circular(20),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Row(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 24,
+                                    backgroundColor: AppColors.secondary,
+                                    backgroundImage: exec['avatar_url'] != null ? NetworkImage(exec['avatar_url']) : null,
+                                    child: exec['avatar_url'] == null 
+                                      ? Text(exec['full_name']?[0] ?? 'E', 
+                                          style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold))
+                                      : null,
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(exec['full_name'] ?? 'Unknown', 
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                        const SizedBox(height: 4),
+                                        _statusIndicator(isCheckedIn, isCheckedOut, attendance),
+                                      ],
+                                    ),
+                                  ),
+                                  const Icon(Icons.chevron_right_rounded, color: AppColors.textGray),
+                                ],
                               ),
-                              const Icon(Icons.chevron_right_rounded, color: AppColors.textGray),
-                            ],
+                            ),
                           ),
-                        ),
-                      ),
-                    );
-                  },
+                        );
+                      },
+                    ),
+                  ),
                 ),
     );
   }

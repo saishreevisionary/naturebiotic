@@ -50,60 +50,65 @@ class _ExecutiveListScreenState extends State<ExecutiveListScreen> {
         ? const Center(child: CircularProgressIndicator())
         : _executives.isEmpty
           ? const Center(child: Text('No executives found.'))
-          : ListView.builder(
-              padding: const EdgeInsets.all(24.0),
-              itemCount: _executives.length,
-              itemBuilder: (context, index) {
-                final executive = _executives[index];
-                return InkWell(
-                  onTap: () {
-                    _showOptions(executive);
-                  },
-                  borderRadius: BorderRadius.circular(16),
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
+          : Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 800),
+                child: ListView.builder(
+                  padding: const EdgeInsets.all(24.0),
+                  itemCount: _executives.length,
+                  itemBuilder: (context, index) {
+                    final executive = _executives[index];
+                    return InkWell(
+                      onTap: () {
+                        _showOptions(executive);
+                      },
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppColors.secondary),
-                    ),
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          backgroundColor: AppColors.secondary,
-                          backgroundImage: executive['avatar_url'] != null 
-                            ? NetworkImage(executive['avatar_url']) 
-                            : null,
-                          child: executive['avatar_url'] == null 
-                            ? Text(
-                                executive['full_name']?[0] ?? 'E',
-                                style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
-                              )
-                            : null,
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: AppColors.secondary),
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                executive['full_name'] ?? 'N/A',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              backgroundColor: AppColors.secondary,
+                              backgroundImage: executive['avatar_url'] != null 
+                                ? NetworkImage(executive['avatar_url']) 
+                                : null,
+                              child: executive['avatar_url'] == null 
+                                ? Text(
+                                    executive['full_name']?[0] ?? 'E',
+                                    style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
+                                  )
+                                : null,
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    executive['full_name'] ?? 'N/A',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                  ),
+                                  Text(
+                                    '@${executive['username'] ?? 'unknown'}',
+                                    style: const TextStyle(color: AppColors.textGray, fontSize: 13),
+                                  ),
+                                ],
                               ),
-                              Text(
-                                '@${executive['username'] ?? 'unknown'}',
-                                style: const TextStyle(color: AppColors.textGray, fontSize: 13),
-                              ),
-                            ],
-                          ),
+                            ),
+                            const Icon(Icons.chevron_right_rounded, color: AppColors.textGray),
+                          ],
                         ),
-                        const Icon(Icons.chevron_right_rounded, color: AppColors.textGray),
-                      ],
-                    ),
-                  ),
-                );
-              },
+                      ),
+                    );
+                  },
+                ),
+              ),
             ),
     );
   }
@@ -159,6 +164,38 @@ class _ExecutiveListScreenState extends State<ExecutiveListScreen> {
                     builder: (context) => AttendanceHistoryScreen(userId: executive['id']),
                   ),
                 );
+              },
+            ),
+            const SizedBox(height: 16),
+            _optionItem(
+              Icons.phonelink_erase_rounded, 
+              'Reset Device Pairing', 
+              'Allow login from a new phone',
+              onTap: () async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Reset Device?'),
+                    content: const Text('This will allow the user to link their account to a new phone. Are you sure?'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, true), 
+                        child: const Text('Reset', style: TextStyle(color: Colors.red)),
+                      ),
+                    ],
+                  ),
+                );
+                
+                if (confirm == true) {
+                  await SupabaseService.resetUserDevice(executive['id']);
+                  if (mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Device pairing reset successfully')),
+                    );
+                  }
+                }
               },
             ),
             const SizedBox(height: 40),

@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:nature_biotic/core/theme.dart';
 import 'package:nature_biotic/services/supabase_service.dart';
+import 'package:nature_biotic/services/local_database_service.dart';
+import 'package:nature_biotic/services/sync_manager.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:file_picker/file_picker.dart';
+import 'dart:typed_data';
 
 class AddFarmScreen extends StatefulWidget {
   final Map<String, dynamic>? farm;
@@ -22,21 +28,27 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
   final _placeController = TextEditingController();
   final _areaController = TextEditingController();
   
-  String _soilType = 'Loomy';
-  String _irrigationType = 'Flood';
-  String _waterSource = 'Well';
-  String _waterQty = 'Ample';
-  String _powerSource = 'EB';
+  String? _soilType;
+  String? _irrigationType;
+  String? _waterSource;
+  String? _waterQty;
+  String? _powerSource;
 
   List<String> _soilTypes = ['Red', 'Black', 'Loomy', 'Aluvial'];
   List<String> _irrigationTypes = ['Flood', 'Drip irrigation'];
   List<String> _waterSources = ['Well', 'Borewell', 'canal/Pond', 'River/Stream'];
   List<String> _waterQtys = ['Ample', 'surplus', 'Scarcity'];
   List<String> _powerSources = ['EB', 'Diesel Pump', 'Solar'];
+  
+  // Additional Contacts
+  final List<Map<String, TextEditingController>> _contactControllers = [];
 
   bool _isLoading = false;
   bool _isLocationLoading = false;
   bool _isEdit = false;
+
+  PlatformFile? _selectedReport;
+  String? _existingReportUrl;
 
   @override
   void initState() {
@@ -47,11 +59,34 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
       _nameController.text = widget.farm!['name'] ?? '';
       _placeController.text = widget.farm!['place'] ?? '';
       _areaController.text = (widget.farm!['area'] ?? '').toString();
-      _soilType = widget.farm!['soil_type'] ?? 'Loomy';
-      _irrigationType = widget.farm!['irrigation_type'] ?? 'Flood';
-      _waterSource = widget.farm!['water_source'] ?? 'Well';
-      _waterQty = widget.farm!['water_quantity'] ?? 'Ample';
-      _powerSource = widget.farm!['power_source'] ?? 'EB';
+      _soilType = widget.farm!['soil_type'];
+      _irrigationType = widget.farm!['irrigation_type'];
+      _waterSource = widget.farm!['water_source'];
+      _waterQty = widget.farm!['water_quantity'];
+      _powerSource = widget.farm!['power_source'];
+      _existingReportUrl = widget.farm!['report_url'];
+
+      // Load existing contacts
+      if (widget.farm!['contacts'] != null) {
+        try {
+          final dynamic contactsData = widget.farm!['contacts'];
+          List<dynamic> contacts = [];
+          if (contactsData is String) {
+            contacts = jsonDecode(contactsData);
+          } else if (contactsData is List) {
+            contacts = contactsData;
+          }
+
+          for (var contact in contacts) {
+            _contactControllers.add({
+              'name': TextEditingController(text: contact['name']?.toString() ?? ''),
+              'phone': TextEditingController(text: contact['phone']?.toString() ?? ''),
+            });
+          }
+        } catch (e) {
+          debugPrint('Error parsing contacts: $e');
+        }
+      }
     }
   }
 
@@ -73,12 +108,12 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
           if (results[3].isNotEmpty) _waterQtys = results[3].map((e) => e['label'].toString()).toList();
           if (results[4].isNotEmpty) _powerSources = results[4].map((e) => e['label'].toString()).toList();
           
-          // Ensure selected values are in the lists
-          if (!_soilTypes.contains(_soilType)) _soilType = _soilTypes.first;
-          if (!_irrigationTypes.contains(_irrigationType)) _irrigationType = _irrigationTypes.first;
-          if (!_waterSources.contains(_waterSource)) _waterSource = _waterSources.first;
-          if (!_waterQtys.contains(_waterQty)) _waterQty = _waterQtys.first;
-          if (!_powerSources.contains(_powerSource)) _powerSource = _powerSources.first;
+          // Ensure selected values are in the lists, but only if they are not null
+          if (_soilType != null && !_soilTypes.contains(_soilType)) _soilType = _soilTypes.first;
+          if (_irrigationType != null && !_irrigationTypes.contains(_irrigationType)) _irrigationType = _irrigationTypes.first;
+          if (_waterSource != null && !_waterSources.contains(_waterSource)) _waterSource = _waterSources.first;
+          if (_waterQty != null && !_waterQtys.contains(_waterQty)) _waterQty = _waterQtys.first;
+          if (_powerSource != null && !_powerSources.contains(_powerSource)) _powerSource = _powerSources.first;
         });
       }
     } catch (_) {}
@@ -171,11 +206,85 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
     }
   }
 
+  Future<void> _pickReport() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+        withData: true,
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+        if (file.size > 5 * 1024 * 1024) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('File size must be less than 5MB'), backgroundColor: Colors.orange),
+            );
+          }
+          return;
+        }
+        setState(() {
+          _selectedReport = file;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error picking file: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  void _addContactRow() {
+    setState(() {
+      _contactControllers.add({
+        'name': TextEditingController(),
+        'phone': TextEditingController(),
+      });
+    });
+  }
+
+  void _removeContactRow(int index) {
+    setState(() {
+      _contactControllers[index]['name']?.dispose();
+      _contactControllers[index]['phone']?.dispose();
+      _contactControllers.removeAt(index);
+    });
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _placeController.dispose();
+    _areaController.dispose();
+    for (var controllers in _contactControllers) {
+      controllers['name']?.dispose();
+      controllers['phone']?.dispose();
+    }
+    super.dispose();
+  }
+
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
     try {
+      String? reportUrl = _existingReportUrl;
+
+      if (_selectedReport != null && _selectedReport!.bytes != null) {
+        final fileName = 'report_${DateTime.now().millisecondsSinceEpoch}.${_selectedReport!.extension}';
+        reportUrl = await SupabaseService.uploadImage(
+          _selectedReport!.bytes!, 
+          fileName, 
+          'farm_reports'
+        );
+      }
+
+      final userProfile = await SupabaseService.getProfile();
+      final currentUserId = SupabaseService.client.auth.currentUser?.id;
+
       final farmData = {
         'name': _nameController.text.trim(),
         'place': _placeController.text.trim(),
@@ -186,12 +295,53 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
         'water_quantity': _waterQty,
         'power_source': _powerSource,
         'farmer_id': widget.farmerId ?? widget.farm?['farmer_id'],
+        'report_url': reportUrl,
+        'created_at': DateTime.now().toIso8601String(),
+        'created_by': currentUserId,
       };
 
-      if (_isEdit) {
-        await SupabaseService.updateFarm(widget.farm!['id'], farmData);
+      // Collect additional contacts
+      final List<Map<String, String>> contacts = _contactControllers
+          .where((c) => c['name']!.text.isNotEmpty || c['phone']!.text.isNotEmpty)
+          .map((c) => {
+                'name': c['name']!.text.trim(),
+                'phone': c['phone']!.text.trim(),
+              })
+          .toList();
+      
+      if (contacts.isNotEmpty) {
+        farmData['contacts'] = contacts;
+      }
+
+      // Auto-assign if created by an executive (and not just an edit)
+      if (!_isEdit && userProfile?['role'] == 'executive' && currentUserId != null) {
+        farmData['assigned_to'] = currentUserId;
+      } else if (_isEdit) {
+        // Keep existing assignment if editing
+        farmData['assigned_to'] = widget.farm?['assigned_to'];
+      }
+
+      // NEW OFFLINE-FIRST LOGIC
+      final String op = _isEdit ? 'UPDATE' : 'INSERT';
+      final Map<String, dynamic> offlineData = {
+        ...farmData,
+        if (_isEdit) 'id': widget.farm!['id'].toString(),
+      };
+
+      if (kIsWeb) {
+        if (_isEdit) {
+          await SupabaseService.updateFarm(widget.farm!['id'], farmData);
+        } else {
+          await SupabaseService.addFarm(farmData);
+        }
       } else {
-        await SupabaseService.addFarm(farmData);
+        await LocalDatabaseService.saveAndQueue(
+          tableName: 'farms',
+          data: offlineData,
+          operation: op,
+        );
+        // Attempt to sync
+        SyncManager().sync();
       }
 
       if (mounted) {
@@ -221,160 +371,287 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
       appBar: AppBar(
         title: Text(_isEdit ? 'Edit Farm' : 'Add Farm'),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Farm Details',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textBlack,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppColors.secondary.withOpacity(0.5),
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: Column(
-                  children: [
-                    TextFormField(
-                      controller: _nameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Farm Name',
-                        hintText: 'e.g. Green Valley Farm',
-                        fillColor: Colors.white,
-                      ),
-                      validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Farm Details',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textBlack,
                     ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _placeController,
-                      decoration: InputDecoration(
-                        labelText: 'Farm Location / Place',
-                        hintText: 'Enter farm location',
-                        fillColor: Colors.white,
-                        suffixIcon: IconButton(
-                          icon: _isLocationLoading 
-                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                            : const Icon(Icons.my_location_rounded, color: AppColors.primary),
-                          onPressed: _isLocationLoading ? null : _fetchCurrentLocation,
-                          tooltip: 'Get Current Location',
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: AppColors.secondary.withOpacity(0.5),
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: Column(
+                      children: [
+                        TextFormField(
+                          controller: _nameController,
+                          decoration: const InputDecoration(
+                            labelText: 'Farm Name',
+                            hintText: 'e.g. Green Valley Farm',
+                            fillColor: Colors.white,
+                          ),
+                          validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _placeController,
+                          decoration: InputDecoration(
+                            labelText: 'Farm Location / Place',
+                            hintText: 'Enter farm location',
+                            fillColor: Colors.white,
+                            suffixIcon: IconButton(
+                              icon: _isLocationLoading 
+                                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                                : const Icon(Icons.my_location_rounded, color: AppColors.primary),
+                              onPressed: _isLocationLoading ? null : _fetchCurrentLocation,
+                              tooltip: 'Get Current Location',
+                            ),
+                          ),
+                          validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _areaController,
+                          decoration: const InputDecoration(
+                            labelText: 'Total Area (Acres)',
+                            hintText: 'Enter area in acres',
+                            fillColor: Colors.white,
+                          ),
+                          keyboardType: TextInputType.number,
+                          validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                        ),
+                        const SizedBox(height: 16),
+                        _buildDropdown('Soil Type', _soilTypes, _soilType, (v) => setState(() => _soilType = v ?? _soilType)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Infrastructure & Resources',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textBlack,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: AppColors.secondary.withOpacity(0.5),
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: Column(
+                      children: [
+                        _buildDropdown('Irrigation Type', _irrigationTypes, _irrigationType, (v) => setState(() => _irrigationType = v ?? _irrigationType)),
+                        const SizedBox(height: 16),
+                        _buildDropdown('Water Source', _waterSources, _waterSource, (v) => setState(() => _waterSource = v ?? _waterSource)),
+                        const SizedBox(height: 16),
+                        _buildDropdown('Water Quantity', _waterQtys, _waterQty, (v) => setState(() => _waterQty = v ?? _waterQty)),
+                        const SizedBox(height: 16),
+                        _buildDropdown('Power Source', _powerSources, _powerSource, (v) => setState(() => _powerSource = v ?? _powerSource)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Additional Contacts',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textBlack,
                         ),
                       ),
-                      validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _areaController,
-                      decoration: const InputDecoration(
-                        labelText: 'Total Area (Acres)',
-                        hintText: 'Enter area in acres',
-                        fillColor: Colors.white,
+                      TextButton.icon(
+                        onPressed: _addContactRow,
+                        icon: const Icon(Icons.add_circle_outline_rounded, size: 20),
+                        label: const Text('Add Contact'),
+                        style: TextButton.styleFrom(foregroundColor: AppColors.primary),
                       ),
-                      keyboardType: TextInputType.number,
-                      validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
-                    ),
-                    const SizedBox(height: 16),
-                    _buildDropdown('Soil Type', _soilTypes, _soilType, (v) => setState(() => _soilType = v ?? _soilType)),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                'Infrastructure & Resources',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textBlack,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppColors.secondary.withOpacity(0.5),
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: Column(
-                  children: [
-                    _buildDropdown('Irrigation Type', _irrigationTypes, _irrigationType, (v) => setState(() => _irrigationType = v ?? _irrigationType)),
-                    const SizedBox(height: 16),
-                    _buildDropdown('Water Source', _waterSources, _waterSource, (v) => setState(() => _waterSource = v ?? _waterSource)),
-                    const SizedBox(height: 16),
-                    _buildDropdown('Water Quantity', _waterQtys, _waterQty, (v) => setState(() => _waterQty = v ?? _waterQty)),
-                    const SizedBox(height: 16),
-                    _buildDropdown('Power Source', _powerSources, _powerSource, (v) => setState(() => _powerSource = v ?? _powerSource)),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                'Soil & Water Reports',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textBlack,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(32),
-                decoration: BoxDecoration(
-                  color: AppColors.secondary.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: AppColors.primary.withOpacity(0.2), style: BorderStyle.solid),
-                ),
-                child: Column(
-                  children: [
-                    const Icon(Icons.cloud_upload_outlined, size: 48, color: AppColors.primary),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Upload PDF or Image',
-                      style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Max size 5MB',
-                      style: TextStyle(fontSize: 12, color: AppColors.textGray),
-                    ),
-                    const SizedBox(height: 16),
-                    TextButton(
-                      onPressed: () {},
-                      style: TextButton.styleFrom(
-                        backgroundColor: AppColors.primary.withOpacity(0.1),
-                        foregroundColor: AppColors.primary,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (_contactControllers.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        'No additional contacts added. (Optional)',
+                        style: TextStyle(color: AppColors.textGray.withOpacity(0.6), fontStyle: FontStyle.italic, fontSize: 13),
                       ),
-                      child: const Text('Browse Files'),
+                    )
+                  else
+                    ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: _contactControllers.length,
+                      separatorBuilder: (context, index) => const SizedBox(height: 12),
+                      itemBuilder: (context, index) {
+                        return Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: AppColors.primary.withOpacity(0.1)),
+                          ),
+                          child: Column(
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _contactControllers[index]['name'],
+                                      decoration: const InputDecoration(
+                                        labelText: 'Contact Person Name',
+                                        hintText: 'e.g. Farm Manager',
+                                        isDense: true,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  IconButton(
+                                    onPressed: () => _removeContactRow(index),
+                                    icon: const Icon(Icons.remove_circle_outline_rounded, color: Colors.red),
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                                TextFormField(
+                                  controller: _contactControllers[index]['phone'],
+                                  decoration: const InputDecoration(
+                                    labelText: 'Contact Number',
+                                    hintText: 'Enter 10 digit number',
+                                    isDense: true,
+                                  ),
+                                  keyboardType: TextInputType.phone,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                    LengthLimitingTextInputFormatter(10),
+                                  ],
+                                  validator: (v) {
+                                    if (v != null && v.isNotEmpty && v.length != 10) {
+                                      return 'Must be 10 digits';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                            ],
+                          ),
+                        );
+                      },
                     ),
-                  ],
-                ),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Soil & Water Reports',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textBlack,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(32),
+                    decoration: BoxDecoration(
+                      color: AppColors.secondary.withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: AppColors.primary.withOpacity(0.2), style: BorderStyle.solid),
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(
+                          _selectedReport != null ? Icons.description_rounded : Icons.cloud_upload_outlined, 
+                          size: 48, 
+                          color: AppColors.primary
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          _selectedReport != null ? _selectedReport!.name : 'Upload PDF or Image',
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
+                          textAlign: TextAlign.center,
+                        ),
+                        if (_selectedReport == null && _existingReportUrl != null) ...[
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Existing report will be kept',
+                            style: TextStyle(fontSize: 12, color: AppColors.primary, fontStyle: FontStyle.italic),
+                          ),
+                        ],
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Max size 5MB',
+                          style: TextStyle(fontSize: 12, color: AppColors.textGray),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            TextButton(
+                              onPressed: _pickReport,
+                              style: TextButton.styleFrom(
+                                backgroundColor: AppColors.primary.withOpacity(0.1),
+                                foregroundColor: AppColors.primary,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              child: Text(_selectedReport != null ? 'Change File' : 'Browse Files'),
+                            ),
+                            if (_selectedReport != null) ...[
+                              const SizedBox(width: 8),
+                              IconButton(
+                                onPressed: () => setState(() => _selectedReport = null),
+                                icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
+                                tooltip: 'Remove selected file',
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 48),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _isLoading ? null : _handleSubmit,
+                      child: _isLoading 
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                            )
+                          : Text(_isEdit ? 'Update Farm Details' : 'Save Farm Details'),
+                    ),
+                  ),
+                  const SizedBox(height: 48),
+                ],
               ),
-              const SizedBox(height: 48),
-              ElevatedButton(
-                onPressed: _isLoading ? null : _handleSubmit,
-                child: _isLoading 
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : Text(_isEdit ? 'Update Farm Details' : 'Save Farm Details'),
-              ),
-              const SizedBox(height: 24),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildDropdown(String label, List<String> items, String value, Function(String?) onChanged) {
+  Widget _buildDropdown(String label, List<String> items, String? value, Function(String?) onChanged) {
     return DropdownButtonFormField<String>(
       value: value,
       decoration: InputDecoration(
@@ -388,6 +665,7 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
         );
       }).toList(),
       onChanged: onChanged,
+      validator: (v) => (v == null || v.isEmpty) ? 'Selection required' : null,
     );
   }
 }

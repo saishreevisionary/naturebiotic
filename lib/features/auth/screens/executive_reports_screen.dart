@@ -118,40 +118,45 @@ class _ExecutiveReportsScreenState extends State<ExecutiveReportsScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          if (_dateRange != null)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              color: AppColors.primary.withOpacity(0.1),
-              child: Row(
-                children: [
-                  const Icon(Icons.filter_alt_rounded, size: 16, color: AppColors.primary),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Filter: ${DateFormat('dd MMM').format(_dateRange!.start)} - ${DateFormat('dd MMM').format(_dateRange!.end)}',
-                    style: const TextStyle(
-                      fontSize: 13, 
-                      fontWeight: FontWeight.bold, 
-                      color: AppColors.primary
-                    ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: Column(
+            children: [
+              if (_dateRange != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  color: AppColors.primary.withOpacity(0.1),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.filter_alt_rounded, size: 16, color: AppColors.primary),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Filter: ${DateFormat('dd MMM').format(_dateRange!.start)} - ${DateFormat('dd MMM').format(_dateRange!.end)}',
+                        style: const TextStyle(
+                          fontSize: 13, 
+                          fontWeight: FontWeight.bold, 
+                          color: AppColors.primary
+                        ),
+                      ),
+                      const Spacer(),
+                      GestureDetector(
+                        onTap: _clearFilter,
+                        child: const Text('Reset', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
                   ),
-                  const Spacer(),
-                  GestureDetector(
-                    onTap: _clearFilter,
-                    child: const Text('Reset', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
-                  ),
-                ],
+                ),
+              Expanded(
+                child: _isLoading 
+                  ? const Center(child: CircularProgressIndicator())
+                  : _reports.isEmpty 
+                    ? _buildEmptyState()
+                    : _buildReportsList(),
               ),
-            ),
-          Expanded(
-            child: _isLoading 
-              ? const Center(child: CircularProgressIndicator())
-              : _reports.isEmpty 
-                ? _buildEmptyState()
-                : _buildReportsList(),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

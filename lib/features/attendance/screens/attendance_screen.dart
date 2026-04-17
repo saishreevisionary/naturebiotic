@@ -5,7 +5,10 @@ import 'package:geocoding/geocoding.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:nature_biotic/core/theme.dart';
 import 'package:nature_biotic/services/supabase_service.dart';
+import 'package:nature_biotic/services/local_database_service.dart';
+import 'package:nature_biotic/services/sync_manager.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class AttendanceScreen extends StatefulWidget {
   const AttendanceScreen({super.key});
@@ -32,10 +35,22 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
+      // 1. Try fetching from remote
       _todayAttendance = await SupabaseService.getTodayAttendance();
+      
+      // 2. If remote is null (sync pending), check local
+      if (_todayAttendance == null && !kIsWeb) {
+        _todayAttendance = await LocalDatabaseService.getTodayAttendance();
+      }
+
       await _getCurrentLocation();
     } catch (e) {
-      if (mounted) {
+      // Fallback to local on error (e.g. offline)
+      if (!kIsWeb) {
+        _todayAttendance = await LocalDatabaseService.getTodayAttendance();
+      }
+      
+      if (mounted && _todayAttendance == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error loading data: $e'), backgroundColor: Colors.red),
         );
@@ -111,6 +126,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       final pickedFile = await _picker.pickImage(
         source: ImageSource.camera,
         imageQuality: 50,
+        maxWidth: 1024,
+        maxHeight: 1024,
       );
       if (pickedFile != null) {
         setState(() => _image = File(pickedFile.path));
@@ -150,20 +167,50 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         'attendance',
       );
 
-      if (isCheckIn) {
-        await SupabaseService.checkIn({
-          'check_in_time': DateTime.now().toIso8601String(),
-          'check_in_photo': imageUrl,
-          'check_in_location_lat': _currentPosition!.latitude,
-          'check_in_location_lng': _currentPosition!.longitude,
-        });
+      final attendanceData = {
+        if (isCheckIn) 'check_in_time': DateTime.now().toIso8601String()
+        else 'check_out_time': DateTime.now().toIso8601String(),
+        
+        if (isCheckIn) 'check_in_photo': imageUrl
+        else 'check_out_photo': imageUrl,
+        
+        if (isCheckIn) 'check_in_location_lat': _currentPosition!.latitude
+        else 'check_out_location_lat': _currentPosition!.latitude,
+        
+        if (isCheckIn) 'check_in_location_lng': _currentPosition!.longitude
+        else 'check_out_location_lng': _currentPosition!.longitude,
+
+        'created_at': DateTime.now().toIso8601String(),
+        // Only keep local bytes if upload failed
+        '_local_photo': imageUrl == null ? await _image!.readAsBytes() : null,
+      };
+
+      if (!isCheckIn) attendanceData['id'] = _todayAttendance!['id'];
+
+      if (kIsWeb) {
+        if (isCheckIn) {
+          await SupabaseService.checkIn({
+            'check_in_time': DateTime.now().toIso8601String(),
+            'check_in_photo': imageUrl,
+            'check_in_location_lat': _currentPosition!.latitude,
+            'check_in_location_lng': _currentPosition!.longitude,
+          });
+        } else {
+          await SupabaseService.checkOut(_todayAttendance!['id'], {
+            'check_out_time': DateTime.now().toIso8601String(),
+            'check_out_photo': imageUrl,
+            'check_out_location_lat': _currentPosition!.latitude,
+            'check_out_location_lng': _currentPosition!.longitude,
+          });
+        }
       } else {
-        await SupabaseService.checkOut(_todayAttendance!['id'], {
-          'check_out_time': DateTime.now().toIso8601String(),
-          'check_out_photo': imageUrl,
-          'check_out_location_lat': _currentPosition!.latitude,
-          'check_out_location_lng': _currentPosition!.longitude,
-        });
+        await LocalDatabaseService.saveAndQueue(
+          tableName: 'attendance',
+          data: attendanceData,
+          operation: isCheckIn ? 'INSERT' : 'UPDATE',
+        );
+        // Attempt to sync in background
+        SyncManager().sync();
       }
 
       if (mounted) {
@@ -199,116 +246,121 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       ),
       body: _isLoading 
         ? const Center(child: CircularProgressIndicator())
-        : SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // Info Card
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: AppColors.secondary.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  child: Column(
-                    children: [
-                      _infoRow(Icons.calendar_today_rounded, 'Date', 
-                        DateFormat('EEEE, MMM d').format(DateTime.now())),
-                      const Divider(height: 32),
-                      _infoRow(Icons.location_on_rounded, 'Location', _currentAddress),
-                    ],
-                  ),
-                ),
-                
-                const SizedBox(height: 32),
-                
-                // Photo Area
-                GestureDetector(
-                  onTap: isCompleted ? null : _takePhoto,
-                  child: Container(
-                    width: double.infinity,
-                    height: 250,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: AppColors.secondary, width: 2),
-                    ),
-                    child: _image != null
-                        ? ClipRRect(
-                            borderRadius: BorderRadius.circular(22),
-                            child: Image.file(_image!, fit: BoxFit.cover),
-                          )
-                        : isCompleted
-                            ? const Center(child: Text('Shift Completed for Today'))
-                            : Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.camera_alt_rounded, size: 64, color: AppColors.primary.withOpacity(0.5)),
-                                  const SizedBox(height: 12),
-                                  const Text('Tap to take photo', style: TextStyle(color: AppColors.textGray)),
-                                ],
-                              ),
-                  ),
-                ),
-
-                const SizedBox(height: 40),
-
-                if (isCompleted)
-                  const Text('You have already logged your attendance for today.', 
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold))
-                else
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _isSubmitting ? null : _handleSubmit,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: isCheckedIn ? Colors.orange : AppColors.primary,
+        : Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 800),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Info Card
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: AppColors.secondary.withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(24),
                       ),
-                      child: _isSubmitting
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : Text(isCheckedIn ? 'Check Out' : 'Check In'),
+                      child: Column(
+                        children: [
+                          _infoRow(Icons.calendar_today_rounded, 'Date', 
+                            DateFormat('EEEE, MMM d').format(DateTime.now())),
+                          const Divider(height: 32),
+                          _infoRow(Icons.location_on_rounded, 'Location', _currentAddress),
+                        ],
+                      ),
                     ),
-                  ),
-                
-                const SizedBox(height: 24),
-                
-                // Today Stats
-                if (_todayAttendance != null)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(24),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.shadow.withOpacity(0.05),
-                          blurRadius: 10, offset: const Offset(0, 4)
-                        )
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Activity Today', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        const SizedBox(height: 16),
-                        _activityItem(
-                          'Check In', 
-                          DateFormat('hh:mm a').format(DateTime.parse(_todayAttendance!['check_in_time'])),
-                          true
+                    
+                    const SizedBox(height: 32),
+                    
+                    // Photo Area
+                    GestureDetector(
+                      onTap: isCompleted ? null : _takePhoto,
+                      child: Container(
+                        width: double.infinity,
+                        height: 250,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: AppColors.secondary, width: 2),
                         ),
-                        if (_todayAttendance!['check_out_time'] != null)
-                          _activityItem(
-                            'Check Out', 
-                            DateFormat('hh:mm a').format(DateTime.parse(_todayAttendance!['check_out_time'])),
-                            false
-                          ),
-                      ],
+                        child: _image != null
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(22),
+                                child: Image.file(_image!, fit: BoxFit.cover),
+                              )
+                            : isCompleted
+                                ? const Center(child: Text('Shift Completed for Today'))
+                                : Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.camera_alt_rounded, size: 64, color: AppColors.primary.withOpacity(0.5)),
+                                      const SizedBox(height: 12),
+                                      const Text('Tap to take photo', style: TextStyle(color: AppColors.textGray)),
+                                    ],
+                                  ),
+                      ),
                     ),
-                  ),
-              ],
+    
+                    const SizedBox(height: 40),
+    
+                    if (isCompleted)
+                      const Text('You have already logged your attendance for today.', 
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold))
+                    else
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: _isSubmitting ? null : _handleSubmit,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: isCheckedIn ? Colors.orange : AppColors.primary,
+                          ),
+                          child: _isSubmitting
+                              ? const CircularProgressIndicator(color: Colors.white)
+                              : Text(isCheckedIn ? 'Check Out' : 'Check In'),
+                        ),
+                      ),
+                    
+                    const SizedBox(height: 24),
+                    
+                    // Today Stats
+                    if (_todayAttendance != null)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(24),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.shadow.withOpacity(0.05),
+                              blurRadius: 10, offset: const Offset(0, 4)
+                            )
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Activity Today', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            const SizedBox(height: 16),
+                            _activityItem(
+                              'Check In', 
+                              DateFormat('hh:mm a').format(DateTime.parse(_todayAttendance!['check_in_time'])),
+                              true
+                            ),
+                            if (_todayAttendance!['check_out_time'] != null)
+                              _activityItem(
+                                'Check Out', 
+                                DateFormat('hh:mm a').format(DateTime.parse(_todayAttendance!['check_out_time'])),
+                                false
+                              ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
           ),
     );

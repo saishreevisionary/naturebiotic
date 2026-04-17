@@ -26,10 +26,28 @@ class _SplashScreenState extends State<SplashScreen> {
       final session = SupabaseService.client.auth.currentSession;
       
       if (session != null) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const BottomNav()),
-        );
+        final isAuthorized = await SupabaseService.isDeviceAuthorized();
+        if (isAuthorized) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const BottomNav()),
+          );
+        } else {
+          // Device Mismatch - Clear session and go to login
+          await SupabaseService.client.auth.signOut();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Security Alert: This device is not authorized for this account.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const LoginScreen()),
+            );
+          }
+        }
       } else {
         Navigator.pushReplacement(
           context,

@@ -3,9 +3,15 @@ import 'package:nature_biotic/core/theme.dart';
 import 'package:nature_biotic/services/supabase_service.dart';
 import 'package:nature_biotic/features/farms/screens/add_farm_screen.dart';
 import 'package:nature_biotic/features/farms/screens/farm_detail_screen.dart';
+import 'package:nature_biotic/features/farms/screens/stock_management_screen.dart';
+import 'package:nature_biotic/services/local_database_service.dart';
+import 'package:nature_biotic/core/widgets/animations.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:nature_biotic/services/pdf_service.dart';
 
 class FarmListScreen extends StatefulWidget {
-  const FarmListScreen({super.key});
+  final bool isStockMode;
+  const FarmListScreen({super.key, this.isStockMode = false});
 
   @override
   State<FarmListScreen> createState() => _FarmListScreenState();
@@ -13,6 +19,7 @@ class FarmListScreen extends StatefulWidget {
 
 class _FarmListScreenState extends State<FarmListScreen> {
   List<Map<String, dynamic>> _farms = [];
+  Map<String, List<Map<String, dynamic>>> _farmBalances = {};
   bool _isLoading = true;
 
   @override
@@ -22,11 +29,32 @@ class _FarmListScreenState extends State<FarmListScreen> {
   }
 
   Future<void> _loadFarms() async {
+    setState(() => _isLoading = true);
     try {
-      final data = await SupabaseService.getFarms();
+      final remoteData = await SupabaseService.getFarms();
+      List<Map<String, dynamic>> localData = [];
+
+      if (!kIsWeb) {
+        localData = await LocalDatabaseService.getData('farms');
+      }
+
+      // Merge and De-duplicate
+      final Map<String, Map<String, dynamic>> combinedMap = {};
+      for (var farm in localData) combinedMap[farm['id'].toString()] = farm;
+      for (var farm in remoteData) combinedMap[farm['id'].toString()] = farm;
+      
+      final farms = combinedMap.values.toList();
+      farms.sort((a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''));
+
+      // If in stock mode, fetch and calculate balances
+      if (widget.isStockMode) {
+        final transactions = await SupabaseService.getAllStockTransactions();
+        _calculateAllBalances(transactions);
+      }
+
       if (mounted) {
         setState(() {
-          _farms = data;
+          _farms = farms;
           _isLoading = false;
         });
       }
@@ -39,6 +67,35 @@ class _FarmListScreenState extends State<FarmListScreen> {
         );
       }
     }
+  }
+
+  void _calculateAllBalances(List<Map<String, dynamic>> transactions) {
+    final Map<String, Map<String, Map<String, dynamic>>> farmItemMap = {};
+
+    for (var tx in transactions) {
+      final farmId = tx['farm_id']?.toString() ?? 'unknown';
+      final item = tx['item_name'] ?? 'Unknown';
+      final unit = tx['unit'] ?? 'Std';
+      final qty = double.tryParse(tx['quantity'].toString()) ?? 0.0;
+      final type = tx['transaction_type'];
+
+      if (!farmItemMap.containsKey(farmId)) farmItemMap[farmId] = {};
+      final itemKey = "$item ($unit)";
+
+      if (!farmItemMap[farmId]!.containsKey(itemKey)) {
+        farmItemMap[farmId]![itemKey] = {'item': item, 'unit': unit, 'balance': 0.0};
+      }
+
+      if (type == 'RECEIVED') {
+        farmItemMap[farmId]![itemKey]!['balance'] += qty;
+      } else if (type == 'DELIVERED' || type == 'RETURN') {
+        farmItemMap[farmId]![itemKey]!['balance'] -= qty;
+      }
+    }
+
+    setState(() {
+      _farmBalances = farmItemMap.map((fid, items) => MapEntry(fid, items.values.toList()));
+    });
   }
 
   Future<void> _editFarm(Map<String, dynamic> farm) async {
@@ -85,6 +142,152 @@ class _FarmListScreenState extends State<FarmListScreen> {
     }
   }
 
+  Future<void> _showStockDownloadDialog() async {
+    final Set<String> selectedIds = _farms.map((f) => f['id'].toString()).toSet();
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final allSelected = selectedIds.length == _farms.length;
+
+          return AlertDialog(
+            title: Row(
+              children: [
+                const Icon(Icons.picture_as_pdf_rounded, color: AppColors.primary),
+                const SizedBox(width: 8),
+                const Expanded(child: Text('Download Stock Report')),
+              ],
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CheckboxListTile(
+                    title: const Text('Select All Farms', style: TextStyle(fontWeight: FontWeight.bold)),
+                    value: allSelected,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: EdgeInsets.zero,
+                    onChanged: (val) {
+                      setDialogState(() {
+                        if (val == true) {
+                          selectedIds.addAll(_farms.map((f) => f['id'].toString()));
+                        } else {
+                          selectedIds.clear();
+                        }
+                      });
+                    },
+                  ),
+                  const Divider(),
+                  Flexible(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: _farms.length,
+                      itemBuilder: (context, index) {
+                        final farm = _farms[index];
+                        final farmId = farm['id'].toString();
+                        return CheckboxListTile(
+                          title: Text(farm['name'] ?? 'Unknown Farm'),
+                          subtitle: Text(farm['place'] ?? '', style: const TextStyle(fontSize: 11)),
+                          value: selectedIds.contains(farmId),
+                          controlAffinity: ListTileControlAffinity.leading,
+                          contentPadding: EdgeInsets.zero,
+                          onChanged: (val) {
+                            setDialogState(() {
+                              if (val == true) {
+                                selectedIds.add(farmId);
+                              } else {
+                                selectedIds.remove(farmId);
+                              }
+                            });
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+              ElevatedButton(
+                onPressed: selectedIds.isEmpty ? null : () {
+                  Navigator.pop(context);
+                  _handlePdfGeneration(selectedIds.toList());
+                },
+                child: const Text('Download PDF'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _handlePdfGeneration(List<String> farmIds) async {
+    setState(() => _isLoading = true);
+    try {
+      final transactions = await SupabaseService.getAllStockTransactions();
+      
+      // Calculate balances for each farm
+      final List<Map<String, dynamic>> reportData = [];
+      
+      for (var farmId in farmIds) {
+        final farm = _farms.firstWhere((f) => f['id'].toString() == farmId, orElse: () => {});
+        if (farm.isEmpty) continue;
+
+        final farmName = farm['name'] ?? farm['place'] ?? 'Unknown Farm';
+        
+        // Calculate balance for this specific farm
+        final Map<String, Map<String, dynamic>> balancesPerItem = {};
+        final farmTransactions = transactions.where((tx) => tx['farm_id'].toString() == farmId);
+        
+        for (var tx in farmTransactions) {
+          final item = tx['item_name'] ?? 'Unknown';
+          final unit = tx['unit'] ?? 'Std';
+          final qty = double.tryParse(tx['quantity'].toString()) ?? 0.0;
+          final type = tx['transaction_type'];
+          final key = "$item ($unit)";
+
+          if (!balancesPerItem.containsKey(key)) {
+            balancesPerItem[key] = {'item': item, 'unit': unit, 'balance': 0.0};
+          }
+
+          if (type == 'RECEIVED') {
+            balancesPerItem[key]!['balance'] += qty;
+          } else if (type == 'DELIVERED' || type == 'RETURN') {
+            balancesPerItem[key]!['balance'] -= qty;
+          }
+        }
+
+        reportData.add({
+          'farmName': farmName,
+          'balances': balancesPerItem.values.toList(),
+        });
+      }
+
+      await PdfService.generateMultiFarmStockReport(
+        farmData: reportData,
+        date: DateTime.now(),
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Stock report generated successfully')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error generating PDF: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -92,6 +295,11 @@ class _FarmListScreenState extends State<FarmListScreen> {
       appBar: AppBar(
         title: const Text('Farms'),
         actions: [
+          IconButton(
+            onPressed: _showStockDownloadDialog, 
+            icon: const Icon(Icons.picture_as_pdf_outlined, color: AppColors.primary),
+            tooltip: 'Download Stock Report',
+          ),
           IconButton(onPressed: _loadFarms, icon: const Icon(Icons.refresh_rounded)),
         ],
       ),
@@ -99,41 +307,67 @@ class _FarmListScreenState extends State<FarmListScreen> {
         ? const Center(child: CircularProgressIndicator())
         : _farms.isEmpty
           ? const Center(child: Text('No farms registered.'))
-          : ListView.builder(
-              padding: const EdgeInsets.all(24.0),
-              itemCount: _farms.length,
-              itemBuilder: (context, index) {
-                final farm = _farms[index];
-                return FarmCard(
-                  name: farm['name'] ?? farm['place'] ?? 'N/A',
-                  place: farm['place'] ?? 'N/A',
-                  area: '${farm['area'] ?? '0'} Acres',
-                  soilType: farm['soil_type'] ?? 'N/A',
-                  onEdit: () => _editFarm(farm),
-                  onDelete: () => _deleteFarm(farm),
-                  onViewDetails: () {
-                    debugPrint('Opening farm details for: ${farm['name']}');
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => FarmDetailScreen(farm: farm),
+          : Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 800),
+                child: ListView.builder(
+                  padding: const EdgeInsets.all(24.0),
+                  itemCount: _farms.length,
+                  itemBuilder: (context, index) {
+                    final farm = _farms[index];
+                    return EntranceAnimation(
+                      delay: 100 + (index * 100),
+                      child: FarmCard(
+                        name: farm['name'] ?? farm['place'] ?? 'N/A',
+                        place: farm['place'] ?? 'N/A',
+                        area: '${farm['area'] ?? '0'} Acres',
+                        soilType: farm['soil_type'] ?? 'N/A',
+                        onEdit: () => _editFarm(farm),
+                        onDelete: () => _deleteFarm(farm),
+                        onViewDetails: () {
+                          debugPrint('Opening farm details for: ${farm['name']}');
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => FarmDetailScreen(farm: farm),
+                            ),
+                          );
+                        },
+                        onManageStock: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => StockManagementScreen(
+                                farmId: farm['id'].toString(),
+                                farmName: farm['name'] ?? farm['place'] ?? 'N/A',
+                              ),
+                            ),
+                          );
+                        },
+                        balances: _farmBalances[farm['id'].toString()],
                       ),
                     );
                   },
-                );
-              },
+                ),
+              ),
             ),
-      floatingActionButton: FloatingActionButton(
-        heroTag: 'add_farm_fab',
-        onPressed: () async {
-          await Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const AddFarmScreen()),
-          );
-          _loadFarms();
-        },
-        backgroundColor: AppColors.primary,
-        child: const Icon(Icons.add_rounded, color: Colors.white),
+      floatingActionButton: EntranceAnimation(
+        delay: 800,
+        child: ScaleButton(
+          onTap: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const AddFarmScreen()),
+            );
+            _loadFarms();
+          },
+          child: FloatingActionButton(
+            heroTag: 'farm_fab',
+            onPressed: null,
+            backgroundColor: AppColors.primary,
+            child: const Icon(Icons.add_rounded, color: Colors.white),
+          ),
+        ),
       ),
     );
   }
@@ -145,6 +379,8 @@ class FarmCard extends StatelessWidget {
   final String area;
   final String soilType;
   final VoidCallback? onViewDetails;
+  final VoidCallback? onManageStock;
+  final List<Map<String, dynamic>>? balances;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
 
@@ -155,6 +391,8 @@ class FarmCard extends StatelessWidget {
     required this.area,
     required this.soilType,
     this.onViewDetails,
+    this.onManageStock,
+    this.balances,
     this.onEdit,
     this.onDelete,
   });
@@ -226,16 +464,67 @@ class FarmCard extends StatelessWidget {
               _infoTile(Icons.waves_rounded, soilType),
             ],
           ),
-          const SizedBox(height: 16),
-          ElevatedButton(
-            onPressed: onViewDetails,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: AppColors.primary,
-              minimumSize: const Size(double.infinity, 44),
-              side: const BorderSide(color: AppColors.primary),
+          if (balances != null && balances!.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            const Text(
+              'Stock in Hand:',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),
             ),
-            child: const Text('View Farm Details'),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: balances!.map((b) => Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: (b['balance'] as double) > 0 ? Colors.teal.withOpacity(0.1) : Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: (b['balance'] as double) > 0 ? Colors.teal.withOpacity(0.3) : Colors.red.withOpacity(0.3)),
+                ),
+                child: Text(
+                  '${b['item']}: ${b['balance'].toString().replaceAll(RegExp(r'\.0$'), '')}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: (b['balance'] as double) > 0 ? Colors.teal : Colors.red,
+                  ),
+                ),
+              )).toList(),
+            ),
+          ],
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                flex: 4,
+                child: OutlinedButton.icon(
+                  onPressed: onManageStock,
+                  icon: const Icon(Icons.inventory_2_rounded, size: 16),
+                  label: const Text('Stock', style: TextStyle(fontSize: 13)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.teal,
+                    side: const BorderSide(color: Colors.teal),
+                    minimumSize: const Size(0, 44),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 5,
+                child: ElevatedButton(
+                  onPressed: onViewDetails,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: AppColors.primary,
+                    minimumSize: const Size(0, 44),
+                    side: const BorderSide(color: AppColors.primary),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                  child: const Text('View Details', style: TextStyle(fontSize: 13)),
+                ),
+              ),
+            ],
           ),
         ],
       ),

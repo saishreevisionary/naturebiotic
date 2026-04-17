@@ -80,62 +80,67 @@ class _ExecutiveAssignmentScreenState extends State<ExecutiveAssignmentScreen> {
         ? const Center(child: CircularProgressIndicator())
         : _farms.isEmpty
           ? const Center(child: Text('No farms registered yet.'))
-          : ListView.builder(
-              padding: const EdgeInsets.all(24.0),
-              itemCount: _farms.length,
-              itemBuilder: (context, index) {
-                final farm = _farms[index];
-                final isAssignedToThisExecutive = farm['assigned_to'] == widget.executive['id'];
-                final isAssignedToOther = farm['assigned_to'] != null && !isAssignedToThisExecutive;
-                final assignedName = farm['assigned_executive']?['full_name'];
-
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: isAssignedToThisExecutive ? AppColors.secondary : Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: isAssignedToThisExecutive ? AppColors.primary : AppColors.secondary,
-                      width: isAssignedToThisExecutive ? 2 : 1,
-                    ),
-                  ),
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.all(16),
-                    leading: Container(
-                      padding: const EdgeInsets.all(8),
+          : Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 800),
+                child: ListView.builder(
+                  padding: const EdgeInsets.all(24.0),
+                  itemCount: _farms.length,
+                  itemBuilder: (context, index) {
+                    final farm = _farms[index];
+                    final isAssignedToThisExecutive = farm['assigned_to'] == widget.executive['id'];
+                    final isAssignedToOther = farm['assigned_to'] != null && !isAssignedToThisExecutive;
+                    final assignedName = farm['assigned_executive']?['full_name'];
+    
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 16),
                       decoration: BoxDecoration(
-                        color: isAssignedToThisExecutive ? Colors.white : AppColors.secondary,
-                        borderRadius: BorderRadius.circular(12),
+                        color: isAssignedToThisExecutive ? AppColors.secondary : Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isAssignedToThisExecutive ? AppColors.primary : AppColors.secondary,
+                          width: isAssignedToThisExecutive ? 2 : 1,
+                        ),
                       ),
-                      child: Icon(
-                        Icons.agriculture_rounded,
-                        color: isAssignedToThisExecutive ? AppColors.primary : AppColors.textGray,
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.all(16),
+                        leading: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: isAssignedToThisExecutive ? Colors.white : AppColors.secondary,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(
+                            Icons.agriculture_rounded,
+                            color: isAssignedToThisExecutive ? AppColors.primary : AppColors.textGray,
+                          ),
+                        ),
+                        title: Text(
+                          farm['name'] ?? farm['place'] ?? 'N/A',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Text(
+                          isAssignedToThisExecutive 
+                            ? 'Assigned to this Executive' 
+                            : isAssignedToOther 
+                              ? 'Assigned to: $assignedName' 
+                              : 'Unassigned',
+                          style: TextStyle(
+                            color: isAssignedToThisExecutive ? AppColors.primary : AppColors.textGray,
+                            fontSize: 12,
+                          ),
+                        ),
+                        trailing: Switch(
+                          value: isAssignedToThisExecutive,
+                          activeColor: AppColors.primary,
+                          onChanged: (value) => _toggleAssignment(farm),
+                        ),
+                        onTap: () => _toggleAssignment(farm),
                       ),
-                    ),
-                    title: Text(
-                      farm['name'] ?? farm['place'] ?? 'N/A',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: Text(
-                      isAssignedToThisExecutive 
-                        ? 'Assigned to this Executive' 
-                        : isAssignedToOther 
-                          ? 'Assigned to: $assignedName' 
-                          : 'Unassigned',
-                      style: TextStyle(
-                        color: isAssignedToThisExecutive ? AppColors.primary : AppColors.textGray,
-                        fontSize: 12,
-                      ),
-                    ),
-                    trailing: Switch(
-                      value: isAssignedToThisExecutive,
-                      activeColor: AppColors.primary,
-                      onChanged: (value) => _toggleAssignment(farm),
-                    ),
-                    onTap: () => _toggleAssignment(farm),
-                  ),
-                );
-              },
+                    );
+                  },
+                ),
+              ),
             ),
     );
   }

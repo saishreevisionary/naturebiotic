@@ -208,103 +208,109 @@ class _CropCreatorScreenState extends State<CropCreatorScreen> {
       appBar: AppBar(
         title: const Text('Crop Creator'),
       ),
-      body: _tableMissing ? _buildSetupGuide() : (_isLoading 
-        ? const Center(child: CircularProgressIndicator())
-        : _masterCrops.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.eco_rounded, size: 64, color: AppColors.secondary),
-                  const SizedBox(height: 16),
-                  const Text('No crops defined', style: TextStyle(color: AppColors.textGray)),
-                  const SizedBox(height: 24),
-                  ElevatedButton.icon(
-                    onPressed: _addCrop,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add First Crop'),
-                  ),
-                ],
-              ),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(24),
-              itemCount: _masterCrops.length,
-              itemBuilder: (context, index) {
-                final crop = _masterCrops[index];
-                final List varieties = crop['master_crop_varieties'] ?? [];
-                
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(24),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.shadow.withOpacity(0.03),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
+      body: _tableMissing ? Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 900), child: _buildSetupGuide())) : Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 900),
+          child: (_isLoading 
+            ? const Center(child: CircularProgressIndicator())
+            : _masterCrops.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.eco_rounded, size: 64, color: AppColors.secondary),
+                      const SizedBox(height: 16),
+                      const Text('No crops defined', style: TextStyle(color: AppColors.textGray)),
+                      const SizedBox(height: 24),
+                      ElevatedButton.icon(
+                        onPressed: _addCrop,
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add First Crop'),
                       ),
                     ],
                   ),
-                  child: Theme(
-                    data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                    child: ExpansionTile(
-                      leading: CircleAvatar(
-                        backgroundColor: AppColors.secondary.withOpacity(0.5),
-                        child: const Icon(Icons.eco_rounded, color: AppColors.primary, size: 20),
-                      ),
-                      title: Text(
-                        crop['name'],
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                      ),
-                      subtitle: Text('${varieties.length} varieties established'),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline_rounded, color: Colors.black26, size: 18),
-                            onPressed: () => _deleteCrop(crop),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(24),
+                  itemCount: _masterCrops.length,
+                  itemBuilder: (context, index) {
+                    final crop = _masterCrops[index];
+                    final List varieties = crop['master_crop_varieties'] ?? [];
+                    
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.shadow.withOpacity(0.03),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
                           ),
-                          const Icon(Icons.expand_more_rounded),
                         ],
                       ),
-                      children: [
-                        const Divider(height: 1, indent: 16, endIndent: 16),
-                        ...varieties.map((v) => ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
-                          title: Text(v['variety_name'], style: const TextStyle(fontWeight: FontWeight.w600)),
-                          subtitle: Text('Expected Life: ${v['life'] ?? 'Not set'}'),
+                      child: Theme(
+                        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                        child: ExpansionTile(
+                          leading: CircleAvatar(
+                            backgroundColor: AppColors.secondary.withOpacity(0.5),
+                            child: const Icon(Icons.eco_rounded, color: AppColors.primary, size: 20),
+                          ),
+                          title: Text(
+                            crop['name'],
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                          ),
+                          subtitle: Text('${varieties.length} varieties established'),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               IconButton(
-                                icon: const Icon(Icons.edit_outlined, color: AppColors.primary, size: 18),
-                                onPressed: () => _addOrEditVariety(crop['id'], v),
+                                icon: const Icon(Icons.delete_outline_rounded, color: Colors.black26, size: 18),
+                                onPressed: () => _deleteCrop(crop),
                               ),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 18),
-                                onPressed: () => _deleteVariety(v),
-                              ),
+                              const Icon(Icons.expand_more_rounded),
                             ],
                           ),
-                        )),
-                        Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: TextButton.icon(
-                            onPressed: () => _addOrEditVariety(crop['id']),
-                            icon: const Icon(Icons.add_circle_outline_rounded),
-                            label: const Text('Add Variety for this Crop'),
-                          ),
+                          children: [
+                            const Divider(height: 1, indent: 16, endIndent: 16),
+                            ...varieties.map((v) => ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+                              title: Text(v['variety_name'], style: const TextStyle(fontWeight: FontWeight.w600)),
+                              subtitle: Text('Expected Life: ${v['life'] ?? 'Not set'}'),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.edit_outlined, color: AppColors.primary, size: 18),
+                                    onPressed: () => _addOrEditVariety(crop['id'], v),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 18),
+                                    onPressed: () => _deleteVariety(v),
+                                  ),
+                                ],
+                              ),
+                            )),
+                            Padding(
+                              padding: const EdgeInsets.all(16.0),
+                              child: TextButton.icon(
+                                onPressed: () => _addOrEditVariety(crop['id']),
+                                icon: const Icon(Icons.add_circle_outline_rounded),
+                                label: const Text('Add Variety for this Crop'),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            )),
+                      ),
+                    );
+                  },
+                )),
+        ),
+      ),
       floatingActionButton: !_isLoading && !_tableMissing
         ? FloatingActionButton.extended(
+            heroTag: 'crop_creator_fab',
             onPressed: _addCrop,
             label: const Text('Add New Category'),
             icon: const Icon(Icons.add),

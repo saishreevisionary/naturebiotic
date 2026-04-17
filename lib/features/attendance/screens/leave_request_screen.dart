@@ -102,97 +102,102 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
       appBar: AppBar(
         title: const Text('Request Leave'),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Request Details', 
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textBlack)),
-              const SizedBox(height: 16),
-              
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppColors.secondary.withOpacity(0.5),
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: Column(
-                  children: [
-                    DropdownButtonFormField<String>(
-                      value: _leaveType,
-                      decoration: const InputDecoration(
-                        labelText: 'Leave Type',
-                        fillColor: Colors.white,
-                      ),
-                      items: _leaveTypes.map((type) => DropdownMenuItem(
-                        value: type,
-                        child: Text(type),
-                      )).toList(),
-                      onChanged: (v) => setState(() => _leaveType = v!),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Request Details', 
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textBlack)),
+                  const SizedBox(height: 16),
+                  
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: AppColors.secondary.withOpacity(0.5),
+                      borderRadius: BorderRadius.circular(24),
                     ),
-                    
-                    const SizedBox(height: 16),
-                    
-                    InkWell(
-                      onTap: _selectDateRange,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
+                    child: Column(
+                      children: [
+                        DropdownButtonFormField<String>(
+                          value: _leaveType,
+                          decoration: const InputDecoration(
+                            labelText: 'Leave Type',
+                            fillColor: Colors.white,
+                          ),
+                          items: _leaveTypes.map((type) => DropdownMenuItem(
+                            value: type,
+                            child: Text(type),
+                          )).toList(),
+                          onChanged: (v) => setState(() => _leaveType = v!),
                         ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.date_range_rounded, color: AppColors.primary),
-                            const SizedBox(width: 16),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                        
+                        const SizedBox(height: 16),
+                        
+                        InkWell(
+                          onTap: _selectDateRange,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Row(
                               children: [
-                                const Text('Date Range', style: TextStyle(color: AppColors.textGray, fontSize: 12)),
-                                Text(
-                                  _selectedDateRange == null
-                                      ? 'Select Dates'
-                                      : '${DateFormat('MMM d').format(_selectedDateRange!.start)} - ${DateFormat('MMM d').format(_selectedDateRange!.end)}',
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                const Icon(Icons.date_range_rounded, color: AppColors.primary),
+                                const SizedBox(width: 16),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Date Range', style: TextStyle(color: AppColors.textGray, fontSize: 12)),
+                                    Text(
+                                      _selectedDateRange == null
+                                          ? 'Select Dates'
+                                          : '${DateFormat('MMM d').format(_selectedDateRange!.start)} - ${DateFormat('MMM d').format(_selectedDateRange!.end)}',
+                                      style: const TextStyle(fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
-                          ],
+                          ),
                         ),
-                      ),
+                        
+                        const SizedBox(height: 16),
+                        
+                        TextFormField(
+                          controller: _reasonController,
+                          maxLines: 4,
+                          decoration: const InputDecoration(
+                            labelText: 'Reason for Leave',
+                            hintText: 'Provide a brief explanation...',
+                            fillColor: Colors.white,
+                          ),
+                          validator: (v) => v!.isEmpty ? 'Required' : null,
+                        ),
+                      ],
                     ),
-                    
-                    const SizedBox(height: 16),
-                    
-                    TextFormField(
-                      controller: _reasonController,
-                      maxLines: 4,
-                      decoration: const InputDecoration(
-                        labelText: 'Reason for Leave',
-                        hintText: 'Provide a brief explanation...',
-                        fillColor: Colors.white,
-                      ),
-                      validator: (v) => v!.isEmpty ? 'Required' : null,
+                  ),
+                  
+                  const SizedBox(height: 48),
+                  
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _isLoading ? null : _handleSubmit,
+                      child: _isLoading 
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : const Text('Submit Request'),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              
-              const SizedBox(height: 48),
-              
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _handleSubmit,
-                  child: _isLoading 
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text('Submit Request'),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
