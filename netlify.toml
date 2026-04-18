@@ -1,6 +1,6 @@
 [build]
   publish = "build/web"
-  command = "flutter/bin/flutter build web --release"
+  command = "if [ ! -d \"flutter\" ]; then git clone https://github.com/flutter/flutter.git -b stable --depth 1; fi && ./flutter/bin/flutter build web --release"
 
 [build.environment]
   FLUTTER_VERSION = "3.22.0"
