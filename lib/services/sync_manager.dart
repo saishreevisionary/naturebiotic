@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:nature_biotic/services/local_database_service.dart';
 import 'package:nature_biotic/services/supabase_service.dart';
@@ -17,7 +16,9 @@ class SyncManager {
 
   void initialize() {
     if (kIsWeb) return;
-    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((results) {
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
+      results,
+    ) {
       if (results.any((r) => r != ConnectivityResult.none)) {
         sync();
       }
@@ -47,7 +48,6 @@ class SyncManager {
       debugPrint('SYNC: Starting synchronization pass...');
 
       await _performSync();
-      
     } while (_syncRequestedAgain);
 
     _isSyncing = false;
@@ -57,7 +57,10 @@ class SyncManager {
   Future<void> _performSync() async {
     try {
       final db = await LocalDatabaseService.database;
-      final allQueue = await db?.query('sync_queue', columns: ['id', 'status', 'table_name', 'operation']);
+      final allQueue = await db?.query(
+        'sync_queue',
+        columns: ['id', 'status', 'table_name', 'operation'],
+      );
       debugPrint('SYNC DUMP: All queue items: $allQueue');
 
       final pendingIds = await LocalDatabaseService.getPendingSyncIds();
@@ -65,16 +68,20 @@ class SyncManager {
         debugPrint('SYNC: No pending items found.');
         return;
       }
-      
+
       debugPrint('SYNC: Found ${pendingIds.length} pending items.');
-      
+
       for (var queueId in pendingIds) {
         Map<String, dynamic>? item;
         try {
           item = await LocalDatabaseService.getSyncItem(queueId);
         } catch (e) {
           debugPrint('SYNC: FATAL ROW ERROR for ID $queueId: $e');
-          await LocalDatabaseService.updateSyncStatus(queueId, 'FAILED', error: 'Row too big or corrupted: $e');
+          await LocalDatabaseService.updateSyncStatus(
+            queueId,
+            'FAILED',
+            error: 'Row too big or corrupted: $e',
+          );
           continue;
         }
 
@@ -91,12 +98,17 @@ class SyncManager {
           await LocalDatabaseService.updateSyncStatus(queueId, 'SYNCED');
           debugPrint('SYNC: Successfully synced $tableName record $recordId');
         } catch (e) {
-          debugPrint('SYNC: ERROR in _processSyncItem for $tableName ($recordId): $e');
-          await LocalDatabaseService.updateSyncStatus(queueId, 'FAILED', error: e.toString());
+          debugPrint(
+            'SYNC: ERROR in _processSyncItem for $tableName ($recordId): $e',
+          );
+          await LocalDatabaseService.updateSyncStatus(
+            queueId,
+            'FAILED',
+            error: e.toString(),
+          );
         }
       }
-    }
- catch (e, stack) {
+    } catch (e, stack) {
       debugPrint('SYNC: FATAL ERROR during sync loop: $e');
       debugPrint('SYNC: Stack trace: $stack');
     } finally {
@@ -104,19 +116,31 @@ class SyncManager {
     }
   }
 
-  Future<void> _processSyncItem(String tableName, String operation, Map<String, dynamic> payload) async {
+  Future<void> _processSyncItem(
+    String tableName,
+    String operation,
+    Map<String, dynamic> payload,
+  ) async {
     // 1. Handle File Uploads first if any
     final cleanPayload = Map<String, dynamic>.from(payload);
 
     // Handle Attendance Photos
-    if (cleanPayload.containsKey('_local_photo') && cleanPayload['_local_photo'] != null) {
+    if (cleanPayload.containsKey('_local_photo') &&
+        cleanPayload['_local_photo'] != null) {
       final List<int> bytes = List<int>.from(cleanPayload['_local_photo']);
       final fileName = 'att_${DateTime.now().millisecondsSinceEpoch}.jpg';
-      final url = await SupabaseService.uploadImage(Uint8List.fromList(bytes), fileName, 'attendance');
-      
-      if (operation == 'INSERT') cleanPayload['check_in_photo'] = url;
-      else cleanPayload['check_out_photo'] = url;
-      
+      final url = await SupabaseService.uploadImage(
+        Uint8List.fromList(bytes),
+        fileName,
+        'attendance',
+      );
+
+      if (operation == 'INSERT') {
+        cleanPayload['check_in_photo'] = url;
+      } else {
+        cleanPayload['check_out_photo'] = url;
+      }
+
       cleanPayload.remove('_local_photo');
     } else {
       cleanPayload.remove('_local_photo');
@@ -124,31 +148,47 @@ class SyncManager {
 
     // Handle Report Signature and Images
     if (tableName == 'reports') {
-      if (cleanPayload.containsKey('_local_signature') && cleanPayload['_local_signature'] != null) {
-        final List<int> bytes = List<int>.from(cleanPayload['_local_signature']);
+      if (cleanPayload.containsKey('_local_signature') &&
+          cleanPayload['_local_signature'] != null) {
+        final List<int> bytes = List<int>.from(
+          cleanPayload['_local_signature'],
+        );
         final fileName = 'sig_${DateTime.now().millisecondsSinceEpoch}.png';
-        final url = await SupabaseService.uploadImage(Uint8List.fromList(bytes), fileName, 'reports');
+        final url = await SupabaseService.uploadImage(
+          Uint8List.fromList(bytes),
+          fileName,
+          'reports',
+        );
         cleanPayload['signature_url'] = url;
         cleanPayload.remove('_local_signature');
       } else {
         cleanPayload.remove('_local_signature');
       }
 
-      if (cleanPayload.containsKey('_local_images') && cleanPayload['_local_images'] != null) {
+      if (cleanPayload.containsKey('_local_images') &&
+          cleanPayload['_local_images'] != null) {
         Map<String, dynamic> localImages;
         if (cleanPayload['_local_images'] is String) {
-          localImages = Map<String, dynamic>.from(jsonDecode(cleanPayload['_local_images']));
+          localImages = Map<String, dynamic>.from(
+            jsonDecode(cleanPayload['_local_images']),
+          );
         } else {
-          localImages = Map<String, dynamic>.from(cleanPayload['_local_images']);
+          localImages = Map<String, dynamic>.from(
+            cleanPayload['_local_images'],
+          );
         }
-        
+
         Map<String, String> uploadedUrls = {};
-        
+
         for (var entry in localImages.entries) {
           if (entry.value != null) {
             final List<int> bytes = List<int>.from(entry.value);
             final fileName = 'img_${DateTime.now().millisecondsSinceEpoch}.jpg';
-            final url = await SupabaseService.uploadImage(Uint8List.fromList(bytes), fileName, 'reports');
+            final url = await SupabaseService.uploadImage(
+              Uint8List.fromList(bytes),
+              fileName,
+              'reports',
+            );
             uploadedUrls[entry.key] = url;
           }
         }
@@ -156,7 +196,10 @@ class SyncManager {
         // Reconstruct problem string with remote URLs
         String problemStr = cleanPayload['problem'] ?? '';
         for (var entry in uploadedUrls.entries) {
-          problemStr = problemStr.replaceFirst(RegExp(r'\{img: .*?\}'), '{img: ${entry.value}}');
+          problemStr = problemStr.replaceFirst(
+            RegExp(r'\{img: .*?\}'),
+            '{img: ${entry.value}}',
+          );
         }
         cleanPayload['problem'] = problemStr;
         cleanPayload.remove('_local_images');
@@ -164,7 +207,9 @@ class SyncManager {
         cleanPayload.remove('_local_images');
       }
     }
-    if (tableName == 'farms' && cleanPayload.containsKey('contacts') && cleanPayload['contacts'] is String) {
+    if (tableName == 'farms' &&
+        cleanPayload.containsKey('contacts') &&
+        cleanPayload['contacts'] is String) {
       try {
         cleanPayload['contacts'] = jsonDecode(cleanPayload['contacts']);
       } catch (_) {}
@@ -178,31 +223,43 @@ class SyncManager {
 
     switch (tableName) {
       case 'farmers':
-        if (operation == 'INSERT') await SupabaseService.addFarmer(cleanPayload);
-        else if (operation == 'UPDATE') await SupabaseService.updateFarmer(cleanPayload['id'], cleanPayload);
+        if (operation == 'INSERT') {
+          await SupabaseService.addFarmer(cleanPayload);
+        } else if (operation == 'UPDATE')
+          await SupabaseService.updateFarmer(cleanPayload['id'], cleanPayload);
         break;
       case 'farms':
-        if (operation == 'INSERT') await SupabaseService.addFarm(cleanPayload);
-        else if (operation == 'UPDATE') await SupabaseService.updateFarm(cleanPayload['id'], cleanPayload);
+        if (operation == 'INSERT') {
+          await SupabaseService.addFarm(cleanPayload);
+        } else if (operation == 'UPDATE')
+          await SupabaseService.updateFarm(cleanPayload['id'], cleanPayload);
         break;
       case 'crops':
         if (operation == 'INSERT') await SupabaseService.addCrop(cleanPayload);
         break;
       case 'reports':
-        if (operation == 'INSERT') await SupabaseService.addReport(cleanPayload);
+        if (operation == 'INSERT')
+          await SupabaseService.addReport(cleanPayload);
         break;
       case 'attendance':
-        if (cleanPayload['check_out_time'] != null && cleanPayload['id'] != null) {
+        if (cleanPayload['check_out_time'] != null &&
+            cleanPayload['id'] != null) {
           await SupabaseService.checkOut(cleanPayload['id'], cleanPayload);
         } else {
           await SupabaseService.checkIn(cleanPayload);
         }
         break;
       case 'call_logs':
-        if (operation == 'INSERT') await SupabaseService.addCallLog(cleanPayload);
+        if (operation == 'INSERT')
+          await SupabaseService.addCallLog(cleanPayload);
         break;
       case 'stock_transactions':
-        if (operation == 'INSERT') await SupabaseService.addStockTransaction(cleanPayload);
+        if (operation == 'INSERT')
+          await SupabaseService.addStockTransaction(cleanPayload);
+        break;
+      case 'store_transactions':
+        if (operation == 'INSERT')
+          await SupabaseService.addStoreTransaction(cleanPayload);
         break;
     }
   }

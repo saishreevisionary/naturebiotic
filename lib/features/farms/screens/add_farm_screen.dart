@@ -7,11 +7,9 @@ import 'package:nature_biotic/services/sync_manager.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
-import 'dart:typed_data';
 
 class AddFarmScreen extends StatefulWidget {
   final Map<String, dynamic>? farm;
@@ -27,7 +25,7 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
   final _nameController = TextEditingController();
   final _placeController = TextEditingController();
   final _areaController = TextEditingController();
-  
+
   String? _soilType;
   String? _irrigationType;
   String? _waterSource;
@@ -36,10 +34,15 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
 
   List<String> _soilTypes = ['Red', 'Black', 'Loomy', 'Aluvial'];
   List<String> _irrigationTypes = ['Flood', 'Drip irrigation'];
-  List<String> _waterSources = ['Well', 'Borewell', 'canal/Pond', 'River/Stream'];
+  List<String> _waterSources = [
+    'Well',
+    'Borewell',
+    'canal/Pond',
+    'River/Stream',
+  ];
   List<String> _waterQtys = ['Ample', 'surplus', 'Scarcity'];
   List<String> _powerSources = ['EB', 'Diesel Pump', 'Solar'];
-  
+
   // Additional Contacts
   final List<Map<String, TextEditingController>> _contactControllers = [];
 
@@ -79,8 +82,12 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
 
           for (var contact in contacts) {
             _contactControllers.add({
-              'name': TextEditingController(text: contact['name']?.toString() ?? ''),
-              'phone': TextEditingController(text: contact['phone']?.toString() ?? ''),
+              'name': TextEditingController(
+                text: contact['name']?.toString() ?? '',
+              ),
+              'phone': TextEditingController(
+                text: contact['phone']?.toString() ?? '',
+              ),
             });
           }
         } catch (e) {
@@ -102,18 +109,32 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
 
       if (mounted) {
         setState(() {
-          if (results[0].isNotEmpty) _soilTypes = results[0].map((e) => e['label'].toString()).toList();
-          if (results[1].isNotEmpty) _irrigationTypes = results[1].map((e) => e['label'].toString()).toList();
-          if (results[2].isNotEmpty) _waterSources = results[2].map((e) => e['label'].toString()).toList();
-          if (results[3].isNotEmpty) _waterQtys = results[3].map((e) => e['label'].toString()).toList();
-          if (results[4].isNotEmpty) _powerSources = results[4].map((e) => e['label'].toString()).toList();
-          
+          if (results[0].isNotEmpty)
+            _soilTypes = results[0].map((e) => e['label'].toString()).toList();
+          if (results[1].isNotEmpty)
+            _irrigationTypes =
+                results[1].map((e) => e['label'].toString()).toList();
+          if (results[2].isNotEmpty)
+            _waterSources =
+                results[2].map((e) => e['label'].toString()).toList();
+          if (results[3].isNotEmpty)
+            _waterQtys = results[3].map((e) => e['label'].toString()).toList();
+          if (results[4].isNotEmpty)
+            _powerSources =
+                results[4].map((e) => e['label'].toString()).toList();
+
           // Ensure selected values are in the lists, but only if they are not null
-          if (_soilType != null && !_soilTypes.contains(_soilType)) _soilType = _soilTypes.first;
-          if (_irrigationType != null && !_irrigationTypes.contains(_irrigationType)) _irrigationType = _irrigationTypes.first;
-          if (_waterSource != null && !_waterSources.contains(_waterSource)) _waterSource = _waterSources.first;
-          if (_waterQty != null && !_waterQtys.contains(_waterQty)) _waterQty = _waterQtys.first;
-          if (_powerSource != null && !_powerSources.contains(_powerSource)) _powerSource = _powerSources.first;
+          if (_soilType != null && !_soilTypes.contains(_soilType))
+            _soilType = _soilTypes.first;
+          if (_irrigationType != null &&
+              !_irrigationTypes.contains(_irrigationType))
+            _irrigationType = _irrigationTypes.first;
+          if (_waterSource != null && !_waterSources.contains(_waterSource))
+            _waterSource = _waterSources.first;
+          if (_waterQty != null && !_waterQtys.contains(_waterQty))
+            _waterQty = _waterQtys.first;
+          if (_powerSource != null && !_powerSources.contains(_powerSource))
+            _powerSource = _powerSources.first;
         });
       }
     } catch (_) {}
@@ -121,10 +142,15 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
 
   Future<String> _getAddressFromCoordinatesWeb(double lat, double lng) async {
     try {
-      final url = Uri.parse('https://nominatim.openstreetmap.org/reverse?format=json&lat=$lat&lon=$lng');
+      final url = Uri.parse(
+        'https://nominatim.openstreetmap.org/reverse?format=json&lat=$lat&lon=$lng',
+      );
       // Nominatim requires a user-agent
-      final response = await http.get(url, headers: {'User-Agent': 'NatureBioticApp/1.0'});
-      
+      final response = await http.get(
+        url,
+        headers: {'User-Agent': 'NatureBioticApp/1.0'},
+      );
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         return data['display_name'] ?? "$lat, $lng";
@@ -152,18 +178,23 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
           throw 'Location permissions are denied';
         }
       }
-      
+
       if (permission == LocationPermission.deniedForever) {
         throw 'Location permissions are permanently denied';
-      } 
+      }
 
       Position position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high)
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
       );
 
       // Web does not support reverse geocoding with this plugin
       if (kIsWeb) {
-        final address = await _getAddressFromCoordinatesWeb(position.latitude, position.longitude);
+        final address = await _getAddressFromCoordinatesWeb(
+          position.latitude,
+          position.longitude,
+        );
         setState(() {
           _placeController.text = address;
         });
@@ -172,27 +203,33 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
 
       // Reverse geocoding (Mobile only)
       try {
-        List<Placemark> placemarks = await placemarkFromCoordinates(position.latitude, position.longitude);
-        
+        List<Placemark> placemarks = await placemarkFromCoordinates(
+          position.latitude,
+          position.longitude,
+        );
+
         if (placemarks.isNotEmpty) {
           Placemark place = placemarks[0];
-          String address = "${place.name ?? ''}, ${place.subLocality ?? ''}, ${place.locality ?? ''}, ${place.postalCode ?? ''}";
+          String address =
+              "${place.name ?? ''}, ${place.subLocality ?? ''}, ${place.locality ?? ''}, ${place.postalCode ?? ''}";
           // Clean up address (remove double commas/spaces)
           address = address.replaceAll(RegExp(r',\s*,'), ',').trim();
           if (address.startsWith(',')) address = address.substring(1).trim();
-          
+
           setState(() {
             _placeController.text = address;
           });
         } else {
           setState(() {
-            _placeController.text = "${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}";
+            _placeController.text =
+                "${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}";
           });
         }
       } catch (_) {
         // If geocoding fails, fallback to coordinates
         setState(() {
-          _placeController.text = "${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}";
+          _placeController.text =
+              "${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}";
         });
       }
     } catch (e) {
@@ -219,7 +256,10 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
         if (file.size > 5 * 1024 * 1024) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('File size must be less than 5MB'), backgroundColor: Colors.orange),
+              const SnackBar(
+                content: Text('File size must be less than 5MB'),
+                backgroundColor: Colors.orange,
+              ),
             );
           }
           return;
@@ -231,7 +271,10 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error picking file: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Error picking file: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -274,11 +317,12 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
       String? reportUrl = _existingReportUrl;
 
       if (_selectedReport != null && _selectedReport!.bytes != null) {
-        final fileName = 'report_${DateTime.now().millisecondsSinceEpoch}.${_selectedReport!.extension}';
+        final fileName =
+            'report_${DateTime.now().millisecondsSinceEpoch}.${_selectedReport!.extension}';
         reportUrl = await SupabaseService.uploadImage(
-          _selectedReport!.bytes!, 
-          fileName, 
-          'farm_reports'
+          _selectedReport!.bytes!,
+          fileName,
+          'farm_reports',
         );
       }
 
@@ -301,20 +345,28 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
       };
 
       // Collect additional contacts
-      final List<Map<String, String>> contacts = _contactControllers
-          .where((c) => c['name']!.text.isNotEmpty || c['phone']!.text.isNotEmpty)
-          .map((c) => {
-                'name': c['name']!.text.trim(),
-                'phone': c['phone']!.text.trim(),
-              })
-          .toList();
-      
+      final List<Map<String, String>> contacts =
+          _contactControllers
+              .where(
+                (c) =>
+                    c['name']!.text.isNotEmpty || c['phone']!.text.isNotEmpty,
+              )
+              .map(
+                (c) => {
+                  'name': c['name']!.text.trim(),
+                  'phone': c['phone']!.text.trim(),
+                },
+              )
+              .toList();
+
       if (contacts.isNotEmpty) {
         farmData['contacts'] = contacts;
       }
 
       // Auto-assign if created by an executive (and not just an edit)
-      if (!_isEdit && userProfile?['role'] == 'executive' && currentUserId != null) {
+      if (!_isEdit &&
+          userProfile?['role'] == 'executive' &&
+          currentUserId != null) {
         farmData['assigned_to'] = currentUserId;
       } else if (_isEdit) {
         // Keep existing assignment if editing
@@ -347,8 +399,12 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(_isEdit ? 'Farm Updated Successfully' : 'Farm Registered Successfully'), 
-            backgroundColor: AppColors.primary
+            content: Text(
+              _isEdit
+                  ? 'Farm Updated Successfully'
+                  : 'Farm Registered Successfully',
+            ),
+            backgroundColor: AppColors.primary,
           ),
         );
         Navigator.pop(context);
@@ -368,9 +424,7 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: Text(_isEdit ? 'Edit Farm' : 'Add Farm'),
-      ),
+      appBar: AppBar(title: Text(_isEdit ? 'Edit Farm' : 'Add Farm')),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 800),
@@ -405,7 +459,9 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
                             hintText: 'e.g. Green Valley Farm',
                             fillColor: Colors.white,
                           ),
-                          validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                          validator:
+                              (v) =>
+                                  (v == null || v.isEmpty) ? 'Required' : null,
                         ),
                         const SizedBox(height: 16),
                         TextFormField(
@@ -415,14 +471,29 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
                             hintText: 'Enter farm location',
                             fillColor: Colors.white,
                             suffixIcon: IconButton(
-                              icon: _isLocationLoading 
-                                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                                : const Icon(Icons.my_location_rounded, color: AppColors.primary),
-                              onPressed: _isLocationLoading ? null : _fetchCurrentLocation,
+                              icon:
+                                  _isLocationLoading
+                                      ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                      : const Icon(
+                                        Icons.my_location_rounded,
+                                        color: AppColors.primary,
+                                      ),
+                              onPressed:
+                                  _isLocationLoading
+                                      ? null
+                                      : _fetchCurrentLocation,
                               tooltip: 'Get Current Location',
                             ),
                           ),
-                          validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                          validator:
+                              (v) =>
+                                  (v == null || v.isEmpty) ? 'Required' : null,
                         ),
                         const SizedBox(height: 16),
                         TextFormField(
@@ -433,10 +504,17 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
                             fillColor: Colors.white,
                           ),
                           keyboardType: TextInputType.number,
-                          validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                          validator:
+                              (v) =>
+                                  (v == null || v.isEmpty) ? 'Required' : null,
                         ),
                         const SizedBox(height: 16),
-                        _buildDropdown('Soil Type', _soilTypes, _soilType, (v) => setState(() => _soilType = v ?? _soilType)),
+                        _buildDropdown(
+                          'Soil Type',
+                          _soilTypes,
+                          _soilType,
+                          (v) => setState(() => _soilType = v ?? _soilType),
+                        ),
                       ],
                     ),
                   ),
@@ -458,13 +536,37 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
                     ),
                     child: Column(
                       children: [
-                        _buildDropdown('Irrigation Type', _irrigationTypes, _irrigationType, (v) => setState(() => _irrigationType = v ?? _irrigationType)),
+                        _buildDropdown(
+                          'Irrigation Type',
+                          _irrigationTypes,
+                          _irrigationType,
+                          (v) => setState(
+                            () => _irrigationType = v ?? _irrigationType,
+                          ),
+                        ),
                         const SizedBox(height: 16),
-                        _buildDropdown('Water Source', _waterSources, _waterSource, (v) => setState(() => _waterSource = v ?? _waterSource)),
+                        _buildDropdown(
+                          'Water Source',
+                          _waterSources,
+                          _waterSource,
+                          (v) =>
+                              setState(() => _waterSource = v ?? _waterSource),
+                        ),
                         const SizedBox(height: 16),
-                        _buildDropdown('Water Quantity', _waterQtys, _waterQty, (v) => setState(() => _waterQty = v ?? _waterQty)),
+                        _buildDropdown(
+                          'Water Quantity',
+                          _waterQtys,
+                          _waterQty,
+                          (v) => setState(() => _waterQty = v ?? _waterQty),
+                        ),
                         const SizedBox(height: 16),
-                        _buildDropdown('Power Source', _powerSources, _powerSource, (v) => setState(() => _powerSource = v ?? _powerSource)),
+                        _buildDropdown(
+                          'Power Source',
+                          _powerSources,
+                          _powerSource,
+                          (v) =>
+                              setState(() => _powerSource = v ?? _powerSource),
+                        ),
                       ],
                     ),
                   ),
@@ -482,9 +584,14 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
                       ),
                       TextButton.icon(
                         onPressed: _addContactRow,
-                        icon: const Icon(Icons.add_circle_outline_rounded, size: 20),
+                        icon: const Icon(
+                          Icons.add_circle_outline_rounded,
+                          size: 20,
+                        ),
                         label: const Text('Add Contact'),
-                        style: TextButton.styleFrom(foregroundColor: AppColors.primary),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                        ),
                       ),
                     ],
                   ),
@@ -494,7 +601,11 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       child: Text(
                         'No additional contacts added. (Optional)',
-                        style: TextStyle(color: AppColors.textGray.withOpacity(0.6), fontStyle: FontStyle.italic, fontSize: 13),
+                        style: TextStyle(
+                          color: AppColors.textGray.withOpacity(0.6),
+                          fontStyle: FontStyle.italic,
+                          fontSize: 13,
+                        ),
                       ),
                     )
                   else
@@ -502,14 +613,17 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: _contactControllers.length,
-                      separatorBuilder: (context, index) => const SizedBox(height: 12),
+                      separatorBuilder:
+                          (context, index) => const SizedBox(height: 12),
                       itemBuilder: (context, index) {
                         return Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: AppColors.primary.withOpacity(0.1)),
+                            border: Border.all(
+                              color: AppColors.primary.withOpacity(0.1),
+                            ),
                           ),
                           child: Column(
                             children: [
@@ -517,7 +631,8 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
                                 children: [
                                   Expanded(
                                     child: TextFormField(
-                                      controller: _contactControllers[index]['name'],
+                                      controller:
+                                          _contactControllers[index]['name'],
                                       decoration: const InputDecoration(
                                         labelText: 'Contact Person Name',
                                         hintText: 'e.g. Farm Manager',
@@ -528,31 +643,36 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
                                   const SizedBox(width: 8),
                                   IconButton(
                                     onPressed: () => _removeContactRow(index),
-                                    icon: const Icon(Icons.remove_circle_outline_rounded, color: Colors.red),
+                                    icon: const Icon(
+                                      Icons.remove_circle_outline_rounded,
+                                      color: Colors.red,
+                                    ),
                                     visualDensity: VisualDensity.compact,
                                   ),
                                 ],
                               ),
                               const SizedBox(height: 12),
-                                TextFormField(
-                                  controller: _contactControllers[index]['phone'],
-                                  decoration: const InputDecoration(
-                                    labelText: 'Contact Number',
-                                    hintText: 'Enter 10 digit number',
-                                    isDense: true,
-                                  ),
-                                  keyboardType: TextInputType.phone,
-                                  inputFormatters: [
-                                    FilteringTextInputFormatter.digitsOnly,
-                                    LengthLimitingTextInputFormatter(10),
-                                  ],
-                                  validator: (v) {
-                                    if (v != null && v.isNotEmpty && v.length != 10) {
-                                      return 'Must be 10 digits';
-                                    }
-                                    return null;
-                                  },
+                              TextFormField(
+                                controller: _contactControllers[index]['phone'],
+                                decoration: const InputDecoration(
+                                  labelText: 'Contact Number',
+                                  hintText: 'Enter 10 digit number',
+                                  isDense: true,
                                 ),
+                                keyboardType: TextInputType.phone,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                  LengthLimitingTextInputFormatter(10),
+                                ],
+                                validator: (v) {
+                                  if (v != null &&
+                                      v.isNotEmpty &&
+                                      v.length != 10) {
+                                    return 'Must be 10 digits';
+                                  }
+                                  return null;
+                                },
+                              ),
                             ],
                           ),
                         );
@@ -574,32 +694,50 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
                     decoration: BoxDecoration(
                       color: AppColors.secondary.withOpacity(0.3),
                       borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: AppColors.primary.withOpacity(0.2), style: BorderStyle.solid),
+                      border: Border.all(
+                        color: AppColors.primary.withOpacity(0.2),
+                        style: BorderStyle.solid,
+                      ),
                     ),
                     child: Column(
                       children: [
                         Icon(
-                          _selectedReport != null ? Icons.description_rounded : Icons.cloud_upload_outlined, 
-                          size: 48, 
-                          color: AppColors.primary
+                          _selectedReport != null
+                              ? Icons.description_rounded
+                              : Icons.cloud_upload_outlined,
+                          size: 48,
+                          color: AppColors.primary,
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          _selectedReport != null ? _selectedReport!.name : 'Upload PDF or Image',
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
+                          _selectedReport != null
+                              ? _selectedReport!.name
+                              : 'Upload PDF or Image',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primary,
+                          ),
                           textAlign: TextAlign.center,
                         ),
-                        if (_selectedReport == null && _existingReportUrl != null) ...[
+                        if (_selectedReport == null &&
+                            _existingReportUrl != null) ...[
                           const SizedBox(height: 4),
                           const Text(
                             'Existing report will be kept',
-                            style: TextStyle(fontSize: 12, color: AppColors.primary, fontStyle: FontStyle.italic),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.primary,
+                              fontStyle: FontStyle.italic,
+                            ),
                           ),
                         ],
                         const SizedBox(height: 4),
                         const Text(
                           'Max size 5MB',
-                          style: TextStyle(fontSize: 12, color: AppColors.textGray),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textGray,
+                          ),
                         ),
                         const SizedBox(height: 16),
                         Row(
@@ -608,17 +746,30 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
                             TextButton(
                               onPressed: _pickReport,
                               style: TextButton.styleFrom(
-                                backgroundColor: AppColors.primary.withOpacity(0.1),
+                                backgroundColor: AppColors.primary.withOpacity(
+                                  0.1,
+                                ),
                                 foregroundColor: AppColors.primary,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
                               ),
-                              child: Text(_selectedReport != null ? 'Change File' : 'Browse Files'),
+                              child: Text(
+                                _selectedReport != null
+                                    ? 'Change File'
+                                    : 'Browse Files',
+                              ),
                             ),
                             if (_selectedReport != null) ...[
                               const SizedBox(width: 8),
                               IconButton(
-                                onPressed: () => setState(() => _selectedReport = null),
-                                icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
+                                onPressed:
+                                    () =>
+                                        setState(() => _selectedReport = null),
+                                icon: const Icon(
+                                  Icons.delete_outline_rounded,
+                                  color: Colors.red,
+                                ),
                                 tooltip: 'Remove selected file',
                               ),
                             ],
@@ -632,13 +783,21 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: _isLoading ? null : _handleSubmit,
-                      child: _isLoading 
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                            )
-                          : Text(_isEdit ? 'Update Farm Details' : 'Save Farm Details'),
+                      child:
+                          _isLoading
+                              ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                              : Text(
+                                _isEdit
+                                    ? 'Update Farm Details'
+                                    : 'Save Farm Details',
+                              ),
                     ),
                   ),
                   const SizedBox(height: 48),
@@ -651,19 +810,19 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
     );
   }
 
-  Widget _buildDropdown(String label, List<String> items, String? value, Function(String?) onChanged) {
+  Widget _buildDropdown(
+    String label,
+    List<String> items,
+    String? value,
+    Function(String?) onChanged,
+  ) {
     return DropdownButtonFormField<String>(
-      value: value,
-      decoration: InputDecoration(
-        labelText: label,
-        fillColor: Colors.white,
-      ),
-      items: items.map((String item) {
-        return DropdownMenuItem(
-          value: item,
-          child: Text(item),
-        );
-      }).toList(),
+      initialValue: value,
+      decoration: InputDecoration(labelText: label, fillColor: Colors.white),
+      items:
+          items.map((String item) {
+            return DropdownMenuItem(value: item, child: Text(item));
+          }).toList(),
       onChanged: onChanged,
       validator: (v) => (v == null || v.isEmpty) ? 'Selection required' : null,
     );

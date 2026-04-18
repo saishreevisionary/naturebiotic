@@ -10,16 +10,14 @@ class FieldVisitScreen extends StatefulWidget {
 
 class _FieldVisitScreenState extends State<FieldVisitScreen> {
   final _formKey = GlobalKey<FormState>();
-  String _selectedFarmer = 'Ramesh Kumar';
-  String _selectedProblem = 'Pest Attack';
+  final String _selectedFarmer = 'Ramesh Kumar';
+  final String _selectedProblem = 'Pest Attack';
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Field Visit'),
-      ),
+      appBar: AppBar(title: const Text('Field Visit')),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 800),
@@ -48,32 +46,43 @@ class _FieldVisitScreenState extends State<FieldVisitScreen> {
                     child: Column(
                       children: [
                         DropdownButtonFormField<String>(
-                          value: _selectedFarmer,
+                          initialValue: _selectedFarmer,
                           decoration: const InputDecoration(
                             labelText: 'Select Farmer',
                             fillColor: Colors.white,
                           ),
-                          items: ['Ramesh Kumar', 'Suresh Singh', 'Madu Patil'].map((String farmer) {
-                            return DropdownMenuItem(
-                              value: farmer,
-                              child: Text(farmer),
-                            );
-                          }).toList(),
+                          items:
+                              [
+                                'Ramesh Kumar',
+                                'Suresh Singh',
+                                'Madu Patil',
+                              ].map((String farmer) {
+                                return DropdownMenuItem(
+                                  value: farmer,
+                                  child: Text(farmer),
+                                );
+                              }).toList(),
                           onChanged: (String? value) {},
                         ),
                         const SizedBox(height: 16),
                         DropdownButtonFormField<String>(
-                          value: _selectedProblem,
+                          initialValue: _selectedProblem,
                           decoration: const InputDecoration(
                             labelText: 'Identify Problem',
                             fillColor: Colors.white,
                           ),
-                          items: ['Pest Attack', 'Water Scarcity', 'Nutrient Deficiency', 'None'].map((String problem) {
-                            return DropdownMenuItem(
-                              value: problem,
-                              child: Text(problem),
-                            );
-                          }).toList(),
+                          items:
+                              [
+                                'Pest Attack',
+                                'Water Scarcity',
+                                'Nutrient Deficiency',
+                                'None',
+                              ].map((String problem) {
+                                return DropdownMenuItem(
+                                  value: problem,
+                                  child: Text(problem),
+                                );
+                              }).toList(),
                           onChanged: (String? value) {},
                         ),
                       ],
@@ -112,16 +121,25 @@ class _FieldVisitScreenState extends State<FieldVisitScreen> {
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+                            border: Border.all(
+                              color: AppColors.primary.withOpacity(0.2),
+                            ),
                           ),
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Icon(Icons.camera_alt_rounded, color: AppColors.primary, size: 32),
+                              const Icon(
+                                Icons.camera_alt_rounded,
+                                color: AppColors.primary,
+                                size: 32,
+                              ),
                               const SizedBox(height: 8),
                               Text(
                                 'Click to Capture Image',
-                                style: TextStyle(color: AppColors.primary.withOpacity(0.8), fontSize: 12),
+                                style: TextStyle(
+                                  color: AppColors.primary.withOpacity(0.8),
+                                  fontSize: 12,
+                                ),
                               ),
                             ],
                           ),

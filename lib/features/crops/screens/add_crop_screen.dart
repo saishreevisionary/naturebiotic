@@ -21,11 +21,11 @@ class _AddCropScreenState extends State<AddCropScreen> {
   final _countController = TextEditingController();
   final _acreController = TextEditingController();
   final _yieldController = TextEditingController();
-  
+
   bool _isLoading = true;
   bool _isConfigLoading = true;
   bool _isEdit = false;
-  
+
   List<Map<String, dynamic>> _masterCrops = [];
   List<Map<String, dynamic>> _farms = [];
   int? _selectedCropId;
@@ -47,7 +47,12 @@ class _AddCropScreenState extends State<AddCropScreen> {
   String _selectedYieldPeriodUnit = 'Per Month';
   String _selectedCountUnit = 'Plants';
 
-  List<String> _yieldPeriodUnits = ['Per Month', 'Per Week', 'Per Season', 'Per Year'];
+  List<String> _yieldPeriodUnits = [
+    'Per Month',
+    'Per Week',
+    'Per Season',
+    'Per Year',
+  ];
 
   @override
   void initState() {
@@ -81,26 +86,35 @@ class _AddCropScreenState extends State<AddCropScreen> {
 
   void _populateForEdit() {
     if (widget.crop == null) return;
-    
+
     _selectedFarmId = widget.crop!['farm_id']?.toString();
-    
+
     // Attempt to match master crop and variety
     final cropName = widget.crop!['name'];
     final varietyName = widget.crop!['variety'];
-    
+
     try {
       final matchedCrop = _masterCrops.firstWhere((c) => c['name'] == cropName);
       _selectedCropId = matchedCrop['id'];
-      
-      final varieties = List<Map<String, dynamic>>.from(matchedCrop['master_crop_varieties'] ?? []);
-      final matchedVariety = varieties.firstWhere((v) => v['variety_name'] == varietyName);
+
+      final varieties = List<Map<String, dynamic>>.from(
+        matchedCrop['master_crop_varieties'] ?? [],
+      );
+      final matchedVariety = varieties.firstWhere(
+        (v) => v['variety_name'] == varietyName,
+      );
       _selectedVarietyId = matchedVariety['id'];
     } catch (_) {
       // If master data changed, we just keep IDs null and user selects again
     }
 
     // Split "Value Unit"
-    void split(String? full, TextEditingController ctrl, Function(String) setUnit, List<String> units) {
+    void split(
+      String? full,
+      TextEditingController ctrl,
+      Function(String) setUnit,
+      List<String> units,
+    ) {
       if (full == null || full.isEmpty) return;
       final parts = full.split(' ');
       if (parts.isNotEmpty) ctrl.text = parts[0];
@@ -109,18 +123,38 @@ class _AddCropScreenState extends State<AddCropScreen> {
         if (units.contains(unit)) setUnit(unit);
       }
     }
-    
-    split(widget.crop!['age'], _ageController, (v) => _selectedAgeUnit = v, _ageUnits);
-    split(widget.crop!['life'], _lifeController, (v) => _selectedLifeUnit = v, _lifeUnits);
-    split(widget.crop!['count'], _countController, (v) => _selectedCountUnit = v, _countUnits);
-    split(widget.crop!['acre'], _acreController, (v) => _selectedAcreUnit = v, _acreUnits);
-    
+
+    split(
+      widget.crop!['age'],
+      _ageController,
+      (v) => _selectedAgeUnit = v,
+      _ageUnits,
+    );
+    split(
+      widget.crop!['life'],
+      _lifeController,
+      (v) => _selectedLifeUnit = v,
+      _lifeUnits,
+    );
+    split(
+      widget.crop!['count'],
+      _countController,
+      (v) => _selectedCountUnit = v,
+      _countUnits,
+    );
+    split(
+      widget.crop!['acre'],
+      _acreController,
+      (v) => _selectedAcreUnit = v,
+      _acreUnits,
+    );
+
     // Yield "Value Unit Period"
     final yFull = widget.crop!['expected_yield'] as String?;
     if (yFull != null && yFull.isNotEmpty) {
       final yParts = yFull.split(' ');
       if (yParts.isNotEmpty) _yieldController.text = yParts[0];
-      
+
       for (var unit in _yieldUnits) {
         if (yFull.contains(unit)) _selectedYieldUnit = unit;
       }
@@ -143,12 +177,19 @@ class _AddCropScreenState extends State<AddCropScreen> {
 
       if (mounted) {
         setState(() {
-          if (results[0].isNotEmpty) _ageUnits = results[0].map((e) => e['label'] as String).toList();
-          if (results[1].isNotEmpty) _lifeUnits = results[1].map((e) => e['label'] as String).toList();
-          if (results[2].isNotEmpty) _countUnits = results[2].map((e) => e['label'] as String).toList();
-          if (results[3].isNotEmpty) _acreUnits = results[3].map((e) => e['label'] as String).toList();
-          if (results[4].isNotEmpty) _yieldUnits = results[4].map((e) => e['label'] as String).toList();
-          if (results[5].isNotEmpty) _yieldPeriodUnits = results[5].map((e) => e['label'] as String).toList();
+          if (results[0].isNotEmpty)
+            _ageUnits = results[0].map((e) => e['label'] as String).toList();
+          if (results[1].isNotEmpty)
+            _lifeUnits = results[1].map((e) => e['label'] as String).toList();
+          if (results[2].isNotEmpty)
+            _countUnits = results[2].map((e) => e['label'] as String).toList();
+          if (results[3].isNotEmpty)
+            _acreUnits = results[3].map((e) => e['label'] as String).toList();
+          if (results[4].isNotEmpty)
+            _yieldUnits = results[4].map((e) => e['label'] as String).toList();
+          if (results[5].isNotEmpty)
+            _yieldPeriodUnits =
+                results[5].map((e) => e['label'] as String).toList();
 
           if (!_isEdit) {
             _selectedAgeUnit = _ageUnits.first;
@@ -208,7 +249,10 @@ class _AddCropScreenState extends State<AddCropScreen> {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedCropId == null || _selectedVarietyId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select Crop and Variety'), backgroundColor: Colors.orange),
+        const SnackBar(
+          content: Text('Please select Crop and Variety'),
+          backgroundColor: Colors.orange,
+        ),
       );
       return;
     }
@@ -217,7 +261,9 @@ class _AddCropScreenState extends State<AddCropScreen> {
       (c) => c['id'] == _selectedCropId,
       orElse: () => <String, dynamic>{'name': 'Unknown'},
     );
-    final varieties = List<Map<String, dynamic>>.from(crop['master_crop_varieties'] ?? []);
+    final varieties = List<Map<String, dynamic>>.from(
+      crop['master_crop_varieties'] ?? [],
+    );
     final variety = varieties.firstWhere(
       (v) => v['id'] == _selectedVarietyId,
       orElse: () => <String, dynamic>{'variety_name': 'Unknown'},
@@ -226,7 +272,10 @@ class _AddCropScreenState extends State<AddCropScreen> {
     final farmIdToUse = widget.farmId ?? _selectedFarmId;
     if (farmIdToUse == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a Farm'), backgroundColor: Colors.orange),
+        const SnackBar(
+          content: Text('Please select a Farm'),
+          backgroundColor: Colors.orange,
+        ),
       );
       return;
     }
@@ -241,13 +290,21 @@ class _AddCropScreenState extends State<AddCropScreen> {
         'life': '${_lifeController.text.trim()} $_selectedLifeUnit',
         'count': '${_countController.text.trim()} $_selectedCountUnit',
         'acre': '${_acreController.text.trim()} $_selectedAcreUnit',
-        'expected_yield': '${_yieldController.text.trim()} $_selectedYieldUnit $_selectedYieldPeriodUnit',
-        'created_at': _isEdit ? (widget.crop!['created_at'] ?? DateTime.now().toIso8601String()) : DateTime.now().toIso8601String(),
+        'expected_yield':
+            '${_yieldController.text.trim()} $_selectedYieldUnit $_selectedYieldPeriodUnit',
+        'created_at':
+            _isEdit
+                ? (widget.crop!['created_at'] ??
+                    DateTime.now().toIso8601String())
+                : DateTime.now().toIso8601String(),
       };
 
       if (kIsWeb) {
         if (_isEdit) {
-          await SupabaseService.updateCrop(widget.crop!['id'].toString(), cropData);
+          await SupabaseService.updateCrop(
+            widget.crop!['id'].toString(),
+            cropData,
+          );
         } else {
           await SupabaseService.addCrop(cropData);
         }
@@ -268,8 +325,10 @@ class _AddCropScreenState extends State<AddCropScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(_isEdit ? 'Crop Updated Successfully' : 'Crop Added Successfully'), 
-            backgroundColor: AppColors.primary
+            content: Text(
+              _isEdit ? 'Crop Updated Successfully' : 'Crop Added Successfully',
+            ),
+            backgroundColor: AppColors.primary,
           ),
         );
         Navigator.pop(context, true);
@@ -289,236 +348,314 @@ class _AddCropScreenState extends State<AddCropScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: Text(_isEdit ? 'Edit Crop' : 'Add Crop'),
-      ),
-      body: _isConfigLoading 
-        ? const Center(child: CircularProgressIndicator())
-        : Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 800),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24.0),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (widget.farmId == null) ...[
-                        const Text(
-                          'Farm Selection',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textBlack,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Container(
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: AppColors.secondary.withOpacity(0.5),
-                            borderRadius: BorderRadius.circular(24),
-                          ),
-                          child: DropdownButtonFormField<String>(
-                            value: _selectedFarmId,
-                            decoration: const InputDecoration(
-                              labelText: 'Select Farm',
-                              fillColor: Colors.white,
-                            ),
-                            items: _farms.map((farm) => DropdownMenuItem<String>(
-                              value: farm['id'].toString(),
-                              child: Text(farm['name'] ?? 'Unknown Farm'),
-                            )).toList(),
-                            onChanged: (id) => setState(() => _selectedFarmId = id),
-                            validator: (v) => v == null ? 'Required' : null,
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                      ],
-                      const Text(
-                        'Crop Information',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textBlack,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: AppColors.secondary.withOpacity(0.5),
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                        child: Column(
-                          children: [
-                            DropdownButtonFormField<int>(
-                              value: _selectedCropId,
-                              decoration: const InputDecoration(
-                                labelText: 'Crop Name',
-                                fillColor: Colors.white,
+      appBar: AppBar(title: Text(_isEdit ? 'Edit Crop' : 'Add Crop')),
+      body:
+          _isConfigLoading
+              ? const Center(child: CircularProgressIndicator())
+              : Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 800),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (widget.farmId == null) ...[
+                            const Text(
+                              'Farm Selection',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textBlack,
                               ),
-                              items: _masterCrops.map((crop) => DropdownMenuItem<int>(
-                                value: crop['id'],
-                                child: Text(crop['name']),
-                              )).toList(),
-                              onChanged: (id) {
-                                setState(() {
-                                  _selectedCropId = id;
-                                  _selectedVarietyId = null;
-                                  _lifeController.clear();
-                                  _selectedLifeUnit = 'Years';
-                                });
-                              },
-                              validator: (v) => v == null ? 'Required' : null,
                             ),
                             const SizedBox(height: 16),
-                            DropdownButtonFormField<int>(
-                              value: _selectedVarietyId,
-                              decoration: const InputDecoration(
-                                labelText: 'Variety',
-                                fillColor: Colors.white,
+                            Container(
+                              padding: const EdgeInsets.all(20),
+                              decoration: BoxDecoration(
+                                color: AppColors.secondary.withOpacity(0.5),
+                                borderRadius: BorderRadius.circular(24),
                               ),
-                              hint: const Text('Select a variety'),
-                              items: (_masterCrops.firstWhere(
-                                (c) => c['id'] == _selectedCropId,
-                                orElse: () => {'master_crop_varieties': []},
-                              )['master_crop_varieties'] as List).map((v) => DropdownMenuItem<int>(
-                                value: v['id'],
-                                child: Text(v['variety_name']),
-                              )).toList(),
-                              onChanged: _selectedCropId == null ? null : (id) {
-                                setState(() {
-                                  _selectedVarietyId = id;
-                                  if (id != null) {
-                                    final crop = _masterCrops.firstWhere((c) => c['id'] == _selectedCropId);
-                                    final varieties = List<Map<String, dynamic>>.from(crop['master_crop_varieties'] ?? []);
-                                      final variety = varieties.firstWhere(
-                                        (v) => v['id'] == id,
-                                        orElse: () => <String, dynamic>{'life': ''},
-                                      );
-                                      
-                                      String lifeVal = variety['life'] ?? '';
-                                      if (lifeVal.contains(' ')) {
-                                        final parts = lifeVal.split(' ');
-                                        _lifeController.text = parts[0];
-                                        if (_lifeUnits.contains(parts[1])) {
-                                          _selectedLifeUnit = parts[1];
-                                        }
-                                      } else {
-                                        _lifeController.text = lifeVal;
-                                        _selectedLifeUnit = 'Years';
-                                      }
-                                    }
-                                });
-                              },
-                              validator: (v) => v == null ? 'Required' : null,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      const Text(
-                        'Growth & Yield',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textBlack,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: AppColors.secondary.withOpacity(0.5),
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                        child: Column(
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _buildUnitTextField(
-                                    controller: _ageController,
-                                    label: 'Age',
-                                    units: _ageUnits,
-                                    selectedUnit: _selectedAgeUnit,
-                                    onUnitChanged: (v) => setState(() => _selectedAgeUnit = v!),
-                                  ),
+                              child: DropdownButtonFormField<String>(
+                                initialValue: _selectedFarmId,
+                                decoration: const InputDecoration(
+                                  labelText: 'Select Farm',
+                                  fillColor: Colors.white,
                                 ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: _buildUnitTextField(
-                                    controller: _lifeController,
-                                    label: 'Life',
-                                    units: _lifeUnits,
-                                    selectedUnit: _selectedLifeUnit,
-                                    onUnitChanged: (v) => setState(() => _selectedLifeUnit = v!),
+                                items:
+                                    _farms
+                                        .map(
+                                          (farm) => DropdownMenuItem<String>(
+                                            value: farm['id'].toString(),
+                                            child: Text(
+                                              farm['name'] ?? 'Unknown Farm',
+                                            ),
+                                          ),
+                                        )
+                                        .toList(),
+                                onChanged:
+                                    (id) =>
+                                        setState(() => _selectedFarmId = id),
+                                validator: (v) => v == null ? 'Required' : null,
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                          ],
+                          const Text(
+                            'Crop Information',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textBlack,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Container(
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: AppColors.secondary.withOpacity(0.5),
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                            child: Column(
+                              children: [
+                                DropdownButtonFormField<int>(
+                                  initialValue: _selectedCropId,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Crop Name',
+                                    fillColor: Colors.white,
                                   ),
+                                  items:
+                                      _masterCrops
+                                          .map(
+                                            (crop) => DropdownMenuItem<int>(
+                                              value: crop['id'],
+                                              child: Text(crop['name']),
+                                            ),
+                                          )
+                                          .toList(),
+                                  onChanged: (id) {
+                                    setState(() {
+                                      _selectedCropId = id;
+                                      _selectedVarietyId = null;
+                                      _lifeController.clear();
+                                      _selectedLifeUnit = 'Years';
+                                    });
+                                  },
+                                  validator:
+                                      (v) => v == null ? 'Required' : null,
+                                ),
+                                const SizedBox(height: 16),
+                                DropdownButtonFormField<int>(
+                                  initialValue: _selectedVarietyId,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Variety',
+                                    fillColor: Colors.white,
+                                  ),
+                                  hint: const Text('Select a variety'),
+                                  items:
+                                      (_masterCrops.firstWhere(
+                                                (c) =>
+                                                    c['id'] == _selectedCropId,
+                                                orElse:
+                                                    () => {
+                                                      'master_crop_varieties':
+                                                          [],
+                                                    },
+                                              )['master_crop_varieties']
+                                              as List)
+                                          .map(
+                                            (v) => DropdownMenuItem<int>(
+                                              value: v['id'],
+                                              child: Text(v['variety_name']),
+                                            ),
+                                          )
+                                          .toList(),
+                                  onChanged:
+                                      _selectedCropId == null
+                                          ? null
+                                          : (id) {
+                                            setState(() {
+                                              _selectedVarietyId = id;
+                                              if (id != null) {
+                                                final crop = _masterCrops
+                                                    .firstWhere(
+                                                      (c) =>
+                                                          c['id'] ==
+                                                          _selectedCropId,
+                                                    );
+                                                final varieties = List<
+                                                  Map<String, dynamic>
+                                                >.from(
+                                                  crop['master_crop_varieties'] ??
+                                                      [],
+                                                );
+                                                final variety = varieties
+                                                    .firstWhere(
+                                                      (v) => v['id'] == id,
+                                                      orElse:
+                                                          () =>
+                                                              <String, dynamic>{
+                                                                'life': '',
+                                                              },
+                                                    );
+
+                                                String lifeVal =
+                                                    variety['life'] ?? '';
+                                                if (lifeVal.contains(' ')) {
+                                                  final parts = lifeVal.split(
+                                                    ' ',
+                                                  );
+                                                  _lifeController.text =
+                                                      parts[0];
+                                                  if (_lifeUnits.contains(
+                                                    parts[1],
+                                                  )) {
+                                                    _selectedLifeUnit =
+                                                        parts[1];
+                                                  }
+                                                } else {
+                                                  _lifeController.text =
+                                                      lifeVal;
+                                                  _selectedLifeUnit = 'Years';
+                                                }
+                                              }
+                                            });
+                                          },
+                                  validator:
+                                      (v) => v == null ? 'Required' : null,
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 16),
-                            Row(
+                          ),
+                          const SizedBox(height: 24),
+                          const Text(
+                            'Growth & Yield',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textBlack,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Container(
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: AppColors.secondary.withOpacity(0.5),
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                            child: Column(
                               children: [
-                                Expanded(
-                                  child: _buildUnitTextField(
-                                    controller: _countController,
-                                    label: 'Count',
-                                    units: _countUnits,
-                                    selectedUnit: _selectedCountUnit,
-                                    onUnitChanged: (v) => setState(() => _selectedCountUnit = v!),
-                                    keyboardType: TextInputType.number,
-                                  ),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: _buildUnitTextField(
+                                        controller: _ageController,
+                                        label: 'Age',
+                                        units: _ageUnits,
+                                        selectedUnit: _selectedAgeUnit,
+                                        onUnitChanged:
+                                            (v) => setState(
+                                              () => _selectedAgeUnit = v!,
+                                            ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: _buildUnitTextField(
+                                        controller: _lifeController,
+                                        label: 'Life',
+                                        units: _lifeUnits,
+                                        selectedUnit: _selectedLifeUnit,
+                                        onUnitChanged:
+                                            (v) => setState(
+                                              () => _selectedLifeUnit = v!,
+                                            ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: _buildUnitTextField(
-                                    controller: _acreController,
-                                    label: 'Scale/Acre',
-                                    units: _acreUnits,
-                                    selectedUnit: _selectedAcreUnit,
-                                    onUnitChanged: (v) => setState(() => _selectedAcreUnit = v!),
-                                  ),
+                                const SizedBox(height: 16),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: _buildUnitTextField(
+                                        controller: _countController,
+                                        label: 'Count',
+                                        units: _countUnits,
+                                        selectedUnit: _selectedCountUnit,
+                                        onUnitChanged:
+                                            (v) => setState(
+                                              () => _selectedCountUnit = v!,
+                                            ),
+                                        keyboardType: TextInputType.number,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: _buildUnitTextField(
+                                        controller: _acreController,
+                                        label: 'Scale/Acre',
+                                        units: _acreUnits,
+                                        selectedUnit: _selectedAcreUnit,
+                                        onUnitChanged:
+                                            (v) => setState(
+                                              () => _selectedAcreUnit = v!,
+                                            ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                _buildYieldTextField(
+                                  controller: _yieldController,
+                                  label: 'Expected Yield',
+                                  units: _yieldUnits,
+                                  selectedUnit: _selectedYieldUnit,
+                                  onUnitChanged:
+                                      (v) => setState(
+                                        () => _selectedYieldUnit = v!,
+                                      ),
+                                  periods: _yieldPeriodUnits,
+                                  selectedPeriod: _selectedYieldPeriodUnit,
+                                  onPeriodChanged:
+                                      (v) => setState(
+                                        () => _selectedYieldPeriodUnit = v!,
+                                      ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 16),
-                            _buildYieldTextField(
-                              controller: _yieldController,
-                              label: 'Expected Yield',
-                              units: _yieldUnits,
-                              selectedUnit: _selectedYieldUnit,
-                              onUnitChanged: (v) => setState(() => _selectedYieldUnit = v!),
-                              periods: _yieldPeriodUnits,
-                              selectedPeriod: _selectedYieldPeriodUnit,
-                              onPeriodChanged: (v) => setState(() => _selectedYieldPeriodUnit = v!),
+                          ),
+                          const SizedBox(height: 48),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: _isLoading ? null : _handleSubmit,
+                              child:
+                                  _isLoading
+                                      ? const SizedBox(
+                                        height: 20,
+                                        width: 20,
+                                        child: CircularProgressIndicator(
+                                          color: Colors.white,
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                      : Text(
+                                        _isEdit
+                                            ? 'Update Crop Records'
+                                            : 'Save Crop Data',
+                                      ),
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(height: 24),
+                        ],
                       ),
-                      const SizedBox(height: 48),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: _isLoading ? null : _handleSubmit,
-                          child: _isLoading 
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                                )
-                              : Text(_isEdit ? 'Update Crop Records' : 'Save Crop Data'),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
     );
   }
 
@@ -546,7 +683,11 @@ class _AddCropScreenState extends State<AddCropScreen> {
           padding: const EdgeInsets.only(left: 8),
           child: Row(
             children: [
-              Container(height: 30, width: 1, color: Colors.grey.withOpacity(0.2)),
+              Container(
+                height: 30,
+                width: 1,
+                color: Colors.grey.withOpacity(0.2),
+              ),
               // Unit Selection (e.g. Tons)
               Expanded(
                 flex: 4,
@@ -554,16 +695,35 @@ class _AddCropScreenState extends State<AddCropScreen> {
                   child: DropdownButton<String>(
                     value: selectedUnit,
                     isExpanded: true,
-                    icon: const Icon(Icons.arrow_drop_down_rounded, color: AppColors.textGray, size: 20),
-                    items: units.map((unit) => DropdownMenuItem(
-                      value: unit,
-                      child: Text(unit, style: const TextStyle(fontSize: 12, color: AppColors.textGray)),
-                    )).toList(),
+                    icon: const Icon(
+                      Icons.arrow_drop_down_rounded,
+                      color: AppColors.textGray,
+                      size: 20,
+                    ),
+                    items:
+                        units
+                            .map(
+                              (unit) => DropdownMenuItem(
+                                value: unit,
+                                child: Text(
+                                  unit,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textGray,
+                                  ),
+                                ),
+                              ),
+                            )
+                            .toList(),
                     onChanged: onUnitChanged,
                   ),
                 ),
               ),
-              Container(height: 30, width: 1, color: Colors.grey.withOpacity(0.2)),
+              Container(
+                height: 30,
+                width: 1,
+                color: Colors.grey.withOpacity(0.2),
+              ),
               // Period Selection (e.g. Per Month)
               Expanded(
                 flex: 6,
@@ -571,15 +731,28 @@ class _AddCropScreenState extends State<AddCropScreen> {
                   child: DropdownButton<String>(
                     value: selectedPeriod,
                     isExpanded: true,
-                    icon: const Icon(Icons.arrow_drop_down_rounded, color: AppColors.textGray, size: 20),
+                    icon: const Icon(
+                      Icons.arrow_drop_down_rounded,
+                      color: AppColors.textGray,
+                      size: 20,
+                    ),
                     style: const TextStyle(overflow: TextOverflow.ellipsis),
-                    items: periods.map((period) => DropdownMenuItem(
-                      value: period,
-                      child: Text(period, 
-                        style: const TextStyle(fontSize: 11, color: AppColors.textGray),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    )).toList(),
+                    items:
+                        periods
+                            .map(
+                              (period) => DropdownMenuItem(
+                                value: period,
+                                child: Text(
+                                  period,
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.textGray,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            )
+                            .toList(),
                     onChanged: onPeriodChanged,
                   ),
                 ),
@@ -623,11 +796,25 @@ class _AddCropScreenState extends State<AddCropScreen> {
                   child: DropdownButton<String>(
                     value: selectedUnit,
                     isExpanded: true,
-                    icon: const Icon(Icons.arrow_drop_down_rounded, color: AppColors.textGray),
-                    items: units.map((unit) => DropdownMenuItem(
-                      value: unit,
-                      child: Text(unit, style: const TextStyle(fontSize: 12, color: AppColors.textGray)),
-                    )).toList(),
+                    icon: const Icon(
+                      Icons.arrow_drop_down_rounded,
+                      color: AppColors.textGray,
+                    ),
+                    items:
+                        units
+                            .map(
+                              (unit) => DropdownMenuItem(
+                                value: unit,
+                                child: Text(
+                                  unit,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textGray,
+                                  ),
+                                ),
+                              ),
+                            )
+                            .toList(),
                     onChanged: onUnitChanged,
                   ),
                 ),

@@ -10,7 +10,7 @@ class LocalDatabaseService {
   static Database? _database;
   static Future<Database?>? _initFuture;
   static const String _databaseName = "nature_biotic_local.db";
-  static const int _databaseVersion = 5;
+  static const int _databaseVersion = 8;
 
   static Future<Database?> get database async {
     if (kIsWeb) return null;
@@ -113,6 +113,45 @@ class LocalDatabaseService {
         debugPrint('DB Upgrade Error (v5): $e');
       }
     }
+
+    if (oldVersion < 6) {
+      // Migration to version 6: Add collected_amount to stock_transactions
+      try {
+        await db.execute('ALTER TABLE stock_transactions ADD COLUMN collected_amount REAL');
+      } catch (e) {
+        debugPrint('DB Upgrade Error (v6): $e');
+      }
+    }
+    if (oldVersion < 7) {
+      // Migration to version 7: Add follow_up_date to reports
+      try {
+        await db.execute('ALTER TABLE reports ADD COLUMN follow_up_date TEXT');
+      } catch (e) {
+        debugPrint('DB Upgrade Error (v7): $e');
+      }
+    }
+    if (oldVersion < 8) {
+      // Migration to version 8: Add store_transactions
+      try {
+        await db.execute('''
+          CREATE TABLE store_transactions (
+            id TEXT PRIMARY KEY,
+            item_name TEXT,
+            transaction_type TEXT, -- 'PURCHASE', 'DELIVERY', 'RETURN'
+            quantity REAL,
+            unit TEXT,
+            executive_id TEXT, -- For Delivery/Return
+            vendor_name TEXT, -- For Purchase
+            status TEXT, -- 'PENDING', 'ACCEPTED', 'REJECTED'
+            accepted_at TEXT,
+            created_by TEXT,
+            created_at TEXT
+          )
+        ''');
+      } catch (e) {
+        debugPrint('DB Upgrade Error (v8): $e');
+      }
+    }
   }
 
   static Future<void> _onCreate(Database db, int version) async {
@@ -178,6 +217,7 @@ class LocalDatabaseService {
         recommendations TEXT,
         estimated_cost TEXT,
         signature_url TEXT,
+        follow_up_date TEXT,
         created_by TEXT,
         created_at TEXT,
         _local_signature BLOB,
@@ -244,6 +284,24 @@ class LocalDatabaseService {
         quantity REAL,
         unit TEXT,
         executive_id TEXT,
+        collected_amount REAL,
+        created_at TEXT
+      )
+    ''');
+
+    // Store Transactions table
+    await db.execute('''
+      CREATE TABLE store_transactions (
+        id TEXT PRIMARY KEY,
+        item_name TEXT,
+        transaction_type TEXT,
+        quantity REAL,
+        unit TEXT,
+        executive_id TEXT,
+        vendor_name TEXT,
+        status TEXT,
+        accepted_at TEXT,
+        created_by TEXT,
         created_at TEXT
       )
     ''');

@@ -2,13 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppColors {
-  static const Color primary = Color(0xFF2E7D32); // Dark Green
+  static const Color primary = Color(0xFF1B5E20); // Deeper Green
   static const Color secondary = Color(0xFFE8F5E9); // Light Green
-  static const Color background = Colors.white;
-  static const Color textBlack = Color(0xFF212121);
-  static const Color textGray = Color(0xFF757575);
-  static const Color accent = Color(0xFF4CAF50);
-  static const Color shadow = Color(0x1A000000);
+  static const Color background = Color(0xFFF9FBF9); // Off-white/slate
+  static const Color textBlack = Color(0xFF1A1C1A);
+  static const Color textGray = Color(0xFF6C756C);
+  static const Color accent = Color(0xFF43A047);
+  static const Color shadow = Color(0x0D000000); // Softer shadow
+  static const Color cardBg = Colors.white;
+  
+  // Category Colors
+  static const Color hot = Color(0xFFE53935);
+  static const Color warm = Color(0xFFFB8C00);
+  static const Color cold = Color(0xFF1E88E5);
 }
 
 class AppTheme {
@@ -19,20 +25,22 @@ class AppTheme {
       colorScheme: ColorScheme.light(
         primary: AppColors.primary,
         secondary: AppColors.secondary,
-        surface: AppColors.background,
+        surface: AppColors.cardBg,
+        onSurface: AppColors.textBlack,
       ),
       textTheme: GoogleFonts.outfitTextTheme().apply(
         bodyColor: AppColors.textBlack,
         displayColor: AppColors.textBlack,
       ),
       appBarTheme: AppBarTheme(
-        backgroundColor: AppColors.background,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
         titleTextStyle: GoogleFonts.outfit(
           color: AppColors.textBlack,
-          fontSize: 18,
-          fontWeight: FontWeight.w600,
+          fontSize: 20,
+          fontWeight: FontWeight.w700,
+          letterSpacing: -0.5,
         ),
         iconTheme: const IconThemeData(color: AppColors.textBlack),
       ),
@@ -42,38 +50,41 @@ class AppTheme {
           foregroundColor: Colors.white,
           minimumSize: const Size(double.infinity, 56),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(18),
           ),
-          elevation: 0,
+          elevation: 2,
+          shadowColor: AppColors.primary.withOpacity(0.3),
           textStyle: GoogleFonts.outfit(
             fontSize: 16,
-            fontWeight: FontWeight.bold,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.secondary.withOpacity(0.5),
+        fillColor: Colors.white,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
           borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
           borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-        hintStyle: GoogleFonts.outfit(color: AppColors.textGray),
+        hintStyle: GoogleFonts.outfit(color: AppColors.textGray.withOpacity(0.6)),
       ),
-      cardTheme: CardTheme(
-        color: AppColors.secondary,
+      cardTheme: CardThemeData(
+        color: AppColors.cardBg,
         elevation: 0,
+        margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(color: Colors.black.withOpacity(0.04), width: 1),
         ),
       ),
     );

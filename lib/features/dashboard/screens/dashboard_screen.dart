@@ -1,22 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:nature_biotic/core/theme.dart';
 import 'package:nature_biotic/services/supabase_service.dart';
+import 'package:nature_biotic/services/local_database_service.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:nature_biotic/features/auth/screens/create_executive_screen.dart';
 import 'package:nature_biotic/features/auth/screens/executive_list_screen.dart';
 import 'package:nature_biotic/features/attendance/screens/attendance_screen.dart';
-import 'package:nature_biotic/features/attendance/screens/leave_request_screen.dart';
-import 'package:nature_biotic/features/attendance/screens/attendance_history_screen.dart';
-import 'package:nature_biotic/features/attendance/screens/admin_attendance_screen.dart';
-import 'package:nature_biotic/features/attendance/screens/admin_leave_approval_screen.dart';
-import 'package:nature_biotic/features/calls/screens/executive_dialer_screen.dart';
-import 'package:nature_biotic/features/calls/screens/admin_call_logs_screen.dart';
 import 'package:intl/intl.dart';
-import 'package:nature_biotic/features/farmers/screens/farmer_list_screen.dart';
-import 'package:nature_biotic/features/farms/screens/farm_list_screen.dart';
-import 'package:nature_biotic/features/crops/screens/crop_list_screen.dart';
 import 'package:nature_biotic/features/reports/screens/reports_list_screen.dart';
 import 'package:nature_biotic/features/dashboard/screens/farm_sales_list_screen.dart';
 import 'package:nature_biotic/features/auth/screens/login_logs_screen.dart';
+import 'package:nature_biotic/features/profile/screens/profile_screen.dart';
+import 'package:nature_biotic/features/dashboard/screens/visit_calendar_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -25,7 +20,8 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProviderStateMixin {
+class _DashboardScreenState extends State<DashboardScreen>
+    with SingleTickerProviderStateMixin {
   bool _isAdmin = false;
   String _userName = 'User';
   String _avatarUrl = '';
@@ -35,8 +31,9 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   double _totalReturnValue = 0.0;
   int _totalItemsSold = 0;
   int _totalItemsReturned = 0;
-  String _selectedPeriod = 'All Time';
-  
+  String _selectedPeriod = 'This Month';
+  DateTimeRange? _customDateRange;
+
   // Stats
   int _farmerCount = 0;
   int _farmCount = 0;
@@ -46,6 +43,10 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   int _absentCount = 0;
   int _teamPresentCount = 0;
   int _teamAbsentCount = 0;
+  double _salesTarget = 0.0;
+  double _totalCollection = 0.0;
+  double _totalOutstanding = 0.0;
+  double _salesToAchieve = 0.0;
 
   // Raw Data for local filtering
   List<Map<String, dynamic>> _allTransactions = [];
@@ -56,7 +57,8 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   List<Map<String, dynamic>> _allProducts = [];
   List<Map<String, dynamic>> _recentActivities = [];
   List<Map<String, dynamic>> _filteredTransactions = [];
-  
+  List<Map<String, dynamic>> _reminders = [];
+
   // Scroll & Animation Logic
   late ScrollController _scrollController;
   double _scrollOpacity = 1.0;
@@ -72,7 +74,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
 
   void _onScroll() {
     if (!_scrollController.hasClients) return;
-    
+
     final offset = _scrollController.offset;
     setState(() {
       _scrollOpacity = (1 - (offset / 200)).clamp(0.0, 1.0);
@@ -93,18 +95,50 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       final profile = await SupabaseService.getProfile();
       final isAdmin = profile?['role'] == 'admin';
       final attendance = await SupabaseService.getTodayAttendance();
-      
+
       final farmers = await SupabaseService.getFarmers();
       final farms = await SupabaseService.getFarms();
       final crops = await SupabaseService.getAllCrops();
       final reports = await SupabaseService.getReports();
-      final transactions = await SupabaseService.getAllStockTransactions();
-      final products = await SupabaseService.getHierarchicalDropdownOptions('product_name');
+      final remoteTransactions =
+          await SupabaseService.getAllStockTransactions();
+
+      List<Map<String, dynamic>> localTransactions = [];
+      if (!kIsWeb) {
+        localTransactions = await LocalDatabaseService.getData(
+          'stock_transactions',
+        );
+      }
+
+      // Merge transactions correctly to avoid duplicates and preserve local-only data (collected_amount)
+      final Map<String, Map<String, dynamic>> mergedMap = {};
+
+      // 1. Load remote transactions
+      for (var tx in remoteTransactions) {
+        mergedMap[tx['id'].toString()] = Map<String, dynamic>.from(tx);
+      }
+
+      // 2. Override/Add with local transactions
+      for (var tx in localTransactions) {
+        final id = tx['id'].toString();
+        if (mergedMap.containsKey(id)) {
+          // Merge - local data takes priority for keys like 'collected_amount'
+          mergedMap[id] = {...mergedMap[id]!, ...tx};
+        } else {
+          mergedMap[id] = Map<String, dynamic>.from(tx);
+        }
+      }
+
+      final transactions = mergedMap.values.toList();
+      final products = await SupabaseService.getHierarchicalDropdownOptions(
+        'product_name',
+      );
       final activities = await SupabaseService.getRecentActivities();
-      
+
       // Attendance Stats
       final personalStats = await SupabaseService.getPersonalMonthlyStats();
-      final teamStats = isAdmin ? await SupabaseService.getTeamTodayStats() : null;
+      final teamStats =
+          isAdmin ? await SupabaseService.getTeamTodayStats() : null;
 
       if (mounted) {
         setState(() {
@@ -112,22 +146,23 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
           _userName = profile?['full_name']?.split(' ')[0] ?? 'User';
           _avatarUrl = profile?['avatar_url'] ?? '';
           _todayAttendance = attendance;
-          _recentActivities = activities;
-          
-          _allFarmers = farmers;
-          _allFarms = farms;
-          _allCrops = crops;
-          _allReports = reports;
-          _allTransactions = transactions;
-          _allProducts = products;
-          
+          _recentActivities = activities ?? [];
+
+          _allFarmers = farmers ?? [];
+          _allFarms = farms ?? [];
+          _allCrops = crops ?? [];
+          _allReports = reports ?? [];
+          _allTransactions = transactions ?? [];
+          _allProducts = products ?? [];
+          _salesTarget = (profile?['sales_target'] ?? 0.0).toDouble();
+
           _presentCount = personalStats['present'] ?? 0;
           _absentCount = personalStats['absent'] ?? 0;
           if (teamStats != null) {
             _teamPresentCount = teamStats['present'] ?? 0;
             _teamAbsentCount = teamStats['absent'] ?? 0;
           }
-          
+
           _applyFilters();
         });
       }
@@ -139,60 +174,73 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   }
 
   void _applyFilters() {
-    final startDate = _getStartDateForPeriod(_selectedPeriod);
+    final range = _getDateRangeForPeriod(_selectedPeriod);
+    final startDate = range.start;
+    final endDate = range.end;
     final currentUserId = SupabaseService.client.auth.currentUser?.id;
 
-    bool isInPeriod(dynamic item) {
-      if (startDate == null) return true;
-      final createdStr = item['created_at']?.toString() ?? item['start_time']?.toString();
-      if (createdStr == null) return false;
-      final dt = DateTime.tryParse(createdStr);
-      return dt != null && dt.isAfter(startDate);
-    }
-
-    _farmerCount = _allFarmers.where(isInPeriod).length;
-    _farmCount = _allFarms.where(isInPeriod).length;
-    _cropCount = _allCrops.where(isInPeriod).length;
-    _reportCount = _allReports.where(isInPeriod).length;
+    _farmerCount =
+        _allFarmers.where((i) => _isInPeriod(i, startDate, endDate)).length;
+    _farmCount =
+        _allFarms.where((i) => _isInPeriod(i, startDate, endDate)).length;
+    _cropCount =
+        _allCrops.where((i) => _isInPeriod(i, startDate, endDate)).length;
+    _reportCount =
+        _allReports.where((i) => _isInPeriod(i, startDate, endDate)).length;
 
     double revenue = 0;
     double returnValue = 0;
     double itemsSold = 0;
     double itemsReturned = 0;
-    
-    final validTransactions = _allTransactions.where((tx) {
-      final type = tx['transaction_type'];
-      final isRelevant = type == 'DELIVERED' || type == 'RETURN';
-      final periodOk = isInPeriod(tx);
-      if (!_isAdmin) {
-        return isRelevant && periodOk && tx['executive_id'] == currentUserId;
-      }
-      return isRelevant && periodOk;
-    }).toList();
+    double totalCollection = 0;
+
+    final validTransactions =
+        _allTransactions.where((tx) {
+          final type = tx['transaction_type']?.toString().toUpperCase();
+          // Sales are now counted when stock is RECEIVED by the farm.
+          // DELIVERED is just field usage (consumption) and doesn't affect billing.
+          final isRelevant = type == 'RECEIVED' || type == 'RETURN';
+          final periodOk = _isInPeriod(tx, startDate, endDate);
+          if (!_isAdmin) {
+            // Robust executive check: handle strings, cases, and pending locals
+            final txExecId = tx['executive_id']?.toString().toLowerCase();
+            final currentId = currentUserId?.toString().toLowerCase();
+            final isOwner =
+                txExecId == currentId ||
+                (tx['status'] == 'PENDING' && txExecId == null);
+            return isRelevant && periodOk && isOwner;
+          }
+          return isRelevant && periodOk;
+        }).toList();
 
     for (var tx in validTransactions) {
       final type = tx['transaction_type'];
       final itemName = tx['item_name']?.toString().trim().toLowerCase();
-      final unit = tx['unit']?.toString().trim().toLowerCase();
+      final rawUnit = tx['unit']?.toString().trim().toLowerCase() ?? '';
+      // Clean unit of packed metadata "{₹...}" for price matching
+      final unit = rawUnit.split(' {₹')[0].trim();
       final qty = double.tryParse(tx['quantity']?.toString() ?? '0') ?? 0.0;
-      
+
       final parent = _allProducts.firstWhere(
-        (p) => p['label']?.toString().trim().toLowerCase() == itemName, 
-        orElse: () => {}
+        (p) => p['label']?.toString().trim().toLowerCase() == itemName,
+        orElse: () => {},
       );
-      
+
       if (parent.isNotEmpty) {
-        final variants = List<Map<String, dynamic>>.from(parent['variants'] ?? []);
-        final variant = variants.firstWhere(
-          (v) => v['label']?.toString().trim().toLowerCase() == unit, 
-          orElse: () => {}
+        final variants = List<Map<String, dynamic>>.from(
+          parent['variants'] ?? [],
         );
-        
+        final variant = variants.firstWhere(
+          (v) => v['label']?.toString().trim().toLowerCase() == unit,
+          orElse: () => {},
+        );
+
         if (variant.isNotEmpty) {
-          final price = double.tryParse(variant['offer_price']?.toString() ?? '0') ?? 0.0;
+          final price =
+              double.tryParse(variant['offer_price']?.toString() ?? '0') ?? 0.0;
           final amount = price * qty;
-          
-          if (type == 'DELIVERED') {
+
+          if (type == 'RECEIVED') {
             revenue += amount;
             itemsSold += qty;
           } else if (type == 'RETURN') {
@@ -208,22 +256,217 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     _totalReturnValue = returnValue;
     _totalItemsSold = itemsSold.toInt();
     _totalItemsReturned = itemsReturned.toInt();
+
+    // Calculate collections from ALL transactions in period (Collections happen on RECEIVED types)
+    totalCollection = _allTransactions
+        .where((tx) {
+          final isPeriod =
+              tx['created_at'] != null && _isInPeriod(tx, startDate, endDate);
+          final type = tx['transaction_type']?.toString().toUpperCase();
+          final isReceived = type == 'RECEIVED';
+
+          final txExecId = tx['executive_id']?.toString().toLowerCase();
+          final currentId = currentUserId?.toString().toLowerCase();
+          final isOwner =
+              txExecId == currentId ||
+              (tx['status'] == 'PENDING' && txExecId == null);
+
+          final isExecutive = _isAdmin ? true : isOwner;
+          return isPeriod && isReceived && isExecutive;
+        })
+        .fold(0.0, (sum, tx) {
+          // For RECEIVED (Payments), we prefer 'collected_amount' (local-only),
+          // but fallback to parsing the packed unit string "... {₹2000}" (Supabase)
+          double amt =
+              double.tryParse(tx['collected_amount']?.toString() ?? '0') ?? 0.0;
+
+          if (amt == 0 &&
+              tx['unit'] != null &&
+              tx['unit'].toString().contains('{₹')) {
+            try {
+              final unitStr = tx['unit'].toString();
+              final start = unitStr.indexOf('{₹') + 2;
+              final end = unitStr.indexOf('}', start);
+              if (end != -1) {
+                amt = double.tryParse(unitStr.substring(start, end)) ?? 0.0;
+              }
+            } catch (_) {}
+          }
+
+          return sum + amt;
+        });
+
+    _totalCollection = totalCollection;
+    _totalOutstanding = revenue - totalCollection;
+    _salesToAchieve =
+        (_salesTarget - revenue).clamp(0, double.infinity).toDouble();
+
     _filteredTransactions = validTransactions;
+
+    // Process Reminders (Follow-up Dates from Reports)
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    final reportsToProcess = _allReports ?? [];
+    _reminders =
+        reportsToProcess.where((report) {
+          if (report['follow_up_date'] == null) return false;
+          try {
+            final followUp = DateTime.parse(report['follow_up_date']);
+            // Show if today or in the future
+            return followUp.isAfter(today.subtract(const Duration(seconds: 1)));
+          } catch (_) {
+            return false;
+          }
+        }).toList();
+
+    // Sort reminders by date (soonest first)
+    _reminders.sort((a, b) {
+      final dateA = DateTime.parse(a['follow_up_date']);
+      final dateB = DateTime.parse(b['follow_up_date']);
+      return dateA.compareTo(dateB);
+    });
   }
 
-  DateTime? _getStartDateForPeriod(String period) {
+  DateTimeRange _getDateRangeForPeriod(String period) {
     final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
     switch (period) {
       case 'Today':
-        return DateTime(now.year, now.month, now.day);
+        return DateTimeRange(
+          start: today,
+          end: DateTime(now.year, now.month, now.day, 23, 59, 59),
+        );
       case 'This Week':
-        return now.subtract(Duration(days: now.weekday - 1));
+        final startOfWeek = today.subtract(Duration(days: today.weekday - 1));
+        return DateTimeRange(start: startOfWeek, end: now);
       case 'This Month':
-        return DateTime(now.year, now.month, 1);
+        return DateTimeRange(start: DateTime(now.year, now.month, 1), end: now);
       case 'This Year':
-        return DateTime(now.year, 1, 1);
+        return DateTimeRange(start: DateTime(now.year, 1, 1), end: now);
+      case 'Customise':
+        return _customDateRange ??
+            DateTimeRange(start: DateTime(now.year, now.month, 1), end: now);
       default:
-        return null;
+        return DateTimeRange(start: DateTime(2000), end: DateTime(2100));
+    }
+  }
+
+  Future<void> _showMonthYearPicker() async {
+    final now = DateTime.now();
+    int selectedYear = _customDateRange?.start.year ?? now.year;
+    int selectedMonth = _customDateRange?.start.month ?? now.month;
+
+    final result = await showDialog<DateTimeRange>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              surfaceTintColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              title: const Text(
+                'Select Month & Year',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<int>(
+                    initialValue: selectedYear,
+                    decoration: const InputDecoration(
+                      labelText: 'Year',
+                      filled: false,
+                    ),
+                    items:
+                        List.generate(
+                              now.year - 2020 + 1,
+                              (index) => 2020 + index,
+                            ).reversed
+                            .map(
+                              (year) => DropdownMenuItem(
+                                value: year,
+                                child: Text(year.toString()),
+                              ),
+                            )
+                            .toList(),
+                    onChanged:
+                        (val) => setDialogState(() => selectedYear = val!),
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<int>(
+                    initialValue: selectedMonth,
+                    decoration: const InputDecoration(
+                      labelText: 'Month',
+                      filled: false,
+                    ),
+                    items:
+                        List.generate(12, (index) => index + 1)
+                            .map(
+                              (month) => DropdownMenuItem(
+                                value: month,
+                                child: Text(
+                                  DateFormat(
+                                    'MMMM',
+                                  ).format(DateTime(2022, month)),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                    onChanged:
+                        (val) => setDialogState(() => selectedMonth = val!),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(color: AppColors.textGray),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    final startDate = DateTime(selectedYear, selectedMonth, 1);
+                    final endDate = DateTime(
+                      selectedYear,
+                      selectedMonth + 1,
+                      0,
+                      23,
+                      59,
+                      59,
+                    );
+                    Navigator.pop(
+                      context,
+                      DateTimeRange(start: startDate, end: endDate),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(100, 45),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text('Apply'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (result != null) {
+      setState(() {
+        _customDateRange = result;
+        _selectedPeriod = 'Customise';
+        _applyFilters();
+      });
     }
   }
 
@@ -232,7 +475,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     try {
       final dateTime = DateTime.parse(dateTimeStr);
       final diff = DateTime.now().difference(dateTime);
-      
+
       if (diff.inDays >= 365) return '${(diff.inDays / 365).floor()}y ago';
       if (diff.inDays >= 30) return '${(diff.inDays / 30).floor()}mo ago';
       if (diff.inDays >= 1) return '${diff.inDays}d ago';
@@ -288,28 +531,19 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
-              EntranceAnimation(
-                delay: 150,
-                child: _buildFilterBar(),
-              ),
-              const SizedBox(height: 16),
-              EntranceAnimation(
-                delay: 200,
-                child: _buildQuickActions(isWide: false),
-              ),
-              const SizedBox(height: 32),
-              EntranceAnimation(
-                delay: 350,
-                child: _buildSalesCard(),
-              ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 44),
+              _buildFilterBar(),
+              const SizedBox(height: 44),
+              if (!_isAdmin) _buildRemindersSection(),
+              const SizedBox(height: 40),
+              EntranceAnimation(delay: 350, child: _buildSalesCard()),
+              const SizedBox(height: 44),
               _buildStatsGrid(isWide: false),
               const SizedBox(height: 32),
-              if (_isAdmin) ..._buildAdminSections(isWide: false) 
-              else ..._buildUserSections(isWide: false),
-              const SizedBox(height: 32),
-              _buildRecentActivitiesSection(),
+              if (_isAdmin)
+                ..._buildAdminSections(isWide: false)
+              else
+                ..._buildUserSections(isWide: false),
             ],
           ),
         ),
@@ -330,56 +564,38 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildHeroSection(),
-                const SizedBox(height: 40),
+                const SizedBox(height: 52),
                 const Text(
-                  'Overview',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textBlack),
+                  'Quick Overview',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textBlack,
+                  ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 32),
                 _buildStatsGrid(isWide: true),
-                const SizedBox(height: 40),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      flex: 6,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Quick Launch',
-                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 20),
-                          _buildQuickActions(isWide: true),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 32),
-                    Expanded(
-                      flex: 4,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Financial Summary',
-                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 20),
-                          _buildSalesCard(),
-                        ],
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: 72),
+                const Text(
+                  'Financial Progress',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
-                const SizedBox(height: 40),
+                const SizedBox(height: 32),
+                _buildSalesCard(),
+                const SizedBox(height: 52),
                 if (!_isAdmin) ...[
-                  const Text('Action Center', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 20),
+                  const Text(
+                    'Direct Actions',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 32),
                   Wrap(
                     spacing: 20,
                     runSpacing: 20,
-                    children: _buildUserSections(isWide: true).map((w) => SizedBox(width: 350, child: w)).toList(),
+                    children:
+                        _buildUserSections(
+                          isWide: true,
+                        ).map((w) => SizedBox(width: 350, child: w)).toList(),
                   ),
                 ],
               ],
@@ -391,24 +607,35 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
           width: 400,
           decoration: BoxDecoration(
             color: Colors.white,
-            border: Border(left: BorderSide(color: Colors.grey.withOpacity(0.1))),
+            border: Border(
+              left: BorderSide(color: Colors.grey.withOpacity(0.1)),
+            ),
           ),
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(32.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Quick Filters', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 16),
+                const Text(
+                  'Dashboard Filters',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 20),
                 _buildFilterBar(),
+                const SizedBox(height: 50),
+                if (!_isAdmin) _buildRemindersSection(),
                 const SizedBox(height: 40),
                 if (_isAdmin) ...[
-                  const Text('Admin Management', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const Divider(),
+                  const SizedBox(height: 30),
+                  const Text(
+                    'Admin Management',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 20),
                   ..._buildAdminSections(isWide: true),
                   const SizedBox(height: 40),
                 ],
-                _buildRecentActivitiesSection(),
               ],
             ),
           ),
@@ -418,53 +645,89 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   }
 
   Widget _buildStatsGrid({required bool isWide}) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final crossAxisCount = isWide ? 4 : (constraints.maxWidth > 600 ? 4 : 2);
-        return GridView.count(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: crossAxisCount,
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
-          childAspectRatio: isWide ? 1.4 : 1.1,
-          children: [
-            StatCard(
-              title: _selectedPeriod == 'All Time' ? 'Total Farmers' : 'New Farmers',
-              value: _farmerCount.toString(),
-              icon: Icons.people_alt_rounded,
-              gradient: const [Color(0xFF4CAF50), Color(0xFF2E7D32)],
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const FarmerListScreen())),
-            ),
-            StatCard(
-              title: _selectedPeriod == 'All Time' ? 'Total Farms' : 'New Farms',
-              value: _farmCount.toString(),
-              icon: Icons.agriculture_rounded,
-              gradient: const [Color(0xFF8BC34A), Color(0xFF558B2F)],
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const FarmListScreen())),
-            ),
-            StatCard(
-              title: _selectedPeriod == 'All Time' ? 'Total Crops' : 'New Crops',
-              value: _cropCount.toString(),
-              icon: Icons.eco_rounded,
-              gradient: const [Color(0xFF009688), Color(0xFF00695C)],
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const CropListScreen())),
-            ),
-            StatCard(
-              title: _selectedPeriod == 'All Time' ? 'Reports' : 'Recent Reports',
-              value: _reportCount.toString(),
-              icon: Icons.analytics_rounded,
-              gradient: const [Color(0xFF673AB7), Color(0xFF4527A0)],
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ReportsListScreen())),
-            ),
-          ],
-        );
-      },
+    return Column(
+      children: [
+        // Top Line: Visits (Redirects to Reports History)
+        StatCard(
+          title: 'Total Visits (Analysis History)',
+          value: _reportCount.toString(),
+          icon: Icons.analytics_rounded,
+          gradient: const [Color(0xFF673AB7), Color(0xFF4527A0)],
+          onTap:
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ReportsListScreen(),
+                ),
+              ),
+          isHorizontal: true,
+        ),
+        const SizedBox(height: 16),
+        // Second Line: New Farmer, New Farm, New Crop (View Only)
+        LayoutBuilder(
+          builder: (context, constraints) {
+            return GridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 3,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+              childAspectRatio: isWide ? 1.8 : 0.85,
+              children: [
+                StatCard(
+                  title: 'Farmers',
+                  value: _farmerCount.toString(),
+                  icon: Icons.people_alt_rounded,
+                  gradient: const [Color(0xFF4CAF50), Color(0xFF2E7D32)],
+                  onTap: null,
+                  isSmall: true,
+                ),
+                StatCard(
+                  title: 'Farms',
+                  value: _farmCount.toString(),
+                  icon: Icons.agriculture_rounded,
+                  gradient: const [Color(0xFF8BC34A), Color(0xFF558B2F)],
+                  onTap: null,
+                  isSmall: true,
+                ),
+                StatCard(
+                  title: 'Crops',
+                  value: _cropCount.toString(),
+                  icon: Icons.eco_rounded,
+                  gradient: const [Color(0xFF009688), Color(0xFF00695C)],
+                  onTap: null,
+                  isSmall: true,
+                ),
+              ],
+            );
+          },
+        ),
+      ],
     );
   }
 
   List<Widget> _buildAdminSections({required bool isWide}) {
     return [
+      _actionWrapper(
+        isWide,
+        delay: 400,
+        child: _workActionCard(
+          context,
+          title: 'Executive Management',
+          subtitle: 'Manage team, targets & assignments',
+          icon: Icons.people_alt_rounded,
+          color: AppColors.primary,
+          fullWidth: true,
+          onTap:
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ExecutiveListScreen(),
+                ),
+              ),
+        ),
+      ),
+      const SizedBox(height: 16),
       _actionWrapper(
         isWide,
         delay: 700,
@@ -477,55 +740,32 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
           ),
           child: Row(
             children: [
-              const Icon(Icons.person_add_alt_1_rounded, color: AppColors.primary),
+              const Icon(
+                Icons.person_add_alt_1_rounded,
+                color: AppColors.primary,
+              ),
               const SizedBox(width: 16),
               const Expanded(
-                child: Text('Create Executive Account', style: TextStyle(fontWeight: FontWeight.bold)),
+                child: Text(
+                  'Create Staff Account',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
               ),
               IconButton(
-                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const CreateExecutiveScreen())),
-                icon: const Icon(Icons.arrow_forward_rounded, color: AppColors.primary),
+                onPressed:
+                    () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const CreateStaffScreen(),
+                      ),
+                    ),
+                icon: const Icon(
+                  Icons.arrow_forward_rounded,
+                  color: AppColors.primary,
+                ),
               ),
             ],
           ),
-        ),
-      ),
-      const SizedBox(height: 16),
-      _actionWrapper(
-        isWide,
-        delay: 800,
-        child: _workActionCard(
-          context,
-          title: 'Team Attendance',
-          subtitle: 'Shift Overview',
-          icon: Icons.fact_check_rounded,
-          color: Colors.blue,
-          fullWidth: true,
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _statusBadge('P', _teamPresentCount, Colors.green),
-              const SizedBox(width: 8),
-              _statusBadge('A', _teamAbsentCount, Colors.red),
-              const SizedBox(width: 8),
-              const Icon(Icons.chevron_right_rounded, color: Colors.blue, size: 20),
-            ],
-          ),
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminAttendanceScreen())),
-        ),
-      ),
-      const SizedBox(height: 16),
-      _actionWrapper(
-        isWide,
-        delay: 900,
-        child: _workActionCard(
-          context,
-          title: 'Executive Call Logs',
-          subtitle: 'Monitor Phone Activities',
-          icon: Icons.phone_callback_rounded,
-          color: Colors.green,
-          fullWidth: true,
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminCallLogsScreen())),
         ),
       ),
       const SizedBox(height: 16),
@@ -539,101 +779,289 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
           icon: Icons.security_rounded,
           color: Colors.orange,
           fullWidth: true,
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginLogsScreen())),
+          onTap:
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const LoginLogsScreen(),
+                ),
+              ),
         ),
       ),
     ];
   }
 
   List<Widget> _buildUserSections({required bool isWide}) {
-    return [
-      _actionWrapper(
-        isWide,
-        delay: 700,
-        child: _workActionCard(
-          context,
-          title: 'Attendance',
-          subtitle: _todayAttendance == null 
-            ? 'No check-in' 
-            : (_todayAttendance!['check_out_time'] == null ? 'Duty On' : 'Shift Done'),
-          icon: Icons.camera_enhance_rounded,
-          color: AppColors.primary,
-          fullWidth: true,
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _statusBadge('P', _presentCount, Colors.green),
-              const SizedBox(width: 8),
-              _statusBadge('A', _absentCount, Colors.red),
-              const SizedBox(width: 8),
-              const Icon(Icons.chevron_right_rounded, color: AppColors.primary, size: 20),
-            ],
-          ),
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AttendanceScreen())).then((_) => _loadDashboardData()),
-        ),
-      ),
-      const SizedBox(height: 16),
-      _actionWrapper(
-        isWide,
-        delay: 800,
-        child: _workActionCard(
-          context,
-          title: 'Work Logs',
-          subtitle: 'Attendance History',
-          icon: Icons.history_edu_rounded,
-          color: Colors.blue,
-          fullWidth: true,
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AttendanceHistoryScreen())),
-        ),
-      ),
-      const SizedBox(height: 16),
-      _actionWrapper(
-        isWide,
-        delay: 900,
-        child: _workActionCard(
-          context,
-          title: 'Nature Biotic Dialer',
-          subtitle: 'Call Farmers & Contacts',
-          icon: Icons.call_rounded,
-          color: Colors.green,
-          fullWidth: true,
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ExecutiveDialerScreen())),
-        ),
-      ),
-    ];
+    return [];
   }
 
-  Widget _actionWrapper(bool isWide, {required int delay, required Widget child}) {
+  Widget _actionWrapper(
+    bool isWide, {
+    required int delay,
+    required Widget child,
+  }) {
     if (isWide) return child;
     return EntranceAnimation(delay: delay, child: child);
   }
 
-  Widget _buildRecentActivitiesSection() {
+  String _getReminderLabel(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final target = DateTime(date.year, date.month, date.day);
+    final diff = target.difference(today).inDays;
+
+    if (diff == 0) return 'Today';
+    if (diff == 1) return 'Tomorrow';
+    return 'In $diff days';
+  }
+
+  Widget _buildRemindersSection() {
+    if (_reminders.isEmpty) return const SizedBox.shrink();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Recent Activities',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textBlack),
+        GestureDetector(
+          onTap:
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder:
+                      (context) => VisitCalendarScreen(
+                        reminders: _reminders,
+                        allFarms: _allFarms,
+                        allCrops: _allCrops,
+                      ),
+                ),
+              ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Upcoming Visits',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textBlack,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    Text(
+                      '${_reminders.length} Pending',
+                      style: const TextStyle(
+                        color: AppColors.primary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(
+                      Icons.calendar_month_rounded,
+                      color: AppColors.primary,
+                      size: 14,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: 16),
-        if (_recentActivities.isEmpty)
-          const Center(child: Padding(padding: EdgeInsets.symmetric(vertical: 32), child: Text('No recent activities', style: TextStyle(color: AppColors.textGray))))
-        else
-          ..._recentActivities.asMap().entries.map((entry) {
-            return ActivityItem(
-              title: entry.value['title'],
-              subtitle: entry.value['subtitle'],
-              time: _getTimeAgo(entry.value['created_at']),
-            );
-          }),
+        const SizedBox(height: 24),
+        SizedBox(
+          height: 195, // Increased height for the new action row
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            itemCount: _reminders.length,
+            itemBuilder: (context, index) {
+              final reminder = _reminders[index];
+              final date = DateTime.parse(reminder['follow_up_date']);
+              final farm = _allFarms.firstWhere(
+                (f) => f['id'] == reminder['farm_id'],
+                orElse: () => {},
+              );
+              final crop = _allCrops.firstWhere(
+                (c) => c['id'] == reminder['crop_id'],
+                orElse: () => {},
+              );
+
+              return Container(
+                width:
+                    MediaQuery.sizeOf(context).width *
+                    0.82, // STRETCHED: Nearly full width
+                margin: const EdgeInsets.only(right: 24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(color: AppColors.secondary, width: 1.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.04),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: Stack(
+                  children: [
+                    // Watermark / Pattern
+                    Positioned(
+                      right: -20,
+                      bottom: -20,
+                      child: Icon(
+                        Icons.eco_rounded,
+                        size: 120,
+                        color: AppColors.primary.withOpacity(0.03),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.history_toggle_off_rounded,
+                                      color: AppColors.primary,
+                                      size: 14,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      _getReminderLabel(date),
+                                      style: const TextStyle(
+                                        color: AppColors.primary,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Text(
+                                DateFormat('dd MMM').format(date),
+                                style: TextStyle(
+                                  color: AppColors.textGray.withOpacity(0.6),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            farm['name'] ?? 'Unknown Farm',
+                            style: const TextStyle(
+                              color: AppColors.textBlack,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.eco_outlined,
+                                color: AppColors.accent,
+                                size: 14,
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  crop['name'] ?? 'General Checkup',
+                                  style: TextStyle(
+                                    color: AppColors.textGray.withOpacity(0.9),
+                                    fontSize: 13,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const Spacer(),
+                          // Action Row to fill space
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton(
+                                  onPressed: () {
+                                    // Navigate to farm or report
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.primary,
+                                    foregroundColor: Colors.white,
+                                    minimumSize: const Size(0, 42),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    elevation: 0,
+                                  ),
+                                  child: const Text(
+                                    'View Farm Details',
+                                    style: TextStyle(fontSize: 12),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: AppColors.secondary,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: IconButton(
+                                  onPressed: () {},
+                                  icon: const Icon(
+                                    Icons.directions_rounded,
+                                    color: AppColors.primary,
+                                    size: 20,
+                                  ),
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
       ],
     );
   }
 
   Widget _buildHeroSection() {
     String greeting = 'Good ${_getGreeting()}';
-    
+
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -670,45 +1098,88 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 8),
                 const Text(
                   'Keep growing with Nature Biotic',
                   style: TextStyle(color: Colors.white60, fontSize: 13),
                 ),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed:
+                      () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const AttendanceScreen(),
+                        ),
+                      ).then((_) => _loadDashboardData()),
+                  icon: const Icon(Icons.camera_enhance_rounded, size: 18),
+                  label: const Text('Check In'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: AppColors.primary,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    minimumSize: const Size(120, 44),
+                  ),
+                ),
               ],
             ),
           ),
-          Stack(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(3),
-                decoration: const BoxDecoration(
-                  color: Colors.white24,
-                  shape: BoxShape.circle,
-                ),
-                child: Hero(
-                  tag: 'profile_avatar',
-                  child: CircleAvatar(
-                    radius: 35,
-                    backgroundColor: AppColors.secondary,
-                    backgroundImage: _avatarUrl.isNotEmpty ? NetworkImage(_avatarUrl) : null,
-                    child: _avatarUrl.isEmpty ? const Icon(Icons.person, size: 35, color: AppColors.primary) : null,
+          GestureDetector(
+            onTap:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ProfileScreen(),
                   ),
-                ),
-              ),
-              Positioned(
-                right: 0,
-                bottom: 0,
-                child: Container(
-                  padding: const EdgeInsets.all(4),
+                ).then((_) => _loadDashboardData()),
+            child: Stack(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(3),
                   decoration: const BoxDecoration(
-                    color: Colors.white,
+                    color: Colors.white24,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.verified_rounded, size: 16, color: Colors.blue),
+                  child: Hero(
+                    tag: 'profile_avatar',
+                    child: CircleAvatar(
+                      radius: 35,
+                      backgroundColor: AppColors.secondary,
+                      backgroundImage:
+                          _avatarUrl.isNotEmpty
+                              ? NetworkImage(_avatarUrl)
+                              : null,
+                      child:
+                          _avatarUrl.isEmpty
+                              ? const Icon(
+                                Icons.person,
+                                size: 35,
+                                color: AppColors.primary,
+                              )
+                              : null,
+                    ),
+                  ),
                 ),
-              ),
-            ],
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.verified_rounded,
+                      size: 16,
+                      color: Colors.blue,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -720,105 +1191,6 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     if (hour < 12) return 'Morning';
     if (hour < 17) return 'Afternoon';
     return 'Evening';
-  }
-
-  Widget _buildQuickActions({required bool isWide}) {
-    final actions = [
-      _quickActionIcon(
-        icon: Icons.camera_enhance_rounded,
-        label: 'Check In',
-        color: Colors.orange,
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AttendanceScreen())),
-      ),
-      _quickActionIcon(
-        icon: Icons.person_add_rounded,
-        label: 'Add Farmer',
-        color: Colors.blue,
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const FarmerListScreen())),
-      ),
-      _quickActionIcon(
-        icon: Icons.add_chart_rounded,
-        label: 'Analysis',
-        color: Colors.purple,
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ReportsListScreen())),
-      ),
-      _quickActionIcon(
-        icon: Icons.inventory_2_rounded,
-        label: 'Stock',
-        color: Colors.cyan,
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const FarmListScreen(isStockMode: true))),
-      ),
-      _quickActionIcon(
-        icon: Icons.dialpad_rounded,
-        label: 'Dialer',
-        color: Colors.green,
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ExecutiveDialerScreen())),
-      ),
-    ];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (!isWide)
-          const Padding(
-            padding: EdgeInsets.only(left: 4, bottom: 16),
-            child: Text(
-              'The Launchpad',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-          ),
-        if (isWide)
-          Wrap(
-            spacing: 20,
-            runSpacing: 20,
-            children: actions,
-          )
-        else
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            child: Row(
-              children: actions,
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _quickActionIcon({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      hoverColor: color.withOpacity(0.05),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(color: color.withOpacity(0.1), blurRadius: 8, offset: const Offset(0, 4)),
-                ],
-              ),
-              child: Icon(icon, color: color, size: 28),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              label, 
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textBlack),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   Widget _workActionCard(
@@ -856,12 +1228,21 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                  Text(subtitle, style: TextStyle(color: AppColors.textGray, fontSize: 11)),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: TextStyle(color: AppColors.textGray, fontSize: 11),
+                  ),
                 ],
               ),
             ),
-            if (trailing != null) 
+            if (trailing != null)
               trailing
             else
               Icon(Icons.chevron_right_rounded, color: color.withOpacity(0.5)),
@@ -890,7 +1271,11 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   }
 
   Widget _buildSalesCard() {
-    final currencyFormat = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
+    final currencyFormat = NumberFormat.currency(
+      locale: 'en_IN',
+      symbol: '₹',
+      decimalDigits: 0,
+    );
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -898,17 +1283,17 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => FarmSalesListScreen(
-                initialTransactions: _filteredTransactions,
-                allProducts: _allProducts,
-              ),
+              builder:
+                  (context) => FarmSalesListScreen(
+                    initialTransactions: _filteredTransactions,
+                    allProducts: _allProducts,
+                  ),
             ),
           );
         },
         borderRadius: BorderRadius.circular(28),
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
               colors: [Color(0xFF1E3A8A), Color(0xFF3B82F6)],
@@ -924,127 +1309,546 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
               ),
             ],
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _isAdmin ? 'Team Sales Revenue' : 'My Total Sales',
-                        style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        currencyFormat.format(_totalSalesRevenue),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.15),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.payments_rounded, color: Colors.white, size: 24),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '$_totalItemsSold Items',
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                      ),
-                      const Text(
-                        'Sold',
-                        style: TextStyle(color: Colors.white70, fontSize: 10),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        '$_totalItemsReturned Items',
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                      ),
-                      const Text(
-                        'Returned',
-                        style: TextStyle(color: Colors.white70, fontSize: 10),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.trending_up_rounded, color: Colors.greenAccent, size: 16),
-                    const SizedBox(width: 8),
-                    Text(
-                      _isAdmin ? 'Across All Regions' : 'Generated from Deliveries',
-                      style: const TextStyle(color: Colors.white60, fontSize: 11),
-                    ),
-                    const SizedBox(width: 8),
-                    const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white38, size: 10),
-                  ],
-                ),
-              ),
-            ],
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child:
+                _isAdmin
+                    ? _buildAdminSalesContent(currencyFormat)
+                    : _buildExecutiveSalesContent(currencyFormat),
           ),
         ),
       ),
     );
   }
 
+  Widget _buildAdminSalesContent(NumberFormat currencyFormat) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Team Sales Revenue',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  currencyFormat.format(_totalSalesRevenue),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ],
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.payments_rounded,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '$_totalItemsSold Items',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Text(
+                  'Sold',
+                  style: TextStyle(color: Colors.white70, fontSize: 10),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  '$_totalItemsReturned Items',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Text(
+                  'Returned',
+                  style: TextStyle(color: Colors.white70, fontSize: 10),
+                ),
+              ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        _indicatorLabel('Across All Regions', Icons.trending_up_rounded),
+      ],
+    );
+  }
+
+  Widget _buildExecutiveSalesContent(NumberFormat currencyFormat) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            _metricBox(
+              'Sales to Achieve',
+              _salesToAchieve,
+              Colors.red.shade300,
+              Icons.pending_actions_rounded,
+              currencyFormat,
+            ),
+            const SizedBox(width: 16),
+            _metricBox(
+              'Sales Achieved',
+              _totalSalesRevenue,
+              Colors.green.shade300,
+              Icons.check_circle_outline_rounded,
+              currencyFormat,
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            _metricBox(
+              'Outstanding',
+              _totalOutstanding,
+              Colors.orange.shade300,
+              Icons.account_balance_wallet_rounded,
+              currencyFormat,
+              onTap: () => _showBreakdownSheet('Outstanding'),
+            ),
+            const SizedBox(width: 16),
+            _metricBox(
+              'Collection',
+              _totalCollection,
+              Colors.cyan.shade300,
+              Icons.payments_rounded,
+              currencyFormat,
+              onTap: () => _showBreakdownSheet('Collection'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _metricBox(
+    String label,
+    double value,
+    Color color,
+    IconData icon,
+    NumberFormat currencyFormat, {
+    VoidCallback? onTap,
+  }) {
+    return Expanded(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.white.withOpacity(0.05)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(icon, size: 14, color: color),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        label,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.6),
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    currencyFormat.format(value.isFinite ? value : 0.0),
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showBreakdownSheet(String type) {
+    final currencyFormat = NumberFormat.currency(
+      locale: 'en_IN',
+      symbol: '₹',
+      decimalDigits: 0,
+    );
+    final currentUserId = SupabaseService.client.auth.currentUser?.id;
+
+    // Calculate per-farm breakdown using the exact same logic as _applyFilters
+    final Map<String, double> farmCollection = {};
+    final Map<String, double> farmRevenue = {};
+
+    final range = _getDateRangeForPeriod(_selectedPeriod);
+    final startDate = range.start;
+    final endDate = range.end;
+
+    for (var tx in _allTransactions) {
+      if (!_isInPeriod(tx, startDate, endDate)) continue;
+
+      final txType = tx['transaction_type']?.toString().toUpperCase();
+      final txExecId = tx['executive_id']?.toString().toLowerCase();
+      final currentId = currentUserId?.toString().toLowerCase();
+      final isOwner =
+          _isAdmin
+              ? true
+              : (txExecId == currentId ||
+                  (tx['status'] == 'PENDING' && txExecId == null));
+      if (!isOwner) continue;
+
+      final farmId = tx['farm_id']?.toString() ?? 'unknown';
+
+      // 1. Process Revenue (RECEIVED = Sale, RETURN = -Sale)
+      if (txType == 'RECEIVED' || txType == 'RETURN') {
+        final itemName = tx['item_name']?.toString().trim().toLowerCase();
+        final unit = tx['unit']?.toString().trim().toLowerCase() ?? '';
+        // Clean unit for price matching
+        final cleanUnit = unit.split(' {₹')[0].trim();
+        final qty = double.tryParse(tx['quantity']?.toString() ?? '0') ?? 0.0;
+
+        final parent = _allProducts.firstWhere(
+          (p) => p['label']?.toString().trim().toLowerCase() == itemName,
+          orElse: () => {},
+        );
+
+        if (parent.isNotEmpty) {
+          final variants = List<Map<String, dynamic>>.from(
+            parent['variants'] ?? [],
+          );
+          final variant = variants.firstWhere(
+            (v) => v['label']?.toString().trim().toLowerCase() == cleanUnit,
+            orElse: () => {},
+          );
+          if (variant.isNotEmpty) {
+            final price =
+                double.tryParse(variant['offer_price']?.toString() ?? '0') ??
+                0.0;
+            final amount = price * qty;
+            if (txType == 'RECEIVED') {
+              farmRevenue[farmId] = (farmRevenue[farmId] ?? 0) + amount;
+            } else {
+              farmRevenue[farmId] = (farmRevenue[farmId] ?? 0) - amount;
+            }
+          }
+        }
+      }
+
+      // 2. Process Collection
+      if (txType == 'RECEIVED') {
+        double amt =
+            double.tryParse(tx['collected_amount']?.toString() ?? '0') ?? 0.0;
+        if (amt == 0 &&
+            tx['unit'] != null &&
+            tx['unit'].toString().contains('{₹')) {
+          try {
+            final unitStr = tx['unit'].toString();
+            final start = unitStr.indexOf('{₹') + 2;
+            final end = unitStr.indexOf('}', start);
+            if (end != -1) {
+              amt = double.tryParse(unitStr.substring(start, end)) ?? 0.0;
+            }
+          } catch (_) {}
+        }
+        if (amt > 0) {
+          farmCollection[farmId] = (farmCollection[farmId] ?? 0) + amt;
+        }
+      }
+    }
+
+    // Create final list for the selected type
+    final List<Map<String, dynamic>> displayList = [];
+    final targetMap = type == 'Collection' ? farmCollection : {};
+
+    // Use all farms that have some activity
+    final allActiveFarmIds = {...farmCollection.keys, ...farmRevenue.keys};
+
+    for (var fid in allActiveFarmIds) {
+      final revenue = farmRevenue[fid] ?? 0.0;
+      final collection = farmCollection[fid] ?? 0.0;
+      final outstanding = revenue - collection;
+
+      final farm = _allFarms.firstWhere(
+        (f) => f['id'].toString() == fid,
+        orElse: () => {'name': 'Unknown Farm'},
+      );
+
+      final value = type == 'Collection' ? collection : outstanding;
+      if (value != 0) {
+        displayList.add({
+          'name': farm['name'] ?? farm['place'] ?? 'Farm #$fid',
+          'place': farm['place'] ?? '',
+          'amount': value,
+        });
+      }
+    }
+
+    // Sort by amount descending
+    displayList.sort(
+      (a, b) => (b['amount'] as double).abs().compareTo(
+        (a['amount'] as double).abs(),
+      ),
+    );
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder:
+          (context) => Container(
+            height: MediaQuery.of(context).size.height * 0.7,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+            ),
+            child: Column(
+              children: [
+                const SizedBox(height: 12),
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Farm Breakdown: $type',
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child:
+                      displayList.isEmpty
+                          ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.receipt_long_outlined,
+                                  size: 64,
+                                  color: Colors.grey[300],
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'No $type records for this period',
+                                  style: const TextStyle(color: Colors.grey),
+                                ),
+                              ],
+                            ),
+                          )
+                          : ListView.builder(
+                            padding: const EdgeInsets.all(16),
+                            itemCount: displayList.length,
+                            itemBuilder: (context, index) {
+                              final item = displayList[index];
+                              final amt = item['amount'] as double;
+                              final isNegative = amt < 0;
+
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                decoration: BoxDecoration(
+                                  color: AppColors.secondary,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: ListTile(
+                                  leading: CircleAvatar(
+                                    backgroundColor: Colors.white,
+                                    child: Icon(
+                                      Icons.agriculture_rounded,
+                                      color:
+                                          type == 'Collection'
+                                              ? Colors.cyan
+                                              : Colors.orange,
+                                      size: 20,
+                                    ),
+                                  ),
+                                  title: Text(
+                                    item['name'],
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    item['place'],
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  trailing: Text(
+                                    currencyFormat.format(amt),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                      color:
+                                          isNegative
+                                              ? Colors.red
+                                              : (type == 'Collection'
+                                                  ? Colors.cyan
+                                                  : Colors.orange),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                ),
+              ],
+            ),
+          ),
+    );
+  }
+
+  bool _isInPeriod(dynamic item, DateTime startDate, DateTime endDate) {
+    if (item == null) return false;
+    final createdStr =
+        item['created_at']?.toString() ?? item['start_time']?.toString();
+    if (createdStr == null) return false;
+    final dt = DateTime.tryParse(createdStr);
+    if (dt == null) return false;
+    // Add generous 12h buffer for timezone shifts (UTC records vs Local filters)
+    return dt.isAfter(startDate.subtract(const Duration(hours: 12))) &&
+        dt.isBefore(endDate.add(const Duration(hours: 12)));
+  }
+
+  Widget _indicatorLabel(String text, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.greenAccent, size: 16),
+          const SizedBox(width: 8),
+          Text(
+            text,
+            style: const TextStyle(color: Colors.white60, fontSize: 11),
+          ),
+          const SizedBox(width: 8),
+          const Icon(
+            Icons.arrow_forward_ios_rounded,
+            color: Colors.white38,
+            size: 10,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFilterBar() {
-    final periods = ['Today', 'This Week', 'This Month', 'This Year', 'All Time'];
+    final periods = [
+      'Today',
+      'This Week',
+      'This Month',
+      'This Year',
+      'Customise',
+    ];
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       physics: const BouncingScrollPhysics(),
       child: Row(
-        children: periods.map((period) {
-          final isSelected = _selectedPeriod == period;
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: ChoiceChip(
-              label: Text(period),
-              selected: isSelected,
-              onSelected: (selected) {
-                if (selected) {
-                  setState(() {
-                    _selectedPeriod = period;
-                    _applyFilters();
-                  });
-                }
-              },
-              selectedColor: AppColors.primary,
-              backgroundColor: Colors.white,
-              labelStyle: TextStyle(
-                color: isSelected ? Colors.white : AppColors.textGray,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                fontSize: 12,
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              elevation: isSelected ? 4 : 0,
-              side: BorderSide(color: isSelected ? AppColors.primary : Colors.grey.withOpacity(0.2)),
-            ),
-          );
-        }).toList(),
+        children:
+            periods.map((period) {
+              final isSelected = _selectedPeriod == period;
+              String label = period;
+              if (period == 'Customise' && _customDateRange != null) {
+                label = DateFormat('MMM yyyy').format(_customDateRange!.start);
+              }
+
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ChoiceChip(
+                  label: Text(label),
+                  selected: isSelected,
+                  onSelected: (selected) async {
+                    if (period == 'Customise') {
+                      await _showMonthYearPicker();
+                    } else if (selected) {
+                      setState(() {
+                        _selectedPeriod = period;
+                        _applyFilters();
+                      });
+                    }
+                  },
+                  selectedColor: AppColors.primary,
+                  backgroundColor: Colors.white,
+                  labelStyle: TextStyle(
+                    color: isSelected ? Colors.white : AppColors.textGray,
+                    fontWeight:
+                        isSelected ? FontWeight.bold : FontWeight.normal,
+                    fontSize: 12,
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  elevation: isSelected ? 4 : 0,
+                  side: BorderSide(
+                    color:
+                        isSelected
+                            ? AppColors.primary
+                            : Colors.grey.withOpacity(0.2),
+                  ),
+                ),
+              );
+            }).toList(),
       ),
     );
   }
@@ -1081,7 +1885,9 @@ class StatCard extends StatefulWidget {
   final String value;
   final IconData icon;
   final List<Color> gradient;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final bool isSmall;
+  final bool isHorizontal;
 
   const StatCard({
     super.key,
@@ -1089,7 +1895,9 @@ class StatCard extends StatefulWidget {
     required this.value,
     required this.icon,
     required this.gradient,
-    required this.onTap,
+    this.onTap,
+    this.isSmall = false,
+    this.isHorizontal = false,
   });
 
   @override
@@ -1102,9 +1910,18 @@ class _StatCardState extends State<StatCard> {
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      cursor: SystemMouseCursors.click,
+      onEnter:
+          widget.onTap == null
+              ? null
+              : (_) => setState(() => _isHovered = true),
+      onExit:
+          widget.onTap == null
+              ? null
+              : (_) => setState(() => _isHovered = false),
+      cursor:
+          widget.onTap == null
+              ? SystemMouseCursors.basic
+              : SystemMouseCursors.click,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeOutCubic,
@@ -1113,7 +1930,7 @@ class _StatCardState extends State<StatCard> {
           onTap: widget.onTap,
           borderRadius: BorderRadius.circular(24),
           child: Container(
-            padding: const EdgeInsets.all(16),
+            clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: widget.gradient,
@@ -1129,44 +1946,120 @@ class _StatCardState extends State<StatCard> {
                 ),
               ],
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Stack(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(10),
+                // Decorative Background Icon
+                Positioned(
+                  right: -20,
+                  bottom: -20,
+                  child: Icon(
+                    widget.icon,
+                    size: widget.isHorizontal ? 140 : 110,
+                    color: Colors.white.withOpacity(0.12),
                   ),
-                  child: Icon(widget.icon, color: Colors.white, size: 24),
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.value,
-                      style: const TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    Text(
-                      widget.title,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Colors.white70,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
+                Padding(
+                  padding: EdgeInsets.all(widget.isSmall ? 10 : 20),
+                  child:
+                      widget.isHorizontal
+                          ? _buildHorizontalLayout()
+                          : _buildVerticalLayout(),
                 ),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildVerticalLayout() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Container(
+          padding: EdgeInsets.all(widget.isSmall ? 6 : 8),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(widget.isSmall ? 8 : 10),
+          ),
+          child: Icon(
+            widget.icon,
+            color: Colors.white,
+            size: widget.isSmall ? 18 : 24,
+          ),
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.value,
+              style: TextStyle(
+                fontSize: widget.isSmall ? 20 : 26,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            Text(
+              widget.title,
+              style: TextStyle(
+                fontSize: widget.isSmall ? 10 : 13,
+                color: Colors.white70,
+                fontWeight: FontWeight.w500,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHorizontalLayout() {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Icon(widget.icon, color: Colors.white, size: 32),
+        ),
+        const SizedBox(width: 20),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                widget.title,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Colors.white70,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              Text(
+                widget.value,
+                style: const TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                  letterSpacing: 1,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Icon(
+          Icons.arrow_forward_ios_rounded,
+          color: Colors.white54,
+          size: 16,
+        ),
+      ],
     );
   }
 }
@@ -1201,7 +2094,11 @@ class ActivityItem extends StatelessWidget {
               color: AppColors.secondary,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.history, color: AppColors.primary, size: 20),
+            child: const Icon(
+              Icons.history,
+              color: AppColors.primary,
+              size: 20,
+            ),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -1227,10 +2124,7 @@ class ActivityItem extends StatelessWidget {
           ),
           Text(
             time,
-            style: const TextStyle(
-              color: AppColors.textGray,
-              fontSize: 12,
-            ),
+            style: const TextStyle(color: AppColors.textGray, fontSize: 12),
           ),
         ],
       ),

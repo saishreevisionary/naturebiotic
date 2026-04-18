@@ -14,7 +14,8 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final TextEditingController _identifierController = TextEditingController(); // Modified from _emailController
+  final TextEditingController _identifierController =
+      TextEditingController(); // Modified from _emailController
   final TextEditingController _passwordController = TextEditingController();
   bool _isAdmin = false;
   bool _isPasswordVisible = false;
@@ -46,12 +47,12 @@ class _LoginScreenState extends State<LoginScreen> {
             osVersion: deviceInfo['os']!,
             status: 'DEVICE_MISMATCH',
           );
-          
+
           await SupabaseService.client.auth.signOut();
           if (mounted) {
             _showSecurityAlert(
               'Access Denied',
-              'This account is locked to a different device. Your unauthorized login attempt has been logged for Admin review.'
+              'This account is locked to a different device. Your unauthorized login attempt has been logged for Admin review.',
             );
             setState(() => _isLoading = false);
             return;
@@ -60,7 +61,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
         // DEVICE AUTHORIZED (or Admin)
         final profile = await SupabaseService.getProfile();
-        
+
         if (profile == null) {
           // Super Admin or no profile
           await SupabaseService.logLoginActivity(
@@ -71,8 +72,9 @@ class _LoginScreenState extends State<LoginScreen> {
           );
         } else {
           final registeredId = profile['registered_device_id'];
-          
-          if ((registeredId == null || registeredId.isEmpty) && profile['role'] != 'admin') {
+
+          if ((registeredId == null || registeredId.isEmpty) &&
+              profile['role'] != 'admin') {
             // First time login - bind this device (executives only)
             await SupabaseService.updateRegisteredDevice(currentId);
             await SupabaseService.logLoginActivity(
@@ -95,9 +97,7 @@ class _LoginScreenState extends State<LoginScreen> {
         if (mounted) {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(
-              builder: (context) => const BottomNav(),
-            ),
+            MaterialPageRoute(builder: (context) => const BottomNav()),
           );
         }
       }
@@ -137,16 +137,19 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) {
         showDialog(
           context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Reset Link Sent'),
-            content: Text('A password reset link has been sent to $email. Please check your inbox.'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('OK'),
+          builder:
+              (context) => AlertDialog(
+                title: const Text('Reset Link Sent'),
+                content: Text(
+                  'A password reset link has been sent to $email. Please check your inbox.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('OK'),
+                  ),
+                ],
               ),
-            ],
-          ),
         );
       }
     } catch (e) {
@@ -166,22 +169,23 @@ class _LoginScreenState extends State<LoginScreen> {
   void _showSecurityAlert(String title, String message) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            const Icon(Icons.security_rounded, color: Colors.orange),
-            const SizedBox(width: 8),
-            Text(title),
-          ],
-        ),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('I Understand'),
+      builder:
+          (context) => AlertDialog(
+            title: Row(
+              children: [
+                const Icon(Icons.security_rounded, color: Colors.orange),
+                const SizedBox(width: 8),
+                Text(title),
+              ],
+            ),
+            content: Text(message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('I Understand'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 
@@ -202,10 +206,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   EntranceAnimation(
                     delay: 100,
                     child: Center(
-                      child: Image.asset(
-                        'assets/logo.png',
-                        width: 150,
-                      ),
+                      child: Image.asset('assets/logo.png', width: 150),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -243,7 +244,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: TextField(
                       controller: _identifierController,
                       decoration: InputDecoration(
-                        hintText: _isAdmin ? 'Email Address' : 'Executive Username',
+                        hintText:
+                            _isAdmin ? 'Email Address' : 'Executive Username',
                         prefixIcon: const Icon(Icons.person_outline),
                       ),
                     ),
@@ -287,7 +289,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         CupertinoSwitch(
                           value: _isAdmin,
-                          activeColor: AppColors.primary,
+                          activeTrackColor: AppColors.primary,
                           onChanged: (value) {
                             setState(() {
                               _isAdmin = value;
@@ -306,13 +308,17 @@ class _LoginScreenState extends State<LoginScreen> {
                         onTap: _isLoading ? null : _handleLogin,
                         child: ElevatedButton(
                           onPressed: null, // Tap handled by ScaleButton
-                          child: _isLoading 
-                              ? const SizedBox(
-                                  height: 20, 
-                                  width: 20, 
-                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
-                                )
-                              : const Text('Login'),
+                          child:
+                              _isLoading
+                                  ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                  : const Text('Login'),
                         ),
                       ),
                     ),

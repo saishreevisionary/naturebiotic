@@ -11,9 +11,9 @@ class StockManagementScreen extends StatefulWidget {
   final String farmName;
 
   const StockManagementScreen({
-    super.key, 
-    required this.farmId, 
-    required this.farmName
+    super.key,
+    required this.farmId,
+    required this.farmName,
   });
 
   @override
@@ -40,7 +40,9 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
         remoteData = await SupabaseService.getStockTransactions(widget.farmId);
       } catch (_) {}
 
-      final products = await SupabaseService.getHierarchicalDropdownOptions('product_name');
+      final products = await SupabaseService.getHierarchicalDropdownOptions(
+        'product_name',
+      );
 
       List<Map<String, dynamic>> localData = [];
       if (!kIsWeb) {
@@ -53,12 +55,17 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
 
       // Merge and De-duplicate
       final Map<String, Map<String, dynamic>> combined = {};
-      for (var tx in localData) combined[tx['id'].toString()] = tx;
-      for (var tx in remoteData) combined[tx['id'].toString()] = tx;
+      for (var tx in localData) {
+        combined[tx['id'].toString()] = tx;
+      }
+      for (var tx in remoteData) {
+        combined[tx['id'].toString()] = tx;
+      }
 
       final sortedTransactions = combined.values.toList();
-      sortedTransactions.sort((a, b) => 
-          (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''));
+      sortedTransactions.sort(
+        (a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''),
+      );
 
       _calculateBalances(sortedTransactions);
 
@@ -79,17 +86,15 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
 
     for (var tx in transactions) {
       final item = tx['item_name'] ?? 'Unknown';
-      final packetSize = tx['unit'] ?? 'Standard';
+      // Clean unit from packed metadata if present
+      final rawUnit = tx['unit']?.toString() ?? 'Standard';
+      final packetSize = rawUnit.split(' {₹')[0].trim();
       final key = "$item ($packetSize)";
       final qty = double.tryParse(tx['quantity'].toString()) ?? 0.0;
       final type = tx['transaction_type'];
 
       if (!balanceMap.containsKey(key)) {
-        balanceMap[key] = {
-          'balance': 0.0, 
-          'item': item, 
-          'unit': packetSize
-        };
+        balanceMap[key] = {'balance': 0.0, 'item': item, 'unit': packetSize};
       }
 
       if (type == 'RECEIVED') {
@@ -114,60 +119,65 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadData,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildSummaryCard(),
-                    const SizedBox(height: 24),
-                    const Text(
-                      'Transaction History',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textBlack,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    if (_transactions.isEmpty)
-                      const Center(
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(vertical: 40),
-                          child: Text('No stock activities recorded yet.',
-                              style: TextStyle(color: AppColors.textGray)),
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : RefreshIndicator(
+                onRefresh: _loadData,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildSummaryCard(),
+                      const SizedBox(height: 24),
+                      const Text(
+                        'Transaction History',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textBlack,
                         ),
-                      )
-                    else
-                      ListView.separated(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: _transactions.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 12),
-                        itemBuilder: (context, index) {
-                          return _buildTransactionCard(_transactions[index]);
-                        },
                       ),
-                    const SizedBox(height: 80),
-                  ],
+                      const SizedBox(height: 16),
+                      if (_transactions.isEmpty)
+                        const Center(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(vertical: 40),
+                            child: Text(
+                              'No stock activities recorded yet.',
+                              style: TextStyle(color: AppColors.textGray),
+                            ),
+                          ),
+                        )
+                      else
+                        ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _transactions.length,
+                          separatorBuilder:
+                              (_, __) => const SizedBox(height: 12),
+                          itemBuilder: (context, index) {
+                            return _buildTransactionCard(_transactions[index]);
+                          },
+                        ),
+                      const SizedBox(height: 80),
+                    ],
+                  ),
                 ),
               ),
-            ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'stock_fab',
         onPressed: () async {
           final result = await Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => AddStockEntryScreen(
-                farmId: widget.farmId,
-                farmName: widget.farmName,
-              ),
+              builder:
+                  (context) => AddStockEntryScreen(
+                    farmId: widget.farmId,
+                    farmName: widget.farmName,
+                  ),
             ),
           );
           if (result == true) _loadData();
@@ -190,12 +200,20 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
         ),
         child: const Column(
           children: [
-            Icon(Icons.inventory_2_outlined, size: 48, color: AppColors.primary),
+            Icon(
+              Icons.inventory_2_outlined,
+              size: 48,
+              color: AppColors.primary,
+            ),
             SizedBox(height: 12),
-            Text('No Stock in Hand',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            Text('Record activities to see current balance',
-                style: TextStyle(color: AppColors.textGray, fontSize: 12)),
+            Text(
+              'No Stock in Hand',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            Text(
+              'Record activities to see current balance',
+              style: TextStyle(color: AppColors.textGray, fontSize: 12),
+            ),
           ],
         ),
       );
@@ -221,37 +239,51 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
             children: [
               Icon(Icons.analytics_outlined, color: AppColors.primary),
               SizedBox(width: 8),
-              Text('Current Balances',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              Text(
+                'Current Balances',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
             ],
           ),
           const Divider(height: 24),
-          ..._balances.entries.map((e) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(e.value['item'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                          Text('Size: ${e.value['unit']}', style: const TextStyle(fontSize: 12, color: AppColors.textGray)),
-                        ],
-                      ),
+          ..._balances.entries.map(
+            (e) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          e.value['item'],
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          'Size: ${e.value['unit']}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textGray,
+                          ),
+                        ),
+                      ],
                     ),
-                    Text(
-                      '${e.value['balance']} Pkts',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: (e.value['balance'] as double) < 0 
-                            ? Colors.red 
-                            : AppColors.primary,
-                      ),
+                  ),
+                  Text(
+                    '${e.value['balance']} Pkts',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color:
+                          (e.value['balance'] as double) < 0
+                              ? Colors.red
+                              : AppColors.primary,
                     ),
-                  ],
-                ),
-              )),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -260,13 +292,17 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
   Widget _buildTransactionCard(Map<String, dynamic> tx) {
     final type = tx['transaction_type'];
     final bool isAddition = type == 'RECEIVED';
-    final Color color = type == 'RECEIVED' 
-        ? Colors.green 
-        : (type == 'RETURN' ? Colors.blue : Colors.orange);
-    
-    final IconData icon = type == 'RECEIVED'
-        ? Icons.download_rounded
-        : (type == 'RETURN' ? Icons.settings_backup_restore_rounded : Icons.upload_rounded);
+    final Color color =
+        type == 'RECEIVED'
+            ? Colors.green
+            : (type == 'RETURN' ? Colors.blue : Colors.orange);
+
+    final IconData icon =
+        type == 'RECEIVED'
+            ? Icons.download_rounded
+            : (type == 'RETURN'
+                ? Icons.settings_backup_restore_rounded
+                : Icons.upload_rounded);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -290,10 +326,21 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(tx['item_name'] ?? 'N/A',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                Text(_formatType(type),
-                    style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
+                Text(
+                  tx['item_name'] ?? 'N/A',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                Text(
+                  _formatType(type),
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ],
             ),
           ),
@@ -303,18 +350,68 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    '${isAddition ? "+" : "-"}${tx['quantity']} x ${tx['unit']}',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                      color: isAddition ? Colors.green : Colors.orange,
-                    ),
+                  Builder(
+                    builder: (context) {
+                      String unitDisplay = tx['unit'] ?? 'N/A';
+                      String collectionSuffix = "";
+
+                      // Check for packed collection amount: "500 ml {₹2000}"
+                      if (unitDisplay.contains('{₹')) {
+                        final parts = unitDisplay.split(' {₹');
+                        unitDisplay = parts[0];
+                        if (parts.length > 1) {
+                          collectionSuffix = "₹${parts[1].replaceAll('}', '')}";
+                        }
+                      } else if (double.tryParse(
+                                tx['collected_amount']?.toString() ?? '0',
+                              ) !=
+                              null &&
+                          (double.tryParse(
+                                    tx['collected_amount']?.toString() ?? '0',
+                                  ) ??
+                                  0.0) >
+                              0) {
+                        // Fallback for local-only collected_amount field
+                        collectionSuffix = "₹${tx['collected_amount']}";
+                      }
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            '${isAddition ? "+" : "-"}${tx['quantity']} x $unitDisplay',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color:
+                                  isAddition
+                                      ? Colors.green
+                                      : (type == 'RETURN'
+                                          ? Colors.blue
+                                          : Colors.orange),
+                            ),
+                          ),
+                          if (collectionSuffix.isNotEmpty)
+                            Text(
+                              'Collection: $collectionSuffix',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green,
+                              ),
+                            ),
+                        ],
+                      );
+                    },
                   ),
                   const SizedBox(width: 8),
                   IconButton(
                     onPressed: () => _viewChallan(tx),
-                    icon: const Icon(Icons.receipt_long_rounded, size: 18, color: AppColors.primary),
+                    icon: const Icon(
+                      Icons.receipt_long_rounded,
+                      size: 18,
+                      color: AppColors.primary,
+                    ),
                     constraints: const BoxConstraints(),
                     padding: EdgeInsets.zero,
                     visualDensity: VisualDensity.compact,
@@ -336,37 +433,40 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
   Future<void> _viewChallan(Map<String, dynamic> tx) async {
     // 1. Find all items recorded at the same time (within 1 second)
     final createdAt = DateTime.parse(tx['created_at'].toString());
-    final sameBatch = _transactions.where((t) {
-      final tDate = DateTime.parse(t['created_at'].toString());
-      return tDate.difference(createdAt).inSeconds.abs() <= 1 &&
-             t['transaction_type'] == tx['transaction_type'];
-    }).toList();
+    final sameBatch =
+        _transactions.where((t) {
+          final tDate = DateTime.parse(t['created_at'].toString());
+          return tDate.difference(createdAt).inSeconds.abs() <= 1 &&
+              t['transaction_type'] == tx['transaction_type'];
+        }).toList();
 
     // 2. Prepare items with pricing
-    final itemsForChallan = sameBatch.map((item) {
-      final itemName = item['item_name'];
-      final unit = item['unit'];
-      
-      // Calculate Revenue logic (similar to Dashboard)
-      final product = _allProducts.firstWhere(
-        (p) => p['label'] == itemName,
-        orElse: () => {},
-      );
-      final List variants = product['variants'] ?? [];
-      final variant = variants.firstWhere(
-        (v) => v['label'] == unit,
-        orElse: () => {},
-      );
-      
-      final price = double.tryParse(variant['offer_price']?.toString() ?? '0') ?? 0.0;
-      
-      return {
-        'name': itemName,
-        'unit': unit,
-        'quantity': double.tryParse(item['quantity'].toString()) ?? 0.0,
-        'price': price,
-      };
-    }).toList();
+    final itemsForChallan =
+        sameBatch.map((item) {
+          final itemName = item['item_name'];
+          final unit = item['unit'];
+
+          // Calculate Revenue logic (similar to Dashboard)
+          final product = _allProducts.firstWhere(
+            (p) => p['label'] == itemName,
+            orElse: () => {},
+          );
+          final List variants = product['variants'] ?? [];
+          final variant = variants.firstWhere(
+            (v) => v['label'] == unit,
+            orElse: () => {},
+          );
+
+          final price =
+              double.tryParse(variant['offer_price']?.toString() ?? '0') ?? 0.0;
+
+          return {
+            'name': itemName,
+            'unit': unit,
+            'quantity': double.tryParse(item['quantity'].toString()) ?? 0.0,
+            'price': price,
+          };
+        }).toList();
 
     // 3. Generate PDF
     await PdfService.generateStockChallan(
@@ -379,10 +479,14 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
 
   String _formatType(String type) {
     switch (type) {
-      case 'RECEIVED': return 'STOCK RECEIVED';
-      case 'DELIVERED': return 'STOCK DELIVERED';
-      case 'RETURN': return 'STOCK RETURN';
-      default: return type;
+      case 'RECEIVED':
+        return 'STOCK RECEIVED';
+      case 'DELIVERED':
+        return 'STOCK DELIVERED';
+      case 'RETURN':
+        return 'STOCK RETURN';
+      default:
+        return type;
     }
   }
 

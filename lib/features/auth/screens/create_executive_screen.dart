@@ -2,18 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:nature_biotic/core/theme.dart';
 import 'package:nature_biotic/services/supabase_service.dart';
 
-class CreateExecutiveScreen extends StatefulWidget {
-  const CreateExecutiveScreen({super.key});
+class CreateStaffScreen extends StatefulWidget {
+  const CreateStaffScreen({super.key});
 
   @override
-  State<CreateExecutiveScreen> createState() => _CreateExecutiveScreenState();
+  State<CreateStaffScreen> createState() => _CreateStaffScreenState();
 }
 
-class _CreateExecutiveScreenState extends State<CreateExecutiveScreen> {
+class _CreateStaffScreenState extends State<CreateStaffScreen> {
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   final _fullNameController = TextEditingController();
+  String _selectedRole = 'executive';
   bool _isLoading = false;
 
   Future<void> _handleCreate() async {
@@ -21,15 +22,23 @@ class _CreateExecutiveScreenState extends State<CreateExecutiveScreen> {
 
     setState(() => _isLoading = true);
     try {
-      await SupabaseService.createExecutive(
-        username: _usernameController.text.trim(),
-        password: _passwordController.text.trim(),
-        fullName: _fullNameController.text.trim(),
-      );
+      if (_selectedRole == 'executive') {
+        await SupabaseService.createExecutive(
+          username: _usernameController.text.trim(),
+          password: _passwordController.text.trim(),
+          fullName: _fullNameController.text.trim(),
+        );
+      } else {
+        await SupabaseService.createStoreAccount(
+          username: _usernameController.text.trim(),
+          password: _passwordController.text.trim(),
+          fullName: _fullNameController.text.trim(),
+        );
+      }
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Executive Account Created Successfully'), backgroundColor: AppColors.primary),
+          SnackBar(content: Text('${_selectedRole.toUpperCase()} Account Created Successfully'), backgroundColor: AppColors.primary),
         );
         Navigator.pop(context);
       }
@@ -48,7 +57,7 @@ class _CreateExecutiveScreenState extends State<CreateExecutiveScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('Create Executive')),
+      appBar: AppBar(title: const Text('Create Staff Account')),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 800),
@@ -59,6 +68,10 @@ class _CreateExecutiveScreenState extends State<CreateExecutiveScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  const Text('Account Role', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  _buildRoleSelector(),
+                  const SizedBox(height: 32),
                   const Text('Account Details', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 16),
                   Container(
@@ -97,6 +110,21 @@ class _CreateExecutiveScreenState extends State<CreateExecutiveScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildRoleSelector() {
+    return SegmentedButton<String>(
+      segments: const [
+        ButtonSegment(value: 'executive', label: Text('Executive'), icon: Icon(Icons.person_rounded)),
+        ButtonSegment(value: 'store', label: Text('Store'), icon: Icon(Icons.inventory_2_rounded)),
+      ],
+      selected: {_selectedRole},
+      onSelectionChanged: (val) => setState(() => _selectedRole = val.first),
+      style: SegmentedButton.styleFrom(
+        selectedBackgroundColor: AppColors.primary,
+        selectedForegroundColor: Colors.white,
       ),
     );
   }

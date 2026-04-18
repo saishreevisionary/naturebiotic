@@ -33,7 +33,18 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
       if (!kIsWeb) {
         final localReports = await LocalDatabaseService.getData(
           'reports',
-          columns: ['id', 'farm_id', 'crop_id', 'problem', 'previous_inputs', 'recommendations', 'estimated_cost', 'signature_url', 'created_by', 'created_at']
+          columns: [
+            'id',
+            'farm_id',
+            'crop_id',
+            'problem',
+            'previous_inputs',
+            'recommendations',
+            'estimated_cost',
+            'signature_url',
+            'created_by',
+            'created_at',
+          ],
         );
         final localFarms = await LocalDatabaseService.getData('farms');
         final localCrops = await LocalDatabaseService.getData('crops');
@@ -45,40 +56,43 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
         final farmerMap = {for (var f in localFarmers) f['id'].toString(): f};
 
         // Transform local reports to match Supabase structure
-        final transformedLocal = localReports.map((report) {
-          final farmId = report['farm_id']?.toString();
-          final cropId = report['crop_id']?.toString();
-          final farm = farmMap[farmId] ?? {};
-          final farmerId = farm['farmer_id']?.toString();
-          final farmer = farmerMap[farmerId] ?? {};
-          
-          return {
-            ...report,
-            'is_local': true,
-            'farms': {
-              'name': farm['name'],
-              'farmers': {
-                'name': farmer['name'],
-              }
-            },
-            'crops': {
-              'name': cropMap[cropId]?['name'],
-            }
-          };
-        }).toList();
+        final transformedLocal =
+            localReports.map((report) {
+              final farmId = report['farm_id']?.toString();
+              final cropId = report['crop_id']?.toString();
+              final farm = farmMap[farmId] ?? {};
+              final farmerId = farm['farmer_id']?.toString();
+              final farmer = farmerMap[farmerId] ?? {};
+
+              return {
+                ...report,
+                'is_local': true,
+                'farms': {
+                  'name': farm['name'],
+                  'farmers': {'name': farmer['name']},
+                },
+                'crops': {'name': cropMap[cropId]?['name']},
+              };
+            }).toList();
 
         // Merge and De-duplicate using 'id'
         final Map<String, Map<String, dynamic>> combined = {};
-        for (var r in transformedLocal) combined[r['id'].toString()] = r;
-        for (var r in remoteReports) combined[r['id'].toString()] = r;
-        
+        for (var r in transformedLocal) {
+          combined[r['id'].toString()] = r;
+        }
+        for (var r in remoteReports) {
+          combined[r['id'].toString()] = r;
+        }
+
         allReports = combined.values.toList();
       } else {
         allReports = remoteReports;
       }
 
       // Sort by date descending
-      allReports.sort((a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''));
+      allReports.sort(
+        (a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''),
+      );
 
       if (mounted) {
         setState(() => _reports = allReports);
@@ -86,7 +100,10 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading reports: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Error loading reports: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -117,19 +134,26 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
           ),
         ],
       ),
-      body: _isLoading 
-          ? const Center(child: CircularProgressIndicator())
-          : _reports.isEmpty 
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _reports.isEmpty
               ? _buildEmptyState()
               : _buildReportsList(),
-      floatingActionButton: _reports.isNotEmpty ? FloatingActionButton(
-        heroTag: 'reports_fab',
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const CreateReportScreen()),
-        ).then((_) => _loadReports()),
-        child: const Icon(Icons.add_rounded),
-      ) : null,
+      floatingActionButton:
+          _reports.isNotEmpty
+              ? FloatingActionButton(
+                heroTag: 'reports_fab',
+                onPressed:
+                    () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const CreateReportScreen(),
+                      ),
+                    ).then((_) => _loadReports()),
+                child: const Icon(Icons.add_rounded),
+              )
+              : null,
     );
   }
 
@@ -144,7 +168,11 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
               color: AppColors.secondary.withOpacity(0.5),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.description_outlined, size: 64, color: AppColors.primary),
+            child: const Icon(
+              Icons.description_outlined,
+              size: 64,
+              color: AppColors.primary,
+            ),
           ),
           const SizedBox(height: 24),
           const Text(
@@ -158,15 +186,20 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
           ),
           const SizedBox(height: 32),
           ElevatedButton.icon(
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const CreateReportScreen()),
-            ).then((_) => _loadReports()),
+            onPressed:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const CreateReportScreen(),
+                  ),
+                ).then((_) => _loadReports()),
             icon: const Icon(Icons.add_rounded),
             label: const Text('Generate New Report'),
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
             ),
           ),
         ],
@@ -185,16 +218,24 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
             final report = _reports[index];
             final farmName = report['farms']?['name'] ?? 'Unknown Farm';
             final cropName = report['crops']?['name'] ?? 'Unknown Crop';
-            final farmerName = report['farms']?['farmers']?['name'] ?? 'Valued Farmer';
+            final farmerName =
+                report['farms']?['farmers']?['name'] ?? 'Valued Farmer';
             final date = _formatDate(report['created_at']);
-    
+
             return Card(
               margin: const EdgeInsets.only(bottom: 12),
               child: ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 leading: const CircleAvatar(
                   backgroundColor: AppColors.secondary,
-                  child: Icon(Icons.description_rounded, color: AppColors.primary, size: 20),
+                  child: Icon(
+                    Icons.description_rounded,
+                    color: AppColors.primary,
+                    size: 20,
+                  ),
                 ),
                 title: Text(
                   farmName,
@@ -203,24 +244,52 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('$cropName • $date', style: const TextStyle(fontSize: 12)),
+                    Text(
+                      '$cropName • $date',
+                      style: const TextStyle(fontSize: 12),
+                    ),
                     Row(
                       children: [
-                        Expanded(child: Text('Farmer: $farmerName', style: const TextStyle(fontSize: 11, color: AppColors.textGray))),
+                        Expanded(
+                          child: Text(
+                            'Farmer: $farmerName',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textGray,
+                            ),
+                          ),
+                        ),
                         if (report['is_local'] == true)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.orange.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: Colors.orange.withOpacity(0.5), width: 0.5),
+                              border: Border.all(
+                                color: Colors.orange.withOpacity(0.5),
+                                width: 0.5,
+                              ),
                             ),
                             child: const Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.sync_rounded, size: 10, color: Colors.orange),
+                                Icon(
+                                  Icons.sync_rounded,
+                                  size: 10,
+                                  color: Colors.orange,
+                                ),
                                 SizedBox(width: 4),
-                                Text('Pending Sync', style: TextStyle(fontSize: 9, color: Colors.orange, fontWeight: FontWeight.bold)),
+                                Text(
+                                  'Pending Sync',
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    color: Colors.orange,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -228,17 +297,21 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
                     ),
                   ],
                 ),
-                trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.primary),
+                trailing: const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.primary,
+                ),
                 onTap: () {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => ReportGeneratorScreen(
-                        report: report,
-                        farmName: farmName,
-                        cropName: cropName,
-                        farmerName: farmerName,
-                      ),
+                      builder:
+                          (context) => ReportGeneratorScreen(
+                            report: report,
+                            farmName: farmName,
+                            cropName: cropName,
+                            farmerName: farmerName,
+                          ),
                     ),
                   );
                 },

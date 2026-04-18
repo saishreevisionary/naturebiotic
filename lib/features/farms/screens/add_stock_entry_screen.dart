@@ -12,9 +12,9 @@ class AddStockEntryScreen extends StatefulWidget {
   final String farmName;
 
   const AddStockEntryScreen({
-    super.key, 
-    required this.farmId, 
-    required this.farmName
+    super.key,
+    required this.farmId,
+    required this.farmName,
   });
 
   @override
@@ -23,9 +23,10 @@ class AddStockEntryScreen extends StatefulWidget {
 
 class _AddStockEntryScreenState extends State<AddStockEntryScreen> {
   final _formKey = GlobalKey<FormState>();
-  
-  List<StockItemRow> _itemRows = [StockItemRow()];
+
+  final List<StockItemRow> _itemRows = [StockItemRow()];
   String _transactionType = 'RECEIVED';
+  final _collectionController = TextEditingController();
 
   List<String> _itemOptions = [];
   List<Map<String, dynamic>> _allProducts = [];
@@ -42,15 +43,17 @@ class _AddStockEntryScreenState extends State<AddStockEntryScreen> {
 
   Future<void> _loadOptions() async {
     try {
-      final items = await SupabaseService.getHierarchicalDropdownOptions('product_name');
+      final items = await SupabaseService.getHierarchicalDropdownOptions(
+        'product_name',
+      );
       final units = await SupabaseService.getDropdownOptions('dose_unit');
-      
+
       if (mounted) {
         setState(() {
           _allProducts = items;
           _itemOptions = items.map((e) => e['label'].toString()).toList();
           _globalDoseUnits = units.map((e) => e['label'].toString()).toList();
-          
+
           for (var row in _itemRows) {
             _updateRowPacketOptions(row);
           }
@@ -63,8 +66,22 @@ class _AddStockEntryScreenState extends State<AddStockEntryScreen> {
   }
 
   void _updateRowPacketOptions(StockItemRow row) {
-    final List<String> defaults = ['100ml', '250ml', '500ml', '1 Ltr', '100g', '250g', '500g', '1kg', '5kg', '10kg', '25kg', '50kg', 'Nos'];
-    
+    final List<String> defaults = [
+      '100ml',
+      '250ml',
+      '500ml',
+      '1 Ltr',
+      '100g',
+      '250g',
+      '500g',
+      '1kg',
+      '5kg',
+      '10kg',
+      '25kg',
+      '50kg',
+      'Nos',
+    ];
+
     if (row.selectedItem == null) {
       row.packetSizeOptions = [...defaults];
       for (var u in _globalDoseUnits) {
@@ -72,20 +89,21 @@ class _AddStockEntryScreenState extends State<AddStockEntryScreen> {
       }
     } else {
       final product = _allProducts.firstWhere(
-        (p) => p['label'] == row.selectedItem, 
-        orElse: () => {}
+        (p) => p['label'] == row.selectedItem,
+        orElse: () => {},
       );
       final List variants = product['variants'] ?? [];
-      
+
       if (variants.isNotEmpty) {
-        row.packetSizeOptions = variants.map((v) => v['label'].toString()).toList();
+        row.packetSizeOptions =
+            variants.map((v) => v['label'].toString()).toList();
       } else {
         row.packetSizeOptions = [...defaults];
         for (var u in _globalDoseUnits) {
           if (!row.packetSizeOptions.contains(u)) row.packetSizeOptions.add(u);
         }
+      }
     }
-  }
   }
 
   void _updateRowPrice(StockItemRow row) {
@@ -95,18 +113,19 @@ class _AddStockEntryScreenState extends State<AddStockEntryScreen> {
     }
 
     final product = _allProducts.firstWhere(
-      (p) => p['label'] == row.selectedItem, 
-      orElse: () => {}
+      (p) => p['label'] == row.selectedItem,
+      orElse: () => {},
     );
     final List variants = product['variants'] ?? [];
-    
+
     if (variants.isNotEmpty) {
       final variant = variants.firstWhere(
-        (v) => v['label'] == row.selectedUnit, 
-        orElse: () => {}
+        (v) => v['label'] == row.selectedUnit,
+        orElse: () => {},
       );
       if (variant.isNotEmpty) {
-        row.selectedPrice = double.tryParse(variant['offer_price']?.toString() ?? '0') ?? 0.0;
+        row.selectedPrice =
+            double.tryParse(variant['offer_price']?.toString() ?? '0') ?? 0.0;
       } else {
         row.selectedPrice = 0.0;
       }
@@ -133,7 +152,7 @@ class _AddStockEntryScreenState extends State<AddStockEntryScreen> {
 
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
-    
+
     // Check if any row has no product selected
     if (_itemRows.any((r) => r.selectedItem == null)) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -145,15 +164,26 @@ class _AddStockEntryScreenState extends State<AddStockEntryScreen> {
     setState(() => _isLoading = true);
     try {
       final timestamp = DateTime.now().toIso8601String();
-      
+
       for (var row in _itemRows) {
+        final collectionAmt =
+            _transactionType == 'RECEIVED'
+                ? (double.tryParse(_collectionController.text) ?? 0.0)
+                : 0.0;
+
         final data = {
           'id': const Uuid().v4(),
           'farm_id': widget.farmId,
           'item_name': row.selectedItem,
           'transaction_type': _transactionType,
           'quantity': double.tryParse(row.qtyController.text) ?? 0.0,
-          'unit': row.selectedUnit,
+          // Pack the collection amount into the unit field for cloud sync if type is RECEIVED
+          'unit':
+              _transactionType == 'RECEIVED' && collectionAmt > 0
+                  ? "${row.selectedUnit} {₹$collectionAmt}"
+                  : row.selectedUnit,
+          'collected_amount': collectionAmt,
+          'executive_id': SupabaseService.client.auth.currentUser?.id,
           'created_at': timestamp,
         };
 
@@ -178,7 +208,10 @@ class _AddStockEntryScreenState extends State<AddStockEntryScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Error saving: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -190,72 +223,117 @@ class _AddStockEntryScreenState extends State<AddStockEntryScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Record Stock Activity'),
-      ),
-      body: _isDataLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Activity for ${widget.farmName}',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textGray),
-                    ),
-                    const SizedBox(height: 20),
-                    
-                    const Text('Transaction Type', style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 12),
-                    _buildTypeSelector(),
-                    
-                    const SizedBox(height: 24),
-                    
-                    ListView.separated(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _itemRows.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 16),
-                      itemBuilder: (context, index) => _buildItemRow(index, _itemRows[index]),
-                    ),
-                    
-                    const SizedBox(height: 20),
-                    Center(
-                      child: TextButton.icon(
-                        onPressed: _addRow,
-                        icon: const Icon(Icons.add_circle_outline_rounded),
-                        label: const Text('Add Another Product'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: AppColors.primary,
-                          backgroundColor: AppColors.primary.withOpacity(0.05),
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      appBar: AppBar(title: const Text('Record Stock Activity')),
+      body:
+          _isDataLoading
+              ? const Center(child: CircularProgressIndicator())
+              : SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Activity for ${widget.farmName}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: AppColors.textGray,
                         ),
                       ),
-                    ),
-                    
-                    const SizedBox(height: 40),
-                    
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _isLoading ? null : _handleSubmit,
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: const Size(double.infinity, 56),
-                        ),
-                        child: _isLoading 
-                            ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                            : const Text('Save Stock Record'),
+                      const SizedBox(height: 20),
+
+                      const Text(
+                        'Transaction Type',
+                        style: TextStyle(fontWeight: FontWeight.bold),
                       ),
-                    ),
-                    const SizedBox(height: 40),
-                  ],
+                      const SizedBox(height: 12),
+                      _buildTypeSelector(),
+
+                      if (_transactionType == 'RECEIVED') ...[
+                        const SizedBox(height: 24),
+                        const Text(
+                          'Collection Amount',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _collectionController,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: const InputDecoration(
+                            labelText: 'Amount Collected (₹)',
+                            hintText: 'Enter amount if any',
+                            prefixIcon: Icon(
+                              Icons.account_balance_wallet_rounded,
+                            ),
+                          ),
+                        ),
+                      ],
+
+                      const SizedBox(height: 24),
+
+                      ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: _itemRows.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 16),
+                        itemBuilder:
+                            (context, index) =>
+                                _buildItemRow(index, _itemRows[index]),
+                      ),
+
+                      const SizedBox(height: 20),
+                      Center(
+                        child: TextButton.icon(
+                          onPressed: _addRow,
+                          icon: const Icon(Icons.add_circle_outline_rounded),
+                          label: const Text('Add Another Product'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppColors.primary,
+                            backgroundColor: AppColors.primary.withOpacity(
+                              0.05,
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 12,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 40),
+
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: _isLoading ? null : _handleSubmit,
+                          style: ElevatedButton.styleFrom(
+                            minimumSize: const Size(double.infinity, 56),
+                          ),
+                          child:
+                              _isLoading
+                                  ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                  : const Text('Save Stock Record'),
+                        ),
+                      ),
+                      const SizedBox(height: 40),
+                    ],
+                  ),
                 ),
               ),
-            ),
     );
   }
 
@@ -280,12 +358,21 @@ class _AddStockEntryScreenState extends State<AddStockEntryScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Product #${index + 1}', 
-                  style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
+              Text(
+                'Product #${index + 1}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primary,
+                ),
+              ),
               if (_itemRows.length > 1)
                 IconButton(
                   onPressed: () => _removeRow(index),
-                  icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
+                  icon: const Icon(
+                    Icons.delete_outline_rounded,
+                    color: Colors.red,
+                    size: 20,
+                  ),
                   visualDensity: VisualDensity.compact,
                 ),
             ],
@@ -293,16 +380,21 @@ class _AddStockEntryScreenState extends State<AddStockEntryScreen> {
           const Divider(),
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
-            value: row.selectedItem,
+            initialValue: row.selectedItem,
             isExpanded: true,
             decoration: const InputDecoration(
               labelText: 'Select Stock Item',
               hintText: 'Search product...',
             ),
-            items: _itemOptions.map((e) => DropdownMenuItem(
-              value: e,
-              child: Text(e, style: const TextStyle(fontSize: 14)),
-            )).toList(),
+            items:
+                _itemOptions
+                    .map(
+                      (e) => DropdownMenuItem(
+                        value: e,
+                        child: Text(e, style: const TextStyle(fontSize: 14)),
+                      ),
+                    )
+                    .toList(),
             onChanged: (v) {
               setState(() {
                 row.selectedItem = v;
@@ -320,28 +412,41 @@ class _AddStockEntryScreenState extends State<AddStockEntryScreen> {
                 flex: 2,
                 child: TextFormField(
                   controller: row.qtyController,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   decoration: const InputDecoration(
                     labelText: 'Quantity',
                     hintText: 'Qty',
                   ),
-                  onChanged: (_) => setState(() {}), // Trigger total recalculation if needed
-                  validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                  onChanged:
+                      (_) => setState(
+                        () {},
+                      ), // Trigger total recalculation if needed
+                  validator:
+                      (v) => (v == null || v.isEmpty) ? 'Required' : null,
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 flex: 3,
                 child: DropdownButtonFormField<String>(
-                  value: row.selectedUnit,
+                  initialValue: row.selectedUnit,
                   isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Packet Size',
-                  ),
-                  items: row.packetSizeOptions.map((e) => DropdownMenuItem(
-                    value: e,
-                    child: Text(e, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
-                  )).toList(),
+                  decoration: const InputDecoration(labelText: 'Packet Size'),
+                  items:
+                      row.packetSizeOptions
+                          .map(
+                            (e) => DropdownMenuItem(
+                              value: e,
+                              child: Text(
+                                e,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                            ),
+                          )
+                          .toList(),
                   onChanged: (v) {
                     setState(() {
                       row.selectedUnit = v;
@@ -361,12 +466,18 @@ class _AddStockEntryScreenState extends State<AddStockEntryScreen> {
                 children: [
                   Text(
                     'Rate: ₹${row.selectedPrice}',
-                    style: const TextStyle(fontSize: 12, color: AppColors.textGray),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textGray,
+                    ),
                   ),
                   const SizedBox(width: 16),
                   Text(
                     'Amount: ₹${(row.selectedPrice * (double.tryParse(row.qtyController.text) ?? 0)).toStringAsFixed(2)}',
-                    style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primary,
+                    ),
                   ),
                 ],
               ),
@@ -383,7 +494,11 @@ class _AddStockEntryScreenState extends State<AddStockEntryScreen> {
         const SizedBox(width: 8),
         _typeOption('DELIVERED', Colors.orange, Icons.upload_rounded),
         const SizedBox(width: 8),
-        _typeOption('RETURN', Colors.blue, Icons.settings_backup_restore_rounded),
+        _typeOption(
+          'RETURN',
+          Colors.blue,
+          Icons.settings_backup_restore_rounded,
+        ),
       ],
     );
   }
@@ -411,10 +526,13 @@ class _AddStockEntryScreenState extends State<AddStockEntryScreen> {
                 Icon(icon, color: isSelected ? color : AppColors.textGray),
                 const SizedBox(height: 4),
                 Text(
-                  type == 'RECEIVED' ? 'Received' : (type == 'DELIVERED' ? 'Delivered' : 'Return'),
+                  type == 'RECEIVED'
+                      ? 'Received'
+                      : (type == 'DELIVERED' ? 'Delivered' : 'Return'),
                   style: TextStyle(
                     fontSize: 10,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    fontWeight:
+                        isSelected ? FontWeight.bold : FontWeight.normal,
                     color: isSelected ? color : AppColors.textGray,
                   ),
                 ),
@@ -428,70 +546,88 @@ class _AddStockEntryScreenState extends State<AddStockEntryScreen> {
 
   void _showSuccessDialog() {
     final now = DateTime.now();
-    final itemsForChallan = _itemRows.map((row) => {
-      'name': row.selectedItem,
-      'unit': row.selectedUnit,
-      'quantity': double.tryParse(row.qtyController.text) ?? 0.0,
-      'price': row.selectedPrice,
-    }).toList();
+    final itemsForChallan =
+        _itemRows
+            .map(
+              (row) => {
+                'name': row.selectedItem,
+                'unit': row.selectedUnit,
+                'quantity': double.tryParse(row.qtyController.text) ?? 0.0,
+                'price': row.selectedPrice,
+              },
+            )
+            .toList();
 
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-        contentPadding: const EdgeInsets.all(32),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.check_circle_outline_rounded, color: Colors.green, size: 64),
+      builder:
+          (context) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(28),
             ),
-            const SizedBox(height: 24),
-            const Text(
-              'Stock Recorded!',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            contentPadding: const EdgeInsets.all(32),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.check_circle_outline_rounded,
+                    color: Colors.green,
+                    size: 64,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Stock Recorded!',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'The ${_transactionType.toLowerCase()} entry for ${widget.farmName} has been saved successfully.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: AppColors.textGray),
+                ),
+                const SizedBox(height: 32),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    PdfService.generateStockChallan(
+                      items: itemsForChallan,
+                      farmName: widget.farmName,
+                      transactionType: _transactionType,
+                      date: now,
+                    );
+                  },
+                  icon: const Icon(Icons.share_rounded, size: 18),
+                  label: const Text('Share Challan'),
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 50),
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(context); // Close dialog
+                    Navigator.pop(
+                      context,
+                      true,
+                    ); // Go back to management screen
+                  },
+                  child: const Text(
+                    'Done',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            Text(
-              'The ${_transactionType.toLowerCase()} entry for ${widget.farmName} has been saved successfully.',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.textGray),
-            ),
-            const SizedBox(height: 32),
-            ElevatedButton.icon(
-              onPressed: () {
-                PdfService.generateStockChallan(
-                  items: itemsForChallan,
-                  farmName: widget.farmName,
-                  transactionType: _transactionType,
-                  date: now,
-                );
-              },
-              icon: const Icon(Icons.share_rounded, size: 18),
-              label: const Text('Share Challan'),
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 50),
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context); // Close dialog
-                Navigator.pop(context, true); // Go back to management screen
-              },
-              child: const Text('Done', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
-          ],
-        ),
-      ),
+          ),
     );
   }
 }

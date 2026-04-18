@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:nature_biotic/features/reports/screens/report_generator_screen.dart';
 import 'package:intl/intl.dart';
 import 'package:nature_biotic/features/crops/screens/add_crop_screen.dart';
+import 'package:nature_biotic/features/reports/screens/create_report_screen.dart';
 
 class CropDetailScreen extends StatefulWidget {
   final Map<String, dynamic> crop;
@@ -13,7 +14,7 @@ class CropDetailScreen extends StatefulWidget {
   final String? farmerName;
 
   const CropDetailScreen({
-    super.key, 
+    super.key,
     required this.crop,
     this.farmName,
     this.farmerName,
@@ -35,15 +36,28 @@ class __CropDetailScreenState extends State<CropDetailScreen> {
 
   Future<void> _loadReports() async {
     try {
-      final remoteReports = await SupabaseService.getReportsForCrop(widget.crop['id'].toString());
+      final remoteReports = await SupabaseService.getReportsForCrop(
+        widget.crop['id'].toString(),
+      );
       List<Map<String, dynamic>> localReports = [];
-      
+
       if (!kIsWeb) {
         localReports = await LocalDatabaseService.getData(
-          'reports', 
-          where: 'crop_id = ?', 
+          'reports',
+          where: 'crop_id = ?',
           whereArgs: [widget.crop['id'].toString()],
-          columns: ['id', 'farm_id', 'crop_id', 'problem', 'previous_inputs', 'recommendations', 'estimated_cost', 'signature_url', 'created_by', 'created_at']
+          columns: [
+            'id',
+            'farm_id',
+            'crop_id',
+            'problem',
+            'previous_inputs',
+            'recommendations',
+            'estimated_cost',
+            'signature_url',
+            'created_by',
+            'created_at',
+          ],
         );
       }
 
@@ -51,7 +65,7 @@ class __CropDetailScreenState extends State<CropDetailScreen> {
         setState(() {
           // Merge and De-duplicate
           final Map<String, Map<String, dynamic>> combinedMap = {};
-          
+
           for (var report in localReports) {
             combinedMap[report['id'].toString()] = report;
           }
@@ -60,7 +74,9 @@ class __CropDetailScreenState extends State<CropDetailScreen> {
           }
 
           _reports = combinedMap.values.toList();
-          _reports.sort((a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''));
+          _reports.sort(
+            (a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''),
+          );
           _isLoadingReports = false;
         });
       }
@@ -83,14 +99,15 @@ class __CropDetailScreenState extends State<CropDetailScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => AddCropScreen(
-                    crop: widget.crop,
-                    farmId: widget.crop['farm_id']?.toString(),
-                  ),
+                  builder:
+                      (context) => AddCropScreen(
+                        crop: widget.crop,
+                        farmId: widget.crop['farm_id']?.toString(),
+                      ),
                 ),
               ).then((value) {
                 if (value == true) {
-                  // Refresh data if needed, but since we pass crop in constructor, 
+                  // Refresh data if needed, but since we pass crop in constructor,
                   // it might need a re-fetch or pop-back-with-true
                   Navigator.pop(context, true);
                 }
@@ -122,29 +139,49 @@ class __CropDetailScreenState extends State<CropDetailScreen> {
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(16),
                         ),
-                        child: const Icon(Icons.eco_rounded, size: 28, color: Colors.green),
+                        child: const Icon(
+                          Icons.eco_rounded,
+                          size: 28,
+                          color: Colors.green,
+                        ),
                       ),
                       const SizedBox(width: 16),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(widget.crop['variety'] ?? 'Unknown Variety', 
-                              style: const TextStyle(color: AppColors.textGray, fontSize: 11)),
-                            Text(widget.crop['name'] ?? 'N/A', 
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                            Text(
+                              widget.crop['variety'] ?? 'Unknown Variety',
+                              style: const TextStyle(
+                                color: AppColors.textGray,
+                                fontSize: 11,
+                              ),
+                            ),
+                            Text(
+                              widget.crop['name'] ?? 'N/A',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                              ),
+                            ),
                           ],
                         ),
                       ),
                     ],
                   ),
                 ),
-                
+
                 const SizedBox(height: 24),
-                const Text('Crop Metrics', 
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textBlack)),
+                const Text(
+                  'Crop Metrics',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textBlack,
+                  ),
+                ),
                 const SizedBox(height: 16),
-                
+
                 // Grid for Growth and Scale
                 LayoutBuilder(
                   builder: (context, constraints) {
@@ -157,18 +194,40 @@ class __CropDetailScreenState extends State<CropDetailScreen> {
                       crossAxisSpacing: 16,
                       childAspectRatio: isWide ? 1.5 : 2.2,
                       children: [
-                        _infoCard(Icons.history_rounded, 'Current Age', widget.crop['age'] ?? 'N/A'),
-                        _infoCard(Icons.timer_rounded, 'Total Life', widget.crop['life'] ?? 'N/A'),
-                        _infoCard(Icons.straighten_rounded, 'Acres', widget.crop['acre'] ?? 'N/A'),
-                        _infoCard(Icons.numbers_rounded, 'Count', widget.crop['count'] ?? 'N/A'),
+                        _infoCard(
+                          Icons.history_rounded,
+                          'Current Age',
+                          widget.crop['age'] ?? 'N/A',
+                        ),
+                        _infoCard(
+                          Icons.timer_rounded,
+                          'Total Life',
+                          widget.crop['life'] ?? 'N/A',
+                        ),
+                        _infoCard(
+                          Icons.straighten_rounded,
+                          'Acres',
+                          widget.crop['acre'] ?? 'N/A',
+                        ),
+                        _infoCard(
+                          Icons.numbers_rounded,
+                          'Count',
+                          widget.crop['count'] ?? 'N/A',
+                        ),
                       ],
                     );
-                  }
+                  },
                 ),
-    
+
                 const SizedBox(height: 24),
-                const Text('Yield Expectations', 
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textBlack)),
+                const Text(
+                  'Yield Expectations',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textBlack,
+                  ),
+                ),
                 const SizedBox(height: 16),
                 Container(
                   padding: const EdgeInsets.all(16),
@@ -185,24 +244,83 @@ class __CropDetailScreenState extends State<CropDetailScreen> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.show_chart_rounded, color: AppColors.primary, size: 24),
+                      const Icon(
+                        Icons.show_chart_rounded,
+                        color: AppColors.primary,
+                        size: 24,
+                      ),
                       const SizedBox(width: 16),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('Expected Yield', 
-                            style: TextStyle(color: AppColors.textGray, fontSize: 11)),
-                          Text(widget.crop['expected_yield'] ?? 'N/A', 
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.primary)),
+                          const Text(
+                            'Expected Yield',
+                            style: TextStyle(
+                              color: AppColors.textGray,
+                              fontSize: 11,
+                            ),
+                          ),
+                          Text(
+                            widget.crop['expected_yield'] ?? 'N/A',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: AppColors.primary,
+                            ),
+                          ),
                         ],
                       ),
                     ],
                   ),
                 ),
-                
+
                 const SizedBox(height: 32),
-                const Text('Report History', 
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textBlack)),
+                SizedBox(
+                  width: double.infinity,
+                  height: 54,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder:
+                              (context) => CreateReportScreen(
+                                preSelectedFarmId:
+                                    widget.crop['farm_id']?.toString(),
+                                preSelectedCropId:
+                                    widget.crop['id']?.toString(),
+                              ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.add_task_rounded),
+                    label: const Text(
+                      'Add New Visit (Analysis Report)',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      elevation: 2,
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 32),
+                const Text(
+                  'Report History',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textBlack,
+                  ),
+                ),
                 const SizedBox(height: 16),
                 _buildReportHistoryTable(),
                 const SizedBox(height: 40),
@@ -216,9 +334,14 @@ class __CropDetailScreenState extends State<CropDetailScreen> {
 
   Widget _buildReportHistoryTable() {
     if (_isLoadingReports) {
-      return const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()));
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(20),
+          child: CircularProgressIndicator(),
+        ),
+      );
     }
-    
+
     if (_reports.isEmpty) {
       return Container(
         width: double.infinity,
@@ -229,9 +352,16 @@ class __CropDetailScreenState extends State<CropDetailScreen> {
         ),
         child: const Column(
           children: [
-            Icon(Icons.assignment_outlined, size: 40, color: AppColors.textGray),
+            Icon(
+              Icons.assignment_outlined,
+              size: 40,
+              color: AppColors.textGray,
+            ),
             SizedBox(height: 12),
-            Text('No report history available', style: TextStyle(color: AppColors.textGray)),
+            Text(
+              'No report history available',
+              style: TextStyle(color: AppColors.textGray),
+            ),
           ],
         ),
       );
@@ -256,60 +386,89 @@ class __CropDetailScreenState extends State<CropDetailScreen> {
           child: DataTable(
             horizontalMargin: 16,
             columnSpacing: 24,
-            headingRowColor: MaterialStateProperty.all(AppColors.secondary.withOpacity(0.5)),
+            headingRowColor: WidgetStateProperty.all(
+              AppColors.secondary.withOpacity(0.5),
+            ),
             columns: const [
-              DataColumn(label: Text('Date', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('Problem Identified', style: TextStyle(fontWeight: FontWeight.bold))),
-              DataColumn(label: Text('', style: TextStyle(fontWeight: FontWeight.bold))),
-            ],
-            rows: _reports.map((report) {
-              final date = DateTime.parse(report['created_at']);
-              
-              // Clean up problem text (remove image metadata if present)
-              String problemDisplay = report['problem'] ?? 'N/A';
-              if (problemDisplay.contains('{img:')) {
-                problemDisplay = problemDisplay.split('{img:')[0].trim();
-              }
-
-              return DataRow(cells: [
-                DataCell(Text(DateFormat('MMM dd, yyyy').format(date), style: const TextStyle(fontSize: 13))),
-                DataCell(
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 180),
-                    child: Text(
-                      problemDisplay, 
-                      overflow: TextOverflow.ellipsis, 
-                      maxLines: 1,
-                      style: const TextStyle(fontSize: 13),
-                    ),
-                  ),
+              DataColumn(
+                label: Text(
+                  'Date',
+                  style: TextStyle(fontWeight: FontWeight.bold),
                 ),
-                DataCell(
-                  TextButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ReportGeneratorScreen(
-                            report: report,
-                            farmName: widget.farmName,
-                            cropName: widget.crop['name'],
-                            farmerName: widget.farmerName,
+              ),
+              DataColumn(
+                label: Text(
+                  'Problem Identified',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              DataColumn(
+                label: Text('', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
+            rows:
+                _reports.map((report) {
+                  final date = DateTime.parse(report['created_at']);
+
+                  // Clean up problem text (remove image metadata if present)
+                  String problemDisplay = report['problem'] ?? 'N/A';
+                  if (problemDisplay.contains('{img:')) {
+                    problemDisplay = problemDisplay.split('{img:')[0].trim();
+                  }
+
+                  return DataRow(
+                    cells: [
+                      DataCell(
+                        Text(
+                          DateFormat('MMM dd, yyyy').format(date),
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ),
+                      DataCell(
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 180),
+                          child: Text(
+                            problemDisplay,
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                            style: const TextStyle(fontSize: 13),
                           ),
                         ),
-                      );
-                    },
-                    style: TextButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      minimumSize: const Size(0, 0),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: const Text('View More', 
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary)),
-                  ),
-                ),
-              ]);
-            }).toList(),
+                      ),
+                      DataCell(
+                        TextButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder:
+                                    (context) => ReportGeneratorScreen(
+                                      report: report,
+                                      farmName: widget.farmName,
+                                      cropName: widget.crop['name'],
+                                      farmerName: widget.farmerName,
+                                    ),
+                              ),
+                            );
+                          },
+                          style: TextButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            minimumSize: const Size(0, 0),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: const Text(
+                            'View More',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                }).toList(),
           ),
         ),
       ),
@@ -340,9 +499,19 @@ class __CropDetailScreenState extends State<CropDetailScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const Spacer(),
-                Text(label, style: const TextStyle(color: AppColors.textGray, fontSize: 9)),
-                Text(value, 
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: AppColors.textGray,
+                    fontSize: 9,
+                  ),
+                ),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
                 const Spacer(),

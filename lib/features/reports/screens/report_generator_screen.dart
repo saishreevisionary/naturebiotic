@@ -10,7 +10,7 @@ class ReportGeneratorScreen extends StatefulWidget {
   final String? farmerName;
 
   const ReportGeneratorScreen({
-    super.key, 
+    super.key,
     this.report,
     this.farmName,
     this.cropName,
@@ -37,23 +37,27 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
 
     setState(() => _isLoadingHistory = true);
     try {
-      final allReports = await SupabaseService.getReportsForFarm(farmId.toString());
-      
-      // Filter history to show only reports from the same farm, 
+      final allReports = await SupabaseService.getReportsForFarm(
+        farmId.toString(),
+      );
+
+      // Filter history to show only reports from the same farm,
       // excluding the current one and any future ones (if viewing an old report)
       final currentCreatedAt = widget.report?['created_at'];
-      final currentDate = currentCreatedAt != null 
-          ? DateTime.parse(currentCreatedAt.toString()) 
-          : DateTime.now();
-      
+      final currentDate =
+          currentCreatedAt != null
+              ? DateTime.parse(currentCreatedAt.toString())
+              : DateTime.now();
+
       final currentId = widget.report?['id'];
-      
+
       setState(() {
-        _history = allReports.where((r) {
-          if (currentId != null && r['id'] == currentId) return false;
-          final rDate = DateTime.parse(r['created_at'].toString());
-          return rDate.isBefore(currentDate);
-        }).toList();
+        _history =
+            allReports.where((r) {
+              if (currentId != null && r['id'] == currentId) return false;
+              final rDate = DateTime.parse(r['created_at'].toString());
+              return rDate.isBefore(currentDate);
+            }).toList();
       });
     } catch (e) {
       debugPrint('Error loading report history: $e');
@@ -73,17 +77,31 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
   }
 
   String _getMonthName(int month) {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     return months[month - 1];
   }
 
   @override
   Widget build(BuildContext context) {
     final report = widget.report;
-    if (report == null) return const Scaffold(body: Center(child: Text('No report data.')));
+    if (report == null)
+      return const Scaffold(body: Center(child: Text('No report data.')));
 
     final currentHistory = report['previous_inputs'] ?? '';
-    
+
     // Aggregate all history entries into a formatted string for the PDF export button logic
     String combinedHistory = currentHistory;
     if (_history.isNotEmpty) {
@@ -96,10 +114,10 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5), // Slightly grayish to make the "paper" pop
-      appBar: AppBar(
-        title: const Text('Report Analysis'),
-      ),
+      backgroundColor: const Color(
+        0xFFF5F5F5,
+      ), // Slightly grayish to make the "paper" pop
+      appBar: AppBar(title: const Text('Report Analysis')),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 900),
@@ -110,9 +128,13 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
                 // The "Paper" Report
                 Card(
                   elevation: 4,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)), // Sharp but soft edges like paper
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(4),
+                  ), // Sharp but soft edges like paper
                   child: Container(
-                    padding: const EdgeInsets.all(16.0), // Further reduced for mobile
+                    padding: const EdgeInsets.all(
+                      16.0,
+                    ), // Further reduced for mobile
                     color: Colors.white,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -120,28 +142,33 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
                         _buildBrandedHeader(report['created_at']),
                         const SizedBox(height: 24),
                         _buildInfoSection(
-                          widget.farmerName ?? 'N/A', 
-                          widget.farmName ?? 'N/A', 
-                          widget.cropName ?? 'N/A'
+                          widget.farmerName ?? 'N/A',
+                          widget.farmName ?? 'N/A',
+                          widget.cropName ?? 'N/A',
                         ),
                         const SizedBox(height: 24),
                         _buildSectionTitle('Problem Analysis'),
                         _buildProblemSection(report['problem'] ?? ''),
-                        
-                        if (currentHistory.isNotEmpty || _history.isNotEmpty) ...[
+
+                        if (currentHistory.isNotEmpty ||
+                            _history.isNotEmpty) ...[
                           const SizedBox(height: 24),
                           _buildSectionTitle('Previous Inputs History'),
                           _buildHistorySection(currentHistory),
                         ],
-                        
+
                         const SizedBox(height: 24),
                         _buildSectionTitle('Recommended Products & Treatments'),
-                        _buildRecommendationsTable(report['recommendations'] ?? ''),
-                        
+                        _buildRecommendationsTable(
+                          report['recommendations'] ?? '',
+                        ),
+
                         const SizedBox(height: 24),
-                        _buildSectionTitle('Product Requirements & Estimations'),
+                        _buildSectionTitle(
+                          'Product Requirements & Estimations',
+                        ),
                         _buildCostTable(report['estimated_cost'] ?? ''),
-                        
+
                         const SizedBox(height: 48),
                         _buildFooter(report['signature_url']),
                       ],
@@ -149,14 +176,14 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
                   ),
                 ),
                 const SizedBox(height: 32),
-                
+
                 // Action Buttons
                 ElevatedButton.icon(
                   onPressed: () async {
                     // Construct a modified report map that includes the combined history for the PDF
                     final reportForPdf = Map<String, dynamic>.from(report);
                     reportForPdf['previous_inputs'] = combinedHistory;
-    
+
                     await PdfService.generateAndShare(
                       report: reportForPdf,
                       farmName: widget.farmName ?? 'Unknown Farm',
@@ -175,7 +202,9 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
                 ),
                 const SizedBox(height: 12),
                 ElevatedButton.icon(
-                  onPressed: () => Navigator.popUntil(context, (route) => route.isFirst),
+                  onPressed:
+                      () =>
+                          Navigator.popUntil(context, (route) => route.isFirst),
                   icon: const Icon(Icons.home_rounded),
                   label: const Text('Back to Dashboard'),
                   style: ElevatedButton.styleFrom(
@@ -195,29 +224,37 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isNarrow = constraints.maxWidth < 400;
-        
+
         if (isNarrow) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'NATURE BIOTIC', 
+                'NATURE BIOTIC',
                 style: TextStyle(
-                  fontSize: 24, 
-                  fontWeight: FontWeight.bold, 
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
                   color: Colors.green,
                   letterSpacing: 1.2,
-                )
+                ),
               ),
               const SizedBox(height: 2),
               Text(
-                'Agricultural Analysis & Recommendation Report', 
-                style: TextStyle(fontSize: 11, color: Colors.grey[700], fontWeight: FontWeight.w500)
+                'Agricultural Analysis & Recommendation Report',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.grey[700],
+                  fontWeight: FontWeight.w500,
+                ),
               ),
               const SizedBox(height: 8),
               Text(
-                'Date: ${_formatDate(createdAt)}', 
-                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.grey)
+                'Date: ${_formatDate(createdAt)}',
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey,
+                ),
               ),
             ],
           );
@@ -232,30 +269,34 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'NATURE BIOTIC', 
+                    'NATURE BIOTIC',
                     style: TextStyle(
-                      fontSize: 26, 
-                      fontWeight: FontWeight.bold, 
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
                       color: Colors.green,
                       letterSpacing: 1.2,
-                    )
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Agricultural Analysis & Recommendation Report', 
-                    style: TextStyle(fontSize: 12, color: Colors.grey[700], fontWeight: FontWeight.w500)
+                    'Agricultural Analysis & Recommendation Report',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[700],
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ],
               ),
             ),
             const SizedBox(width: 12),
             Text(
-              'Date: ${_formatDate(createdAt)}', 
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)
+              'Date: ${_formatDate(createdAt)}',
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
             ),
           ],
         );
-      }
+      },
     );
   }
 
@@ -283,10 +324,17 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(fontSize: 9, color: Colors.grey[600], fontWeight: FontWeight.bold)),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 9,
+            color: Colors.grey[600],
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         const SizedBox(height: 2),
         Text(
-          value, 
+          value,
           style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
           overflow: TextOverflow.ellipsis,
           maxLines: 1,
@@ -300,10 +348,17 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
       margin: const EdgeInsets.only(bottom: 12),
-      decoration: const BoxDecoration(color: Color(0xFFE8F5E9)), // Light Green 100
+      decoration: const BoxDecoration(
+        color: Color(0xFFE8F5E9),
+      ), // Light Green 100
       child: Text(
-        title.toUpperCase(), 
-        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF1B5E20), letterSpacing: 0.5)
+        title.toUpperCase(),
+        style: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.bold,
+          color: Color(0xFF1B5E20),
+          letterSpacing: 0.5,
+        ),
       ),
     );
   }
@@ -311,7 +366,7 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
   Widget _buildProblemSection(String problem) {
     final parts = problem.split(', ');
     List<Widget> widgets = [];
-    
+
     for (var part in parts) {
       if (part.contains('{img:')) {
         final problemName = part.split('{img:')[0].trim();
@@ -323,7 +378,13 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(problemName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                Text(
+                  problemName,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
@@ -332,10 +393,16 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
                     height: 160,
                     width: 260,
                     fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => Container(
-                      height: 150, width: 250, color: Colors.grey[100], 
-                      child: const Icon(Icons.image_not_supported_rounded, color: Colors.grey)
-                    ),
+                    errorBuilder:
+                        (context, error, stackTrace) => Container(
+                          height: 150,
+                          width: 250,
+                          color: Colors.grey[100],
+                          child: const Icon(
+                            Icons.image_not_supported_rounded,
+                            color: Colors.grey,
+                          ),
+                        ),
                   ),
                 ),
               ],
@@ -356,13 +423,16 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
   }
 
   Widget _buildRecommendationsTable(String recommendations) {
-    final lines = recommendations.split('\n').where((l) => l.isNotEmpty).toList();
+    final lines =
+        recommendations.split('\n').where((l) => l.isNotEmpty).toList();
     if (lines.isEmpty) return const Text('No recommendations provided.');
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: ConstrainedBox(
-        constraints: BoxConstraints(minWidth: MediaQuery.of(context).size.width - 64),
+        constraints: BoxConstraints(
+          minWidth: MediaQuery.of(context).size.width - 64,
+        ),
         child: Table(
           border: TableBorder.all(color: Colors.grey[300]!),
           columnWidths: const {
@@ -375,31 +445,71 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
             // Header
             TableRow(
               decoration: const BoxDecoration(color: Color(0xFF2E7D32)),
-              children: ['Product', 'Application', 'Dose', 'Filler'].map((h) => Padding(
-                padding: const EdgeInsets.all(10),
-                child: Text(h, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-              )).toList(),
+              children:
+                  ['Product', 'Application', 'Dose', 'Filler']
+                      .map(
+                        (h) => Padding(
+                          padding: const EdgeInsets.all(10),
+                          child: Text(
+                            h,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(),
             ),
             // Rows
             ...lines.map((line) {
               final parts = line.split(' - ');
-              if (parts.length < 2) return TableRow(children: [Padding(padding: const EdgeInsets.all(8), child: Text(line)), const SizedBox(), const SizedBox(), const SizedBox()]);
-              
-              final prodPart = parts[0]; 
-              final detailsPart = parts[1]; 
-              
-              final prodName = prodPart.contains('(') ? prodPart.split('(')[0].trim() : prodPart;
-              final app = prodPart.contains('(') ? prodPart.split('(')[1].replaceAll(')', '').trim() : '';
-              
+              if (parts.length < 2)
+                return TableRow(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Text(line),
+                    ),
+                    const SizedBox(),
+                    const SizedBox(),
+                    const SizedBox(),
+                  ],
+                );
+
+              final prodPart = parts[0];
+              final detailsPart = parts[1];
+
+              final prodName =
+                  prodPart.contains('(')
+                      ? prodPart.split('(')[0].trim()
+                      : prodPart;
+              final app =
+                  prodPart.contains('(')
+                      ? prodPart.split('(')[1].replaceAll(')', '').trim()
+                      : '';
+
               final detailParts = detailsPart.split(', ');
               final dose = detailParts[0].replaceAll('Dose: ', '').trim();
-              final filler = detailParts.length > 1 ? detailParts[1].replaceAll('Filler: ', '').trim() : '';
-              
+              final filler =
+                  detailParts.length > 1
+                      ? detailParts[1].replaceAll('Filler: ', '').trim()
+                      : '';
+
               return TableRow(
-                children: [prodName, app, dose, filler].map((t) => Padding(
-                  padding: const EdgeInsets.all(10),
-                  child: Text(t, style: const TextStyle(fontSize: 12)),
-                )).toList(),
+                children:
+                    [prodName, app, dose, filler]
+                        .map(
+                          (t) => Padding(
+                            padding: const EdgeInsets.all(10),
+                            child: Text(
+                              t,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        )
+                        .toList(),
               );
             }),
           ],
@@ -429,17 +539,35 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
       final parts = line.split(' - ');
       if (parts.length < 2) continue;
 
-      final prodPart = parts[0]; 
-      final detailsPart = parts[1]; 
+      final prodPart = parts[0];
+      final detailsPart = parts[1];
 
-      final prodName = prodPart.contains('(Pkg:') ? prodPart.split('(Pkg:')[0].trim() : prodPart;
-      final pkg = prodPart.contains('(Pkg:') ? prodPart.split('(Pkg:')[1].replaceAll(')', '').trim() : '';
+      final prodName =
+          prodPart.contains('(Pkg:')
+              ? prodPart.split('(Pkg:')[0].trim()
+              : prodPart;
+      final pkg =
+          prodPart.contains('(Pkg:')
+              ? prodPart.split('(Pkg:')[1].replaceAll(')', '').trim()
+              : '';
 
       final detailParts = detailsPart.split(', ');
-      final qty = detailParts.length > 0 ? detailParts[0].replaceAll('Qty: ', '').trim() : '';
-      final mrp = detailParts.length > 1 ? detailParts[1].replaceAll('MRP: ', '').trim() : '';
-      final offer = detailParts.length > 2 ? detailParts[2].replaceAll('Offer: ', '').trim() : '';
-      final total = detailParts.length > 3 ? detailParts[3].replaceAll('Total: ', '').trim() : '';
+      final qty =
+          detailParts.isNotEmpty
+              ? detailParts[0].replaceAll('Qty: ', '').trim()
+              : '';
+      final mrp =
+          detailParts.length > 1
+              ? detailParts[1].replaceAll('MRP: ', '').trim()
+              : '';
+      final offer =
+          detailParts.length > 2
+              ? detailParts[2].replaceAll('Offer: ', '').trim()
+              : '';
+      final total =
+          detailParts.length > 3
+              ? detailParts[3].replaceAll('Total: ', '').trim()
+              : '';
 
       tableData.add([prodName, pkg, qty, mrp, offer, total]);
     }
@@ -461,18 +589,40 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
               // Header
               TableRow(
                 decoration: const BoxDecoration(color: Color(0xFF2E7D32)),
-                children: ['Product', 'Size', 'Qty', 'MRP', 'Price', 'Value'].map((h) => Padding(
-                  padding: const EdgeInsets.all(6),
-                  child: Text(h, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10)),
-                )).toList(),
+                children:
+                    ['Product', 'Size', 'Qty', 'MRP', 'Price', 'Value']
+                        .map(
+                          (h) => Padding(
+                            padding: const EdgeInsets.all(6),
+                            child: Text(
+                              h,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(),
               ),
               // Rows
-              ...tableData.map((row) => TableRow(
-                children: row.map((t) => Padding(
-                  padding: const EdgeInsets.all(6),
-                  child: Text(t, style: const TextStyle(fontSize: 10)),
-                )).toList(),
-              )),
+              ...tableData.map(
+                (row) => TableRow(
+                  children:
+                      row
+                          .map(
+                            (t) => Padding(
+                              padding: const EdgeInsets.all(6),
+                              child: Text(
+                                t,
+                                style: const TextStyle(fontSize: 10),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                ),
+              ),
             ],
           ),
         ),
@@ -482,13 +632,21 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
           children: [
             Expanded(
               child: Text(
-                'Next Visit Date: $nextVisit', 
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF2E7D32))
+                'Next Visit Date: $nextVisit',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: Color(0xFF2E7D32),
+                ),
               ),
             ),
             Text(
-              'GRAND TOTAL: $grandTotal', 
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1B5E20))
+              'GRAND TOTAL: $grandTotal',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1B5E20),
+              ),
             ),
           ],
         ),
@@ -512,14 +670,22 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
               SizedBox(width: 12),
               Text(
                 'Current Visit Observations',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textBlack),
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textBlack,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 12),
           Text(
             currentHistory.isEmpty ? 'No data provided.' : currentHistory,
-            style: TextStyle(fontSize: 13, color: AppColors.textBlack.withOpacity(0.8), height: 1.5),
+            style: TextStyle(
+              fontSize: 13,
+              color: AppColors.textBlack.withOpacity(0.8),
+              height: 1.5,
+            ),
           ),
           if (_isLoadingHistory)
             const Padding(
@@ -527,20 +693,42 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
               child: LinearProgressIndicator(minHeight: 2),
             )
           else if (_history.isNotEmpty) ...[
-            const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider()),
-            const Text('Historical Logs', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.primary)),
-            const SizedBox(height: 12),
-            ..._history.map((h) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(_formatDate(h['created_at']), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: AppColors.textGray)),
-                  const SizedBox(height: 4),
-                  Text(h['previous_inputs'] ?? 'No data', style: const TextStyle(fontSize: 12)),
-                ],
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Divider(),
+            ),
+            const Text(
+              'Historical Logs',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+                color: AppColors.primary,
               ),
-            )),
+            ),
+            const SizedBox(height: 12),
+            ..._history.map(
+              (h) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _formatDate(h['created_at']),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                        color: AppColors.textGray,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      h['previous_inputs'] ?? 'No data',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ],
         ],
       ),
@@ -558,10 +746,18 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Nature Biotic Executive Signature', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                const Text(
+                  'Nature Biotic Executive Signature',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(height: 12),
                 if (signatureUrl != null)
-                  Image.network(signatureUrl, height: 50, width: 150, fit: BoxFit.contain)
+                  Image.network(
+                    signatureUrl,
+                    height: 50,
+                    width: 150,
+                    fit: BoxFit.contain,
+                  )
                 else
                   const SizedBox(height: 50),
                 Container(width: 150, height: 1, color: Colors.grey[400]),
@@ -569,8 +765,12 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
             ),
             const Expanded(
               child: Text(
-                'Thank you for choosing Nature Biotic for a sustainable future.', 
-                style: TextStyle(fontSize: 10, fontStyle: FontStyle.italic, color: Colors.grey),
+                'Thank you for choosing Nature Biotic for a sustainable future.',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontStyle: FontStyle.italic,
+                  color: Colors.grey,
+                ),
                 textAlign: TextAlign.right,
               ),
             ),

@@ -48,31 +48,38 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
 
   Future<void> _fetchOptions() async {
     if (_selectedType == null) return;
-    
+
     setState(() => _isLoading = true);
     try {
       if (_selectedType == 'problem_item') {
         if (_problemCategories.isEmpty) {
-          _problemCategories = await SupabaseService.getDropdownOptions('problem_category');
+          _problemCategories = await SupabaseService.getDropdownOptions(
+            'problem_category',
+          );
         }
-        
+
         if (_masterCrops.isEmpty) {
           _masterCrops = await SupabaseService.getMasterCrops();
         }
-        
+
         if (_selectedParentId == null && _problemCategories.isNotEmpty) {
           _selectedParentId = _problemCategories[0]['id'];
         }
-        
+
         if (_selectedParentId != null) {
-          _options = await SupabaseService.getDropdownOptions(_selectedType!, parentId: _selectedParentId);
+          _options = await SupabaseService.getDropdownOptions(
+            _selectedType!,
+            parentId: _selectedParentId,
+          );
         } else {
           _options = [];
         }
       } else if (_selectedType == 'master_crop') {
         _options = await SupabaseService.getMasterCrops();
       } else if (_selectedType == 'product_name') {
-        _options = await SupabaseService.getHierarchicalDropdownOptions('product_name');
+        _options = await SupabaseService.getHierarchicalDropdownOptions(
+          'product_name',
+        );
       } else {
         _options = await SupabaseService.getDropdownOptions(_selectedType!);
       }
@@ -80,12 +87,17 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
     } catch (e) {
       if (mounted) {
         final errorStr = e.toString();
-        if (errorStr.contains('PGRST205') || errorStr.contains('PGRST200') || 
-            errorStr.contains('dropdown_options') || errorStr.contains('master_crops')) {
+        if (errorStr.contains('PGRST205') ||
+            errorStr.contains('PGRST200') ||
+            errorStr.contains('dropdown_options') ||
+            errorStr.contains('master_crops')) {
           setState(() => _tableMissing = true);
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error fetching options: $e'), backgroundColor: Colors.red),
+            SnackBar(
+              content: Text('Error fetching options: $e'),
+              backgroundColor: Colors.red,
+            ),
           );
         }
       }
@@ -106,70 +118,81 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
 
     final result = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Add ${_typeLabels[_selectedType]}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: controller,
-              decoration: const InputDecoration(labelText: 'Product/Label Name'),
-              autofocus: true,
-            ),
-            if (_selectedType == 'product_name') ...[
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: mrpController,
-                      decoration: const InputDecoration(labelText: 'MRP'),
-                      keyboardType: TextInputType.number,
-                    ),
+      builder:
+          (context) => AlertDialog(
+            title: Text('Add ${_typeLabels[_selectedType]}'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: controller,
+                  decoration: const InputDecoration(
+                    labelText: 'Product/Label Name',
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: offerController,
-                      decoration: const InputDecoration(labelText: 'Offer Price'),
-                      keyboardType: TextInputType.number,
-                    ),
+                  autofocus: true,
+                ),
+                if (_selectedType == 'product_name') ...[
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: mrpController,
+                          decoration: const InputDecoration(labelText: 'MRP'),
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: offerController,
+                          decoration: const InputDecoration(
+                            labelText: 'Offer Price',
+                          ),
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Add'),
               ),
             ],
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Add'),
           ),
-        ],
-      ),
     );
 
     if (result == true && controller.text.isNotEmpty) {
       setState(() => _isLoading = true);
       try {
         final newOption = await SupabaseService.addDropdownOption(
-          _selectedType!, 
-          controller.text.trim(), 
+          _selectedType!,
+          controller.text.trim(),
           parentId: _selectedParentId,
           mrp: double.tryParse(mrpController.text),
           offerPrice: double.tryParse(offerController.text),
         );
-        
+
         if (_selectedType == 'problem_item') {
           await _showCropMappingDialog(newOption);
         }
-        
+
         await _fetchOptions();
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error adding option: $e'), backgroundColor: Colors.red),
+            SnackBar(
+              content: Text('Error adding option: $e'),
+              backgroundColor: Colors.red,
+            ),
           );
         }
       } finally {
@@ -179,26 +202,32 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
   }
 
   // --- Hierarchical Crop Methods ---
-  
+
   Future<void> _addMasterCrop() async {
     final controller = TextEditingController();
     final result = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add New Crop'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(labelText: 'Crop Name (e.g. Lemon)'),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Add'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Add New Crop'),
+            content: TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                labelText: 'Crop Name (e.g. Lemon)',
+              ),
+              autofocus: true,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Add'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
 
     if (result == true && controller.text.isNotEmpty) {
@@ -209,7 +238,10 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error adding crop: $e'), backgroundColor: Colors.red),
+            SnackBar(
+              content: Text('Error adding crop: $e'),
+              backgroundColor: Colors.red,
+            ),
           );
           setState(() => _isLoading = false);
         }
@@ -217,52 +249,78 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
     }
   }
 
-  Future<void> _addOrEditVariety(int cropId, [Map<String, dynamic>? variety]) async {
-    final varietyController = TextEditingController(text: variety?['variety_name']);
+  Future<void> _addOrEditVariety(
+    int cropId, [
+    Map<String, dynamic>? variety,
+  ]) async {
+    final varietyController = TextEditingController(
+      text: variety?['variety_name'],
+    );
     final lifeController = TextEditingController(text: variety?['life']);
 
     final result = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(variety == null ? 'Add Variety' : 'Edit Variety'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: varietyController,
-              decoration: const InputDecoration(labelText: 'Variety Name', hintText: 'e.g. Alphonso'),
-              autofocus: true,
+      builder:
+          (context) => AlertDialog(
+            title: Text(variety == null ? 'Add Variety' : 'Edit Variety'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: varietyController,
+                  decoration: const InputDecoration(
+                    labelText: 'Variety Name',
+                    hintText: 'e.g. Alphonso',
+                  ),
+                  autofocus: true,
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: lifeController,
+                  decoration: const InputDecoration(
+                    labelText: 'Life Cycle',
+                    hintText: 'e.g. 20 Years',
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: lifeController,
-              decoration: const InputDecoration(labelText: 'Life Cycle', hintText: 'e.g. 20 Years'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(variety == null ? 'Add' : 'Save'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: Text(variety == null ? 'Add' : 'Save'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
 
     if (result == true && varietyController.text.isNotEmpty) {
       setState(() => _isLoading = true);
       try {
         if (variety == null) {
-          await SupabaseService.addMasterVariety(cropId, varietyController.text.trim(), lifeController.text.trim());
+          await SupabaseService.addMasterVariety(
+            cropId,
+            varietyController.text.trim(),
+            lifeController.text.trim(),
+          );
         } else {
-          await SupabaseService.updateMasterVariety(variety['id'], varietyController.text.trim(), lifeController.text.trim());
+          await SupabaseService.updateMasterVariety(
+            variety['id'],
+            varietyController.text.trim(),
+            lifeController.text.trim(),
+          );
         }
         await _fetchOptions();
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error saving variety: $e'), backgroundColor: Colors.red),
+            SnackBar(
+              content: Text('Error saving variety: $e'),
+              backgroundColor: Colors.red,
+            ),
           );
           setState(() => _isLoading = false);
         }
@@ -273,18 +331,24 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
   Future<void> _deleteMasterCrop(Map<String, dynamic> crop) async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Crop'),
-        content: Text('Are you sure you want to delete "${crop['name']}" and all its varieties?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Delete'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Delete Crop'),
+            content: Text(
+              'Are you sure you want to delete "${crop['name']}" and all its varieties?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                child: const Text('Delete'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
 
     if (confirm == true) {
@@ -295,7 +359,10 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error deleting crop: $e'), backgroundColor: Colors.red),
+            SnackBar(
+              content: Text('Error deleting crop: $e'),
+              backgroundColor: Colors.red,
+            ),
           );
           setState(() => _isLoading = false);
         }
@@ -306,18 +373,24 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
   Future<void> _deleteMasterVariety(Map<String, dynamic> variety) async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Variety'),
-        content: Text('Are you sure you want to delete "${variety['variety_name']}"?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Delete'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Delete Variety'),
+            content: Text(
+              'Are you sure you want to delete "${variety['variety_name']}"?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                child: const Text('Delete'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
 
     if (confirm == true) {
@@ -328,7 +401,10 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error deleting variety: $e'), backgroundColor: Colors.red),
+            SnackBar(
+              content: Text('Error deleting variety: $e'),
+              backgroundColor: Colors.red,
+            ),
           );
           setState(() => _isLoading = false);
         }
@@ -340,60 +416,72 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
 
   Future<void> _editOption(Map<String, dynamic> option) async {
     final controller = TextEditingController(text: option['label']);
-    final mrpController = TextEditingController(text: option['mrp']?.toString());
-    final offerController = TextEditingController(text: option['offer_price']?.toString());
+    final mrpController = TextEditingController(
+      text: option['mrp']?.toString(),
+    );
+    final offerController = TextEditingController(
+      text: option['offer_price']?.toString(),
+    );
 
     final result = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Edit ${_typeLabels[_selectedType]}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: controller,
-              decoration: const InputDecoration(labelText: 'Product/Label Name'),
-              autofocus: true,
-            ),
-            if (_selectedType == 'product_name') ...[
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: mrpController,
-                      decoration: const InputDecoration(labelText: 'MRP'),
-                      keyboardType: TextInputType.number,
-                    ),
+      builder:
+          (context) => AlertDialog(
+            title: Text('Edit ${_typeLabels[_selectedType]}'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: controller,
+                  decoration: const InputDecoration(
+                    labelText: 'Product/Label Name',
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: offerController,
-                      decoration: const InputDecoration(labelText: 'Offer Price'),
-                      keyboardType: TextInputType.number,
-                    ),
+                  autofocus: true,
+                ),
+                if (_selectedType == 'product_name') ...[
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: mrpController,
+                          decoration: const InputDecoration(labelText: 'MRP'),
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: offerController,
+                          decoration: const InputDecoration(
+                            labelText: 'Offer Price',
+                          ),
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Save'),
               ),
             ],
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Save'),
           ),
-        ],
-      ),
     );
 
     if (result == true && controller.text.isNotEmpty) {
       setState(() => _isLoading = true);
       try {
         await SupabaseService.updateDropdownOption(
-          option['id'], 
+          option['id'],
           controller.text.trim(),
           mrp: double.tryParse(mrpController.text),
           offerPrice: double.tryParse(offerController.text),
@@ -402,7 +490,10 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error updating option: $e'), backgroundColor: Colors.red),
+            SnackBar(
+              content: Text('Error updating option: $e'),
+              backgroundColor: Colors.red,
+            ),
           );
         }
       } finally {
@@ -414,18 +505,24 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
   Future<void> _deleteOption(Map<String, dynamic> option) async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Confirm Delete'),
-        content: Text('Are you sure you want to delete "${option['label']}"?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Delete'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Confirm Delete'),
+            content: Text(
+              'Are you sure you want to delete "${option['label']}"?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                child: const Text('Delete'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
 
     if (confirm == true) {
@@ -436,7 +533,10 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error deleting option: $e'), backgroundColor: Colors.red),
+            SnackBar(
+              content: Text('Error deleting option: $e'),
+              backgroundColor: Colors.red,
+            ),
           );
         }
       } finally {
@@ -446,63 +546,76 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
   }
 
   Future<void> _showCropMappingDialog(Map<String, dynamic> problem) async {
-    final existingMappings = await SupabaseService.getCropProblemMappings(problem['id']);
-    final List<int> selectedCropIds = existingMappings.map((m) => m['crop_id'] as int).toList();
+    final existingMappings = await SupabaseService.getCropProblemMappings(
+      problem['id'],
+    );
+    final List<int> selectedCropIds =
+        existingMappings.map((m) => m['crop_id'] as int).toList();
 
     if (!mounted) return;
 
     await showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            title: Text('Link "${problem['label']}" to Crops'),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: _masterCrops.length,
-                itemBuilder: (context, index) {
-                  final crop = _masterCrops[index];
-                  final isSelected = selectedCropIds.contains(crop['id']);
-                  return CheckboxListTile(
-                    title: Text(crop['name']),
-                    value: isSelected,
-                    activeColor: AppColors.primary,
-                    onChanged: (bool? value) {
-                      setDialogState(() {
-                        if (value == true) {
-                          selectedCropIds.add(crop['id']);
-                        } else {
-                          selectedCropIds.remove(crop['id']);
-                        }
-                      });
-                    },
-                  );
-                },
-              ),
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Skip')),
-              ElevatedButton(
-                onPressed: () async {
-                  try {
-                    await SupabaseService.updateCropProblemMappings(problem['id'], selectedCropIds);
-                    if (context.mounted) Navigator.pop(context);
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Error saving mappings: $e'), backgroundColor: Colors.red),
+      builder:
+          (context) => StatefulBuilder(
+            builder: (context, setDialogState) {
+              return AlertDialog(
+                title: Text('Link "${problem['label']}" to Crops'),
+                content: SizedBox(
+                  width: double.maxFinite,
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: _masterCrops.length,
+                    itemBuilder: (context, index) {
+                      final crop = _masterCrops[index];
+                      final isSelected = selectedCropIds.contains(crop['id']);
+                      return CheckboxListTile(
+                        title: Text(crop['name']),
+                        value: isSelected,
+                        activeColor: AppColors.primary,
+                        onChanged: (bool? value) {
+                          setDialogState(() {
+                            if (value == true) {
+                              selectedCropIds.add(crop['id']);
+                            } else {
+                              selectedCropIds.remove(crop['id']);
+                            }
+                          });
+                        },
                       );
-                    }
-                  }
-                },
-                child: const Text('Save Links'),
-              ),
-            ],
-          );
-        }
-      ),
+                    },
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Skip'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () async {
+                      try {
+                        await SupabaseService.updateCropProblemMappings(
+                          problem['id'],
+                          selectedCropIds,
+                        );
+                        if (context.mounted) Navigator.pop(context);
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Error saving mappings: $e'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      }
+                    },
+                    child: const Text('Save Links'),
+                  ),
+                ],
+              );
+            },
+          ),
     );
   }
 
@@ -510,123 +623,168 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Drop down Creator'),
-      ),
-      body: _tableMissing ? _buildSetupGuide() : Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 900),
-          child: Column(
-            children: [
-              // Header / Type Selector
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.only(bottomLeft: Radius.circular(32), bottomRight: Radius.circular(32)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Select Dropdown Type',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                    ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      value: _selectedType,
-                      decoration: const InputDecoration(
-                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      ),
-                      hint: const Text('Choose a category to manage'),
-                      items: _typeLabels.entries.map((e) => DropdownMenuItem(
-                        value: e.key,
-                        child: Text(e.value),
-                      )).toList(),
-                      onChanged: (v) {
-                        setState(() {
-                          _selectedType = v;
-                          _selectedParentId = null;
-                          _options = [];
-                        });
-                        _fetchOptions();
-                      },
-                    ),
-                    if (_selectedType == 'problem_item') ...[
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Select Parent Category',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                      ),
-                      const SizedBox(height: 8),
-                      DropdownButtonFormField<int>(
-                        value: _selectedParentId,
-                        decoration: const InputDecoration(
-                          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      appBar: AppBar(title: const Text('Drop down Creator')),
+      body:
+          _tableMissing
+              ? _buildSetupGuide()
+              : Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 900),
+                  child: Column(
+                    children: [
+                      // Header / Type Selector
+                      Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.only(
+                            bottomLeft: Radius.circular(32),
+                            bottomRight: Radius.circular(32),
+                          ),
                         ),
-                        items: _problemCategories.map((c) => DropdownMenuItem<int>(
-                          value: c['id'],
-                          child: Text(c['label']),
-                        )).toList(),
-                        onChanged: (v) {
-                          setState(() => _selectedParentId = v);
-                          _fetchOptions();
-                        },
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              
-              // List View (Combined for flat and hierarchical)
-              Expanded(
-                child: _isLoading 
-                  ? const Center(child: CircularProgressIndicator())
-                  : _selectedType == null
-                    ? const Center(
                         child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(Icons.list_alt_rounded, size: 64, color: AppColors.secondary),
-                            SizedBox(height: 16),
-                            Text('Please select a dropdown type above', style: TextStyle(color: AppColors.textGray)),
-                          ],
-                        ),
-                      )
-                    : _options.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Text('No options found for this category'),
+                            const Text(
+                              'Select Dropdown Type',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            DropdownButtonFormField<String>(
+                              initialValue: _selectedType,
+                              decoration: const InputDecoration(
+                                contentPadding: EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                              ),
+                              hint: const Text('Choose a category to manage'),
+                              items:
+                                  _typeLabels.entries
+                                      .map(
+                                        (e) => DropdownMenuItem(
+                                          value: e.key,
+                                          child: Text(e.value),
+                                        ),
+                                      )
+                                      .toList(),
+                              onChanged: (v) {
+                                setState(() {
+                                  _selectedType = v;
+                                  _selectedParentId = null;
+                                  _options = [];
+                                });
+                                _fetchOptions();
+                              },
+                            ),
+                            if (_selectedType == 'problem_item') ...[
                               const SizedBox(height: 16),
-                              ElevatedButton.icon(
-                                onPressed: _addOption,
-                                icon: const Icon(Icons.add),
-                                label: const Text('Add First Option'),
+                              const Text(
+                                'Select Parent Category',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              DropdownButtonFormField<int>(
+                                initialValue: _selectedParentId,
+                                decoration: const InputDecoration(
+                                  contentPadding: EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 12,
+                                  ),
+                                ),
+                                items:
+                                    _problemCategories
+                                        .map(
+                                          (c) => DropdownMenuItem<int>(
+                                            value: c['id'],
+                                            child: Text(c['label']),
+                                          ),
+                                        )
+                                        .toList(),
+                                onChanged: (v) {
+                                  setState(() => _selectedParentId = v);
+                                  _fetchOptions();
+                                },
                               ),
                             ],
-                          ),
-                        )
-                      : _selectedType == 'master_crop' 
-                        ? _buildCropListView()
-                        : _selectedType == 'product_name'
-                          ? _buildHierarchicalProductView()
-                          : _buildFlatListView(),
+                          ],
+                        ),
+                      ),
+
+                      // List View (Combined for flat and hierarchical)
+                      Expanded(
+                        child:
+                            _isLoading
+                                ? const Center(
+                                  child: CircularProgressIndicator(),
+                                )
+                                : _selectedType == null
+                                ? const Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.list_alt_rounded,
+                                        size: 64,
+                                        color: AppColors.secondary,
+                                      ),
+                                      SizedBox(height: 16),
+                                      Text(
+                                        'Please select a dropdown type above',
+                                        style: TextStyle(
+                                          color: AppColors.textGray,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                                : _options.isEmpty
+                                ? Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Text(
+                                        'No options found for this category',
+                                      ),
+                                      const SizedBox(height: 16),
+                                      ElevatedButton.icon(
+                                        onPressed: _addOption,
+                                        icon: const Icon(Icons.add),
+                                        label: const Text('Add First Option'),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                                : _selectedType == 'master_crop'
+                                ? _buildCropListView()
+                                : _selectedType == 'product_name'
+                                ? _buildHierarchicalProductView()
+                                : _buildFlatListView(),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ],
-          ),
-        ),
-      ),
-      floatingActionButton: _selectedType != null && !_isLoading && !_tableMissing
-        ? FloatingActionButton.extended(
-            heroTag: 'dropdown_fab',
-            onPressed: _addOption,
-            label: Text(_selectedType == 'master_crop' ? 'Add New Category' : 'Add Option'),
-            icon: const Icon(Icons.add),
-            backgroundColor: AppColors.primary,
-          )
-        : null,
+      floatingActionButton:
+          _selectedType != null && !_isLoading && !_tableMissing
+              ? FloatingActionButton.extended(
+                heroTag: 'dropdown_fab',
+                onPressed: _addOption,
+                label: Text(
+                  _selectedType == 'master_crop'
+                      ? 'Add New Category'
+                      : 'Add Option',
+                ),
+                icon: const Icon(Icons.add),
+                backgroundColor: AppColors.primary,
+              )
+              : null,
     );
   }
 
@@ -658,24 +816,40 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
                   children: [
                     Text(
                       option['label'],
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
                     if (_selectedType == 'product_name') ...[
                       const SizedBox(height: 4),
                       Text(
                         'MRP: ₹${option['mrp'] ?? 0} | Offer: ₹${option['offer_price'] ?? 0}',
-                        style: const TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w600),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ],
                     if (_selectedType == 'problem_item')
                       FutureBuilder<List<Map<String, dynamic>>>(
-                        future: SupabaseService.getCropProblemMappings(option['id']),
+                        future: SupabaseService.getCropProblemMappings(
+                          option['id'],
+                        ),
                         builder: (context, snapshot) {
-                          if (!snapshot.hasData || snapshot.data!.isEmpty) return const SizedBox.shrink();
-                          final crops = snapshot.data!.map((m) => m['master_crops']?['name'] ?? 'N/A').join(', ');
+                          if (!snapshot.hasData || snapshot.data!.isEmpty)
+                            return const SizedBox.shrink();
+                          final crops = snapshot.data!
+                              .map((m) => m['master_crops']?['name'] ?? 'N/A')
+                              .join(', ');
                           return Text(
                             'Common in: $crops',
-                            style: const TextStyle(fontSize: 11, color: AppColors.primary, fontWeight: FontWeight.w500),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w500,
+                            ),
                           );
                         },
                       ),
@@ -684,11 +858,19 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
               ),
               const Spacer(),
               IconButton(
-                icon: const Icon(Icons.edit_outlined, color: AppColors.primary, size: 20),
+                icon: const Icon(
+                  Icons.edit_outlined,
+                  color: AppColors.primary,
+                  size: 20,
+                ),
                 onPressed: () => _editOption(option),
               ),
               IconButton(
-                icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
+                icon: const Icon(
+                  Icons.delete_outline_rounded,
+                  color: Colors.red,
+                  size: 20,
+                ),
                 onPressed: () => _deleteOption(option),
               ),
             ],
@@ -705,7 +887,7 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
       itemBuilder: (context, index) {
         final crop = _options[index];
         final List varieties = crop['master_crop_varieties'] ?? [];
-        
+
         return Container(
           margin: const EdgeInsets.only(bottom: 16),
           decoration: BoxDecoration(
@@ -724,18 +906,29 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
             child: ExpansionTile(
               leading: CircleAvatar(
                 backgroundColor: AppColors.secondary.withOpacity(0.5),
-                child: const Icon(Icons.eco_rounded, color: AppColors.primary, size: 20),
+                child: const Icon(
+                  Icons.eco_rounded,
+                  color: AppColors.primary,
+                  size: 20,
+                ),
               ),
               title: Text(
                 crop['name'],
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
               ),
               subtitle: Text('${varieties.length} varieties established'),
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.delete_outline_rounded, color: Colors.black26, size: 18),
+                    icon: const Icon(
+                      Icons.delete_outline_rounded,
+                      color: Colors.black26,
+                      size: 18,
+                    ),
                     onPressed: () => _deleteMasterCrop(crop),
                   ),
                   const Icon(Icons.expand_more_rounded),
@@ -743,24 +936,40 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
               ),
               children: [
                 const Divider(height: 1, indent: 16, endIndent: 16),
-                ...varieties.map((v) => ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
-                  title: Text(v['variety_name'], style: const TextStyle(fontWeight: FontWeight.w600)),
-                  subtitle: Text('Expected Life: ${v['life'] ?? 'Not set'}'),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.edit_outlined, color: AppColors.primary, size: 18),
-                        onPressed: () => _addOrEditVariety(crop['id'], v),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 18),
-                        onPressed: () => _deleteMasterVariety(v),
-                      ),
-                    ],
+                ...varieties.map(
+                  (v) => ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 4,
+                    ),
+                    title: Text(
+                      v['variety_name'],
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Text('Expected Life: ${v['life'] ?? 'Not set'}'),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(
+                            Icons.edit_outlined,
+                            color: AppColors.primary,
+                            size: 18,
+                          ),
+                          onPressed: () => _addOrEditVariety(crop['id'], v),
+                        ),
+                        IconButton(
+                          icon: const Icon(
+                            Icons.delete_outline_rounded,
+                            color: Colors.red,
+                            size: 18,
+                          ),
+                          onPressed: () => _deleteMasterVariety(v),
+                        ),
+                      ],
+                    ),
                   ),
-                )),
+                ),
                 Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: TextButton.icon(
@@ -778,7 +987,10 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
   }
 
   Widget _buildHierarchicalProductView() {
-    if (_options.isEmpty) return const Center(child: Text('No products found. Add one to get started.'));
+    if (_options.isEmpty)
+      return const Center(
+        child: Text('No products found. Add one to get started.'),
+      );
 
     return ListView.builder(
       padding: const EdgeInsets.all(24),
@@ -805,18 +1017,29 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
             child: ExpansionTile(
               leading: CircleAvatar(
                 backgroundColor: AppColors.secondary.withOpacity(0.5),
-                child: const Icon(Icons.inventory_2_rounded, color: AppColors.primary, size: 20),
+                child: const Icon(
+                  Icons.inventory_2_rounded,
+                  color: AppColors.primary,
+                  size: 20,
+                ),
               ),
               title: Text(
                 product['label'],
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
               ),
               subtitle: Text('${variants.length} package sizes available'),
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.delete_outline_rounded, color: Colors.black26, size: 18),
+                    icon: const Icon(
+                      Icons.delete_outline_rounded,
+                      color: Colors.black26,
+                      size: 18,
+                    ),
                     onPressed: () => _deleteOption(product),
                   ),
                   const Icon(Icons.expand_more_rounded),
@@ -824,24 +1047,42 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
               ),
               children: [
                 const Divider(height: 1, indent: 16, endIndent: 16),
-                ...variants.map((v) => ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
-                  title: Text(v['label'], style: const TextStyle(fontWeight: FontWeight.w600)),
-                  subtitle: Text('MRP: ₹${v['mrp'] ?? 0} | Offer: ₹${v['offer_price'] ?? 0}'),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.edit_outlined, color: AppColors.primary, size: 18),
-                        onPressed: () => _editVariant(product['id'], v),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 18),
-                        onPressed: () => _deleteOption(v),
-                      ),
-                    ],
+                ...variants.map(
+                  (v) => ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 4,
+                    ),
+                    title: Text(
+                      v['label'],
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Text(
+                      'MRP: ₹${v['mrp'] ?? 0} | Offer: ₹${v['offer_price'] ?? 0}',
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(
+                            Icons.edit_outlined,
+                            color: AppColors.primary,
+                            size: 18,
+                          ),
+                          onPressed: () => _editVariant(product['id'], v),
+                        ),
+                        IconButton(
+                          icon: const Icon(
+                            Icons.delete_outline_rounded,
+                            color: Colors.red,
+                            size: 18,
+                          ),
+                          onPressed: () => _deleteOption(v),
+                        ),
+                      ],
+                    ),
                   ),
-                )),
+                ),
                 Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Wrap(
@@ -877,53 +1118,61 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
 
     final result = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add Package Size'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: controller,
-              decoration: const InputDecoration(labelText: 'Size (e.g. 500ml)'),
-              autofocus: true,
-            ),
-            const SizedBox(height: 16),
-            Row(
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Add Package Size'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: mrpController,
-                    decoration: const InputDecoration(labelText: 'MRP'),
-                    keyboardType: TextInputType.number,
+                TextField(
+                  controller: controller,
+                  decoration: const InputDecoration(
+                    labelText: 'Size (e.g. 500ml)',
                   ),
+                  autofocus: true,
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: offerController,
-                    decoration: const InputDecoration(labelText: 'Offer Price'),
-                    keyboardType: TextInputType.number,
-                  ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: mrpController,
+                        decoration: const InputDecoration(labelText: 'MRP'),
+                        keyboardType: TextInputType.number,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: offerController,
+                        decoration: const InputDecoration(
+                          labelText: 'Offer Price',
+                        ),
+                        keyboardType: TextInputType.number,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Add'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Add'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
 
     if (result == true && controller.text.isNotEmpty) {
       setState(() => _isLoading = true);
       try {
         await SupabaseService.addDropdownOption(
-          'product_name', 
+          'product_name',
           controller.text.trim(),
           parentId: productId,
           mrp: double.tryParse(mrpController.text),
@@ -933,7 +1182,10 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error adding variant: $e'), backgroundColor: Colors.red),
+            SnackBar(
+              content: Text('Error adding variant: $e'),
+              backgroundColor: Colors.red,
+            ),
           );
         }
       } finally {
@@ -944,58 +1196,70 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
 
   Future<void> _editVariant(int productId, Map<String, dynamic> variant) async {
     final controller = TextEditingController(text: variant['label']);
-    final mrpController = TextEditingController(text: variant['mrp']?.toString());
-    final offerController = TextEditingController(text: variant['offer_price']?.toString());
+    final mrpController = TextEditingController(
+      text: variant['mrp']?.toString(),
+    );
+    final offerController = TextEditingController(
+      text: variant['offer_price']?.toString(),
+    );
 
     final result = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit Package Size'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: controller,
-              decoration: const InputDecoration(labelText: 'Size (e.g. 500ml)'),
-              autofocus: true,
-            ),
-            const SizedBox(height: 16),
-            Row(
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Edit Package Size'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: mrpController,
-                    decoration: const InputDecoration(labelText: 'MRP'),
-                    keyboardType: TextInputType.number,
+                TextField(
+                  controller: controller,
+                  decoration: const InputDecoration(
+                    labelText: 'Size (e.g. 500ml)',
                   ),
+                  autofocus: true,
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: offerController,
-                    decoration: const InputDecoration(labelText: 'Offer Price'),
-                    keyboardType: TextInputType.number,
-                  ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: mrpController,
+                        decoration: const InputDecoration(labelText: 'MRP'),
+                        keyboardType: TextInputType.number,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: offerController,
+                        decoration: const InputDecoration(
+                          labelText: 'Offer Price',
+                        ),
+                        keyboardType: TextInputType.number,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Save'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Save'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
 
     if (result == true && controller.text.isNotEmpty) {
       setState(() => _isLoading = true);
       try {
         await SupabaseService.updateDropdownOption(
-          variant['id'], 
+          variant['id'],
           controller.text.trim(),
           mrp: double.tryParse(mrpController.text),
           offerPrice: double.tryParse(offerController.text),
@@ -1004,7 +1268,10 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error updating variant: $e'), backgroundColor: Colors.red),
+            SnackBar(
+              content: Text('Error updating variant: $e'),
+              backgroundColor: Colors.red,
+            ),
           );
         }
       } finally {
@@ -1019,7 +1286,11 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 64),
+          const Icon(
+            Icons.warning_amber_rounded,
+            color: Colors.orange,
+            size: 64,
+          ),
           const SizedBox(height: 24),
           const Text(
             'Database Setup Required',
@@ -1104,10 +1375,18 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
           CircleAvatar(
             radius: 12,
             backgroundColor: AppColors.primary,
-            child: Text(num.toString(), style: const TextStyle(color: Colors.white, fontSize: 12)),
+            child: Text(
+              num.toString(),
+              style: const TextStyle(color: Colors.white, fontSize: 12),
+            ),
           ),
           const SizedBox(width: 12),
-          Expanded(child: Text(text, style: const TextStyle(fontWeight: FontWeight.bold))),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
         ],
       ),
     );

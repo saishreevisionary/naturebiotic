@@ -10,7 +10,14 @@ import 'package:signature/signature.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 class CreateReportScreen extends StatefulWidget {
-  const CreateReportScreen({super.key});
+  final String? preSelectedFarmId;
+  final String? preSelectedCropId;
+
+  const CreateReportScreen({
+    super.key,
+    this.preSelectedFarmId,
+    this.preSelectedCropId,
+  });
 
   @override
   State<CreateReportScreen> createState() => _CreateReportScreenState();
@@ -29,7 +36,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
   List<Map<String, dynamic>> _fillerUnitOptions = [];
   List<Map<String, dynamic>> _fillerMaterialOptions = [];
   List<String> _suggestedProblems = [];
-  
+
   // Selection
   String? _selectedFarmId;
   String? _selectedCropId;
@@ -42,15 +49,60 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
 
   // Agricultural Problem Categories
   Map<String, List<String>> _problemCategories = {
-    'Pests': ['Mites', 'Aphids', 'Thrips', 'Leaf Miner', 'S Borer', 'F Borer', 'Worm', 'Caterpillar', 'W.Fly', 'F Fly', 'M.Bug', 'Beetle'],
-    'Diseases': ['Root Rot', 'Wilt', 'Leaf Blight', 'Powdery Mildew', 'Leaf Curl', 'Little Leaf', 'Early Blight', 'Downy Mildew', 'Rust Spot', 'Fusarium', 'Flower Blight', 'Nematode'],
-    'Deficiency': ['Nitrogen (N)', 'Phosphorous (P)', 'Potassium (K)', 'Calcium (Ca)', 'Sulfur (S)', 'Magnesium (Mg)', 'Zinc (Zn)', 'Iron (Fe)', 'Manganese (Mn)', 'Copper (Cu)', 'Boron (B)', 'Chlorine (Cl)'],
-    'Others': ['Drought', 'Water Logging', 'Weed', 'Uvar Soil', 'Poor Maintenance'],
+    'Pests': [
+      'Mites',
+      'Aphids',
+      'Thrips',
+      'Leaf Miner',
+      'S Borer',
+      'F Borer',
+      'Worm',
+      'Caterpillar',
+      'W.Fly',
+      'F Fly',
+      'M.Bug',
+      'Beetle',
+    ],
+    'Diseases': [
+      'Root Rot',
+      'Wilt',
+      'Leaf Blight',
+      'Powdery Mildew',
+      'Leaf Curl',
+      'Little Leaf',
+      'Early Blight',
+      'Downy Mildew',
+      'Rust Spot',
+      'Fusarium',
+      'Flower Blight',
+      'Nematode',
+    ],
+    'Deficiency': [
+      'Nitrogen (N)',
+      'Phosphorous (P)',
+      'Potassium (K)',
+      'Calcium (Ca)',
+      'Sulfur (S)',
+      'Magnesium (Mg)',
+      'Zinc (Zn)',
+      'Iron (Fe)',
+      'Manganese (Mn)',
+      'Copper (Cu)',
+      'Boron (B)',
+      'Chlorine (Cl)',
+    ],
+    'Others': [
+      'Drought',
+      'Water Logging',
+      'Weed',
+      'Uvar Soil',
+      'Poor Maintenance',
+    ],
   };
 
   // Inputs
   final _additionalNotesController = TextEditingController();
-  
+
   // Previous Inputs Categories
   final _pesticidesController = TextEditingController();
   final _fungicidesController = TextEditingController();
@@ -61,13 +113,14 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
 
   // Recommendations Categories
   final List<RecommendationRow> _recommendationsList = [];
-  
+
   // Cost Estimations Categories
   final List<CostEstimationRow> _costEstimations = [];
   DateTime? _nextVisitDate;
-  
-  final _costController = TextEditingController(); // To be removed or used for summary
-  
+
+  final _costController =
+      TextEditingController(); // To be removed or used for summary
+
   // Signature
   final SignatureController _signatureController = SignatureController(
     penStrokeWidth: 3,
@@ -110,14 +163,17 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
   }
 
   void _syncCostEstimations() {
-    final validProductNames = _recommendationsList
-        .where((r) => r.product.text.trim().isNotEmpty)
-        .map((r) => r.product.text.trim())
-        .toList();
+    final validProductNames =
+        _recommendationsList
+            .where((r) => r.product.text.trim().isNotEmpty)
+            .map((r) => r.product.text.trim())
+            .toList();
 
     setState(() {
       // Keep existing data if the product name matches
-      final existingMap = {for (var row in _costEstimations) row.productName: row};
+      final existingMap = {
+        for (var row in _costEstimations) row.productName: row,
+      };
       _costEstimations.clear();
 
       for (var name in validProductNames) {
@@ -131,8 +187,10 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
             orElse: () => {},
           );
           if (product.isNotEmpty) {
-            if (product['mrp'] != null) newRow.mrp.text = product['mrp'].toString();
-            if (product['offer_price'] != null) newRow.offerPrice.text = product['offer_price'].toString();
+            if (product['mrp'] != null)
+              newRow.mrp.text = product['mrp'].toString();
+            if (product['offer_price'] != null)
+              newRow.offerPrice.text = product['offer_price'].toString();
           }
           _costEstimations.add(newRow);
         }
@@ -142,15 +200,38 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
 
   Future<void> _loadFarms() async {
     final farms = await SupabaseService.getFarms();
-    setState(() => _farms = farms);
+    setState(() {
+      _farms = farms;
+      if (widget.preSelectedFarmId != null) {
+        _selectedFarmId = widget.preSelectedFarmId;
+        _loadCrops(_selectedFarmId!);
+      }
+    });
   }
 
   Future<void> _loadCrops(String farmId) async {
     final crops = await SupabaseService.getCrops(farmId);
     setState(() {
       _crops = crops;
-      _selectedCropId = null;
-      _suggestedProblems = [];
+      if (widget.preSelectedCropId != null) {
+        _selectedCropId = widget.preSelectedCropId;
+        _loadLastReportData(farmId, _selectedCropId!);
+
+        // Find crop to load suggested problems
+        final crop = _crops.firstWhere(
+          (c) => c['id'].toString() == _selectedCropId,
+          orElse: () => {},
+        );
+        if (crop.isNotEmpty && crop['dropdown_options'] != null) {
+          final cropIntId = int.tryParse(
+            crop['dropdown_options']['id'].toString(),
+          );
+          if (cropIntId != null) _loadSuggestedProblems(cropIntId);
+        }
+      } else {
+        _selectedCropId = null;
+        _suggestedProblems = [];
+      }
     });
   }
 
@@ -158,23 +239,34 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
     try {
       final mappings = await SupabaseService.getProblemsByCrop(cropId);
       setState(() {
-        _suggestedProblems = mappings
-            .map((m) => m['dropdown_options']?['label']?.toString())
-            .whereType<String>()
-            .toList();
+        _suggestedProblems =
+            mappings
+                .map((m) => m['dropdown_options']?['label']?.toString())
+                .whereType<String>()
+                .toList();
       });
     } catch (_) {}
   }
 
   Future<void> _fetchProblemData() async {
     try {
-      final categories = await SupabaseService.getDropdownOptions('problem_category');
-      final products = await SupabaseService.getHierarchicalDropdownOptions('product_name');
-      final applications = await SupabaseService.getDropdownOptions('application_method');
+      final categories = await SupabaseService.getDropdownOptions(
+        'problem_category',
+      );
+      final products = await SupabaseService.getHierarchicalDropdownOptions(
+        'product_name',
+      );
+      final applications = await SupabaseService.getDropdownOptions(
+        'application_method',
+      );
       final doseUnits = await SupabaseService.getDropdownOptions('dose_unit');
-      final fillerUnits = await SupabaseService.getDropdownOptions('filler_unit');
-      final fillerMaterials = await SupabaseService.getDropdownOptions('filler_material');
-      
+      final fillerUnits = await SupabaseService.getDropdownOptions(
+        'filler_unit',
+      );
+      final fillerMaterials = await SupabaseService.getDropdownOptions(
+        'filler_material',
+      );
+
       setState(() {
         _productOptions = products;
         _applicationOptions = applications;
@@ -186,10 +278,14 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
       if (categories.isEmpty) return;
 
       Map<String, List<String>> dynamicProblems = {};
-      
+
       for (var cat in categories) {
-        final items = await SupabaseService.getDropdownOptions('problem_item', parentId: cat['id']);
-        dynamicProblems[cat['label']] = items.map((e) => e['label'].toString()).toList();
+        final items = await SupabaseService.getDropdownOptions(
+          'problem_item',
+          parentId: cat['id'],
+        );
+        dynamicProblems[cat['label']] =
+            items.map((e) => e['label'].toString()).toList();
       }
 
       if (dynamicProblems.isNotEmpty) {
@@ -201,12 +297,15 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
   }
 
   Future<void> _loadLastReportData(String farmId, String cropId) async {
-    final lastReport = await SupabaseService.getLastReportForCrop(farmId, cropId);
+    final lastReport = await SupabaseService.getLastReportForCrop(
+      farmId,
+      cropId,
+    );
     if (lastReport == null) return;
 
     final history = lastReport['previous_inputs'] as String?;
     final createdAt = lastReport['created_at'];
-    
+
     setState(() {
       if (createdAt != null) {
         try {
@@ -220,35 +319,43 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
           if (line.startsWith('Date:')) {
             // Optional: specifically parse the date string if it differs from createdAt
           } else if (line.startsWith('Pesticides:')) {
-            _pesticidesController.text = line.replaceFirst('Pesticides:', '').trim();
+            _pesticidesController.text =
+                line.replaceFirst('Pesticides:', '').trim();
           } else if (line.startsWith('Fungicides:')) {
-            _fungicidesController.text = line.replaceFirst('Fungicides:', '').trim();
+            _fungicidesController.text =
+                line.replaceFirst('Fungicides:', '').trim();
           } else if (line.startsWith('Fertilizers:')) {
-            _fertilizersController.text = line.replaceFirst('Fertilizers:', '').trim();
+            _fertilizersController.text =
+                line.replaceFirst('Fertilizers:', '').trim();
           } else if (line.startsWith('Bio Stimulant:')) {
-            _stimulantController.text = line.replaceFirst('Bio Stimulant:', '').trim();
+            _stimulantController.text =
+                line.replaceFirst('Bio Stimulant:', '').trim();
           } else if (line.startsWith('Herbicide:')) {
-            _herbicideController.text = line.replaceFirst('Herbicide:', '').trim();
+            _herbicideController.text =
+                line.replaceFirst('Herbicide:', '').trim();
           }
         }
       }
     });
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Last visit history pre-filled automatically'),
-            duration: Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Last visit history pre-filled automatically'),
+          duration: Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   Future<void> _handleSave() async {
     if (_signatureController.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please provide a signature to proceed'), backgroundColor: Colors.orange),
+        const SnackBar(
+          content: Text('Please provide a signature to proceed'),
+          backgroundColor: Colors.orange,
+        ),
       );
       return;
     }
@@ -265,7 +372,11 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
       final signatureBytes = await _signatureController.toPngBytes();
       if (signatureBytes != null) {
         final sigFileName = 'sig_${DateTime.now().millisecondsSinceEpoch}.png';
-        signatureUrl = await SupabaseService.uploadImage(signatureBytes, sigFileName, 'reports');
+        signatureUrl = await SupabaseService.uploadImage(
+          signatureBytes,
+          sigFileName,
+          'reports',
+        );
       }
 
       // Handle Image Uploads
@@ -273,8 +384,13 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
       for (var entry in _problemImages.entries) {
         if (entry.value != null) {
           try {
-            final fileName = '${DateTime.now().millisecondsSinceEpoch}_${_problemImageNames[entry.key] ?? 'image.jpg'}';
-            final url = await SupabaseService.uploadImage(entry.value!, fileName, 'reports');
+            final fileName =
+                '${DateTime.now().millisecondsSinceEpoch}_${_problemImageNames[entry.key] ?? 'image.jpg'}';
+            final url = await SupabaseService.uploadImage(
+              entry.value!,
+              fileName,
+              'reports',
+            );
             uploadedImageUrls[entry.key] = url;
           } catch (e) {
             debugPrint('Error uploading image for ${entry.key}: $e');
@@ -294,26 +410,36 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
         }
       }
       if (problemDataWithImages.endsWith(', ')) {
-        problemDataWithImages = problemDataWithImages.substring(0, problemDataWithImages.length - 2);
+        problemDataWithImages = problemDataWithImages.substring(
+          0,
+          problemDataWithImages.length - 2,
+        );
       }
       if (_additionalNotesController.text.isNotEmpty) {
-        problemDataWithImages += '\nNotes: ${_additionalNotesController.text.trim()}';
+        problemDataWithImages +=
+            '\nNotes: ${_additionalNotesController.text.trim()}';
       }
 
       String finalHistory = '';
       if (_selectedInputDate != null) {
         finalHistory += 'Date: ${_formatDate(_selectedInputDate)}\n';
       }
-      if (_pesticidesController.text.isNotEmpty) finalHistory += 'Pesticides: ${_pesticidesController.text.trim()}\n';
-      if (_fungicidesController.text.isNotEmpty) finalHistory += 'Fungicides: ${_fungicidesController.text.trim()}\n';
-      if (_fertilizersController.text.isNotEmpty) finalHistory += 'Fertilizers: ${_fertilizersController.text.trim()}\n';
-      if (_stimulantController.text.isNotEmpty) finalHistory += 'Bio Stimulant: ${_stimulantController.text.trim()}\n';
-      if (_herbicideController.text.isNotEmpty) finalHistory += 'Herbicide: ${_herbicideController.text.trim()}\n';
+      if (_pesticidesController.text.isNotEmpty)
+        finalHistory += 'Pesticides: ${_pesticidesController.text.trim()}\n';
+      if (_fungicidesController.text.isNotEmpty)
+        finalHistory += 'Fungicides: ${_fungicidesController.text.trim()}\n';
+      if (_fertilizersController.text.isNotEmpty)
+        finalHistory += 'Fertilizers: ${_fertilizersController.text.trim()}\n';
+      if (_stimulantController.text.isNotEmpty)
+        finalHistory += 'Bio Stimulant: ${_stimulantController.text.trim()}\n';
+      if (_herbicideController.text.isNotEmpty)
+        finalHistory += 'Herbicide: ${_herbicideController.text.trim()}\n';
 
       String finalRecommendations = '';
       for (var row in _recommendationsList) {
         if (row.product.text.isNotEmpty) {
-          finalRecommendations += '${row.product.text} (${row.application.text}) - '
+          finalRecommendations +=
+              '${row.product.text} (${row.application.text}) - '
               'Dose: ${row.dose.text}, Filler: ${row.filler.text}\n';
         }
       }
@@ -326,8 +452,9 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
         final double offer = double.tryParse(row.offerPrice.text) ?? mrp;
         final double total = qty * offer;
         grandTotal += total;
-        
-        finalCost += '${row.productName} (Pkg: ${row.pkgSize.text}) - '
+
+        finalCost +=
+            '${row.productName} (Pkg: ${row.pkgSize.text}) - '
             'Qty: ${row.qty.text}, MRP: ${row.mrp.text}, Offer: ${row.offerPrice.text}, Total: $total\n';
       }
       if (_nextVisitDate != null) {
@@ -343,6 +470,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
         'recommendations': finalRecommendations.trim(),
         'estimated_cost': finalCost,
         'signature_url': signatureUrl,
+        'follow_up_date': _nextVisitDate?.toIso8601String(),
         'created_at': DateTime.now().toIso8601String(),
         // Only keep local bytes if upload failed (to save memory and prevent CursorWindow overflow)
         '_local_signature': signatureUrl == null ? signatureBytes : null,
@@ -365,19 +493,26 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
       }
 
       if (mounted) {
-        final farm = _farms.firstWhere((f) => f['id'] == _selectedFarmId, orElse: () => {});
-        final crop = _crops.firstWhere((c) => c['id'] == _selectedCropId, orElse: () => {});
+        final farm = _farms.firstWhere(
+          (f) => f['id'] == _selectedFarmId,
+          orElse: () => {},
+        );
+        final crop = _crops.firstWhere(
+          (c) => c['id'] == _selectedCropId,
+          orElse: () => {},
+        );
         final farmerNameForPdf = farm['farmers']?['name'] ?? 'Valued Farmer';
 
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (context) => ReportGeneratorScreen(
-              report: reportData,
-              farmName: farm['name'] ?? 'Unknown Farm',
-              cropName: crop['name'] ?? 'Unknown Crop',
-              farmerName: farmerNameForPdf,
-            ),
+            builder:
+                (context) => ReportGeneratorScreen(
+                  report: reportData,
+                  farmName: farm['name'] ?? 'Unknown Farm',
+                  cropName: crop['name'] ?? 'Unknown Crop',
+                  farmerName: farmerNameForPdf,
+                ),
           ),
         );
       }
@@ -394,19 +529,25 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final pw_subtitle = Column(
+    final pwSubtitle = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (_costEstimations.isNotEmpty) Text('Grand Total: ₹${_calculateGrandTotal()}', style: const TextStyle(color: AppColors.primary, fontSize: 12)),
-        if (_nextVisitDate != null) Text('Next Visit: ${_formatDate(_nextVisitDate)}', style: const TextStyle(color: AppColors.primary, fontSize: 12)),
+        if (_costEstimations.isNotEmpty)
+          Text(
+            'Grand Total: ₹${_calculateGrandTotal()}',
+            style: const TextStyle(color: AppColors.primary, fontSize: 12),
+          ),
+        if (_nextVisitDate != null)
+          Text(
+            'Next Visit: ${_formatDate(_nextVisitDate)}',
+            style: const TextStyle(color: AppColors.primary, fontSize: 12),
+          ),
       ],
     );
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Create Analysis Report'),
-      ),
+      appBar: AppBar(title: const Text('Create Analysis Report')),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 900),
@@ -434,9 +575,21 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                     Expanded(
                       child: ElevatedButton(
                         onPressed: details.onStepContinue,
-                        child: _isLoading 
-                          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                          : Text(_currentStep == 5 ? 'Generate Analysis' : 'Next Step'),
+                        child:
+                            _isLoading
+                                ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                                : Text(
+                                  _currentStep == 5
+                                      ? 'Generate Analysis'
+                                      : 'Next Step',
+                                ),
                       ),
                     ),
                     if (_currentStep > 0) ...[
@@ -453,59 +606,95 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
             steps: [
               Step(
                 title: const Text('Select Farm & Crop'),
-                subtitle: _selectedFarmId != null ? Text(
-                  '${_farms.firstWhere((f) => f['id'] == _selectedFarmId)['name']} • '
-                  '${_selectedCropId != null ? _crops.firstWhere((c) => c['id'] == _selectedCropId)['name'] : 'Select Crop'}',
-                  style: const TextStyle(color: AppColors.primary, fontSize: 12),
-                ) : null,
+                subtitle:
+                    _selectedFarmId != null
+                        ? Text(
+                          '${_farms.firstWhere((f) => f['id'] == _selectedFarmId, orElse: () => {'name': 'Selected'})['name']} • '
+                          '${_selectedCropId != null ? _crops.firstWhere((c) => c['id'] == _selectedCropId, orElse: () => {'name': 'Selected'})['name'] : 'Select Crop'}',
+                          style: const TextStyle(
+                            color: AppColors.primary,
+                            fontSize: 12,
+                          ),
+                        )
+                        : null,
                 isActive: _currentStep >= 0,
                 content: Column(
                   children: [
                     DropdownButtonFormField<String>(
-                      value: _selectedFarmId,
-                      decoration: const InputDecoration(labelText: 'Choose Farm'),
-                      items: _farms.map((f) => DropdownMenuItem(
-                        value: f['id'].toString(),
-                        child: Text(f['name'] ?? 'Unknown'),
-                      )).toList(),
-                      onChanged: (v) {
-                        setState(() => _selectedFarmId = v);
-                        _loadCrops(v!);
-                      },
+                      initialValue: _selectedFarmId,
+                      decoration: const InputDecoration(
+                        labelText: 'Choose Farm',
+                      ),
+                      items:
+                          _farms
+                              .map(
+                                (f) => DropdownMenuItem(
+                                  value: f['id'].toString(),
+                                  child: Text(f['name'] ?? 'Unknown'),
+                                ),
+                              )
+                              .toList(),
+                      onChanged:
+                          widget.preSelectedFarmId != null
+                              ? null
+                              : (v) {
+                                setState(() => _selectedFarmId = v);
+                                _loadCrops(v!);
+                              },
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
-                      value: _selectedCropId,
-                      decoration: const InputDecoration(labelText: 'Choose Crop'),
-                      items: _crops.map((c) => DropdownMenuItem(
-                        value: c['id'].toString(),
-                        child: Text(c['name'] ?? 'Unknown'),
-                      )).toList(),
-                          onChanged: (value) {
-                            setState(() {
-                              _selectedCropId = value;
-                              _suggestedProblems = [];
-                            });
-                            if (value != null) {
-                              final cropIntId = int.tryParse(value);
-                              if (cropIntId != null) _loadSuggestedProblems(cropIntId);
-                              if (_selectedFarmId != null) {
-                                _loadLastReportData(_selectedFarmId!, value);
-                              }
-                            }
-                          },
+                      initialValue: _selectedCropId,
+                      decoration: const InputDecoration(
+                        labelText: 'Choose Crop',
+                      ),
+                      items:
+                          _crops
+                              .map(
+                                (c) => DropdownMenuItem(
+                                  value: c['id'].toString(),
+                                  child: Text(c['name'] ?? 'Unknown'),
+                                ),
+                              )
+                              .toList(),
+                      onChanged:
+                          widget.preSelectedCropId != null
+                              ? null
+                              : (value) {
+                                setState(() {
+                                  _selectedCropId = value;
+                                  _suggestedProblems = [];
+                                });
+                                if (value != null) {
+                                  final cropIntId = int.tryParse(value);
+                                  if (cropIntId != null)
+                                    _loadSuggestedProblems(cropIntId);
+                                  if (_selectedFarmId != null) {
+                                    _loadLastReportData(
+                                      _selectedFarmId!,
+                                      value,
+                                    );
+                                  }
+                                }
+                              },
                     ),
                   ],
                 ),
               ),
               Step(
                 title: const Text('Identify Problem'),
-                subtitle: _selectedProblems.isNotEmpty ? Text(
-                  _selectedProblems.join(', '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: AppColors.primary, fontSize: 12),
-                ) : null,
+                subtitle:
+                    _selectedProblems.isNotEmpty
+                        ? Text(
+                          _selectedProblems.join(', '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.primary,
+                            fontSize: 12,
+                          ),
+                        )
+                        : null,
                 isActive: _currentStep >= 1,
                 content: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -515,45 +704,58 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                       style: TextStyle(color: AppColors.textGray, fontSize: 13),
                     ),
                     const SizedBox(height: 16),
-                    
+
                     // Category Cards
                     Wrap(
                       spacing: 12,
                       runSpacing: 12,
-                      children: [
-                        'Pests', 'Diseases', 'Deficiency', 'Others'
-                      ].map((cat) => _buildCategoryCard(
-                        cat, 
-                        cat == 'Pests' ? Icons.pest_control_rounded :
-                        cat == 'Diseases' ? Icons.coronavirus_rounded :
-                        cat == 'Deficiency' ? Icons.science_rounded : Icons.more_horiz_rounded
-                      )).toList(),
+                      children:
+                          ['Pests', 'Diseases', 'Deficiency', 'Others']
+                              .map(
+                                (cat) => _buildCategoryCard(
+                                  cat,
+                                  cat == 'Pests'
+                                      ? Icons.pest_control_rounded
+                                      : cat == 'Diseases'
+                                      ? Icons.coronavirus_rounded
+                                      : cat == 'Deficiency'
+                                      ? Icons.science_rounded
+                                      : Icons.more_horiz_rounded,
+                                ),
+                              )
+                              .toList(),
                     ),
-                    
+
                     if (_activeProblemCategory != null) ...[
                       const SizedBox(height: 24),
-                      
+
                       // Search Bar for Problems
                       TextField(
-                        onChanged: (v) => setState(() => _problemSearchQuery = v),
+                        onChanged:
+                            (v) => setState(() => _problemSearchQuery = v),
                         decoration: InputDecoration(
                           hintText: 'Search in $_activeProblemCategory...',
                           prefixIcon: const Icon(Icons.search_rounded),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
                           filled: true,
                           fillColor: Colors.white,
                         ),
                       ),
-                      
+
                       const SizedBox(height: 16),
-                      
+
                       // Problem Selection List (Cards)
                       Container(
                         constraints: const BoxConstraints(maxHeight: 300),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: AppColors.secondary.withOpacity(0.3)),
+                          border: Border.all(
+                            color: AppColors.secondary.withOpacity(0.3),
+                          ),
                         ),
                         child: _buildProblemItemList(),
                       ),
@@ -564,10 +766,20 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('Selected Problems:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          const Text(
+                            'Selected Problems:',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
                           TextButton(
-                            onPressed: () => setState(() => _selectedProblems.clear()),
-                            child: const Text('Clear All', style: TextStyle(color: Colors.red, fontSize: 11)),
+                            onPressed:
+                                () => setState(() => _selectedProblems.clear()),
+                            child: const Text(
+                              'Clear All',
+                              style: TextStyle(color: Colors.red, fontSize: 11),
+                            ),
                           ),
                         ],
                       ),
@@ -575,12 +787,21 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
-                        children: _selectedProblems.map((p) => _selectedProblemChip(p)).toList(),
+                        children:
+                            _selectedProblems
+                                .map((p) => _selectedProblemChip(p))
+                                .toList(),
                       ),
                     ],
 
                     const SizedBox(height: 32),
-                    const Text('Additional Notes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const Text(
+                      'Additional Notes',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     TextField(
                       controller: _additionalNotesController,
@@ -596,10 +817,16 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
               ),
               Step(
                 title: const Text('Previous Inputs'),
-                subtitle: _selectedInputDate != null ? Text(
-                  'Date: ${_formatDate(_selectedInputDate)}',
-                  style: const TextStyle(color: AppColors.primary, fontSize: 12),
-                ) : null,
+                subtitle:
+                    _selectedInputDate != null
+                        ? Text(
+                          'Date: ${_formatDate(_selectedInputDate)}',
+                          style: const TextStyle(
+                            color: AppColors.primary,
+                            fontSize: 12,
+                          ),
+                        )
+                        : null,
                 isActive: _currentStep >= 2,
                 content: Column(
                   children: [
@@ -617,10 +844,14 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                           firstDate: DateTime(2020),
                           lastDate: DateTime.now(),
                         );
-                        if (date != null) setState(() => _selectedInputDate = date);
+                        if (date != null)
+                          setState(() => _selectedInputDate = date);
                       },
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                         decoration: BoxDecoration(
                           border: Border.all(color: AppColors.secondary),
                           borderRadius: BorderRadius.circular(12),
@@ -629,15 +860,24 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              _selectedInputDate == null 
-                                ? 'Select Crop Input Date' 
-                                : 'Date: ${_formatDate(_selectedInputDate)}',
+                              _selectedInputDate == null
+                                  ? 'Select Crop Input Date'
+                                  : 'Date: ${_formatDate(_selectedInputDate)}',
                               style: TextStyle(
-                                color: _selectedInputDate == null ? AppColors.textGray : AppColors.primary,
-                                fontWeight: _selectedInputDate != null ? FontWeight.bold : FontWeight.normal,
+                                color:
+                                    _selectedInputDate == null
+                                        ? AppColors.textGray
+                                        : AppColors.primary,
+                                fontWeight:
+                                    _selectedInputDate != null
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
                               ),
                             ),
-                            const Icon(Icons.calendar_month_rounded, color: AppColors.primary),
+                            const Icon(
+                              Icons.calendar_month_rounded,
+                              color: AppColors.primary,
+                            ),
                           ],
                         ),
                       ),
@@ -647,35 +887,57 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
               ),
               Step(
                 title: const Text('Recommendations'),
-                subtitle: _recommendationsList.any((r) => r.product.text.isNotEmpty) ? Text(
-                  '${_recommendationsList.where((r) => r.product.text.isNotEmpty).length} Products Recommended',
-                  style: const TextStyle(color: AppColors.primary, fontSize: 12),
-                ) : null,
+                subtitle:
+                    _recommendationsList.any((r) => r.product.text.isNotEmpty)
+                        ? Text(
+                          '${_recommendationsList.where((r) => r.product.text.isNotEmpty).length} Products Recommended',
+                          style: const TextStyle(
+                            color: AppColors.primary,
+                            fontSize: 12,
+                          ),
+                        )
+                        : null,
                 isActive: _currentStep >= 3,
                 content: Column(
                   children: [
-                    ..._recommendationsList.asMap().entries.map((entry) => _recommendationRowWidget(entry.key, entry.value)),
+                    ..._recommendationsList.asMap().entries.map(
+                      (entry) =>
+                          _recommendationRowWidget(entry.key, entry.value),
+                    ),
                     const SizedBox(height: 12),
                     TextButton.icon(
                       onPressed: _addRecommendationRow,
                       icon: const Icon(Icons.add_circle_outline_rounded),
                       label: const Text('Add Product Recommendation'),
-                      style: TextButton.styleFrom(foregroundColor: AppColors.primary),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.primary,
+                      ),
                     ),
                   ],
                 ),
               ),
               Step(
                 title: const Text('Estimated Cost'),
-                subtitle: _costEstimations.isNotEmpty || _nextVisitDate != null ? pw_subtitle : null,
+                subtitle:
+                    _costEstimations.isNotEmpty || _nextVisitDate != null
+                        ? pwSubtitle
+                        : null,
                 isActive: _currentStep >= 4,
                 content: Column(
                   children: [
-                    ..._costEstimations.map((row) => _costEstimationRowWidget(row)),
+                    ..._costEstimations.map(
+                      (row) => _costEstimationRowWidget(row),
+                    ),
                     if (_costEstimations.isEmpty)
                       const Padding(
                         padding: EdgeInsets.all(16.0),
-                        child: Text('Add products in Step 4 to see them here.', style: TextStyle(color: AppColors.textGray, fontSize: 13)),
+                        child: Text(
+                          'Add products in Step 4 to see them here.',
+                          style: TextStyle(
+                            color: AppColors.textGray,
+                            fontSize: 13,
+                          ),
+                        ),
                       )
                     else ...[
                       Padding(
@@ -684,7 +946,11 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                           alignment: Alignment.centerRight,
                           child: Text(
                             'Grand Total: ₹${_calculateGrandTotal()}',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.primary),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                              color: AppColors.primary,
+                            ),
                           ),
                         ),
                       ),
@@ -694,11 +960,16 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                         onTap: () async {
                           final date = await showDatePicker(
                             context: context,
-                            initialDate: DateTime.now().add(const Duration(days: 7)),
+                            initialDate: DateTime.now().add(
+                              const Duration(days: 7),
+                            ),
                             firstDate: DateTime.now(),
-                            lastDate: DateTime.now().add(const Duration(days: 365)),
+                            lastDate: DateTime.now().add(
+                              const Duration(days: 365),
+                            ),
                           );
-                          if (date != null) setState(() => _nextVisitDate = date);
+                          if (date != null)
+                            setState(() => _nextVisitDate = date);
                         },
                         child: Container(
                           padding: const EdgeInsets.all(16),
@@ -713,18 +984,32 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text('Next Visit Date', style: TextStyle(color: AppColors.textGray, fontSize: 12)),
+                                  const Text(
+                                    'Next Visit Date',
+                                    style: TextStyle(
+                                      color: AppColors.textGray,
+                                      fontSize: 12,
+                                    ),
+                                  ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    _nextVisitDate == null ? 'Set Follow-up Date' : _formatDate(_nextVisitDate),
+                                    _nextVisitDate == null
+                                        ? 'Set Follow-up Date'
+                                        : _formatDate(_nextVisitDate),
                                     style: TextStyle(
-                                      fontWeight: FontWeight.bold, 
-                                      color: _nextVisitDate == null ? AppColors.textGray : AppColors.primary,
+                                      fontWeight: FontWeight.bold,
+                                      color:
+                                          _nextVisitDate == null
+                                              ? AppColors.textGray
+                                              : AppColors.primary,
                                     ),
                                   ),
                                 ],
                               ),
-                              const Icon(Icons.event_repeat_rounded, color: AppColors.primary),
+                              const Icon(
+                                Icons.event_repeat_rounded,
+                                color: AppColors.primary,
+                              ),
                             ],
                           ),
                         ),
@@ -735,7 +1020,10 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
               ),
               Step(
                 title: const Text('Executive Signature'),
-                subtitle: const Text('Sign below to finalize report', style: TextStyle(fontSize: 10)),
+                subtitle: const Text(
+                  'Sign below to finalize report',
+                  style: TextStyle(fontSize: 10),
+                ),
                 isActive: _currentStep >= 5,
                 content: Column(
                   children: [
@@ -759,11 +1047,23 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                       children: [
                         TextButton.icon(
                           onPressed: () => _signatureController.clear(),
-                          icon: const Icon(Icons.clear_all_rounded, color: Colors.red),
-                          label: const Text('Clear Signature', style: TextStyle(color: Colors.red)),
+                          icon: const Icon(
+                            Icons.clear_all_rounded,
+                            color: Colors.red,
+                          ),
+                          label: const Text(
+                            'Clear Signature',
+                            style: TextStyle(color: Colors.red),
+                          ),
                         ),
                         const SizedBox(width: 8),
-                        const Text('(Mandatory)', style: TextStyle(color: AppColors.textGray, fontSize: 12)),
+                        const Text(
+                          '(Mandatory)',
+                          style: TextStyle(
+                            color: AppColors.textGray,
+                            fontSize: 12,
+                          ),
+                        ),
                       ],
                     ),
                   ],
@@ -778,15 +1078,17 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
 
   Widget _buildCategoryCard(String title, IconData icon) {
     bool isSelected = _activeProblemCategory == title;
-    int selectedCount = _selectedProblems.where((p) {
-      return _problemCategories[title]?.contains(p) ?? false;
-    }).length;
+    int selectedCount =
+        _selectedProblems.where((p) {
+          return _problemCategories[title]?.contains(p) ?? false;
+        }).length;
 
     return GestureDetector(
-      onTap: () => setState(() {
-        _activeProblemCategory = title;
-        _problemSearchQuery = '';
-      }),
+      onTap:
+          () => setState(() {
+            _activeProblemCategory = title;
+            _problemSearchQuery = '';
+          }),
       child: Container(
         width: 100,
         margin: const EdgeInsets.only(right: 12),
@@ -794,13 +1096,19 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
         decoration: BoxDecoration(
           color: isSelected ? AppColors.primary : Colors.white,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: isSelected ? AppColors.primary : AppColors.secondary.withOpacity(0.3)),
+          border: Border.all(
+            color:
+                isSelected
+                    ? AppColors.primary
+                    : AppColors.secondary.withOpacity(0.3),
+          ),
           boxShadow: [
-            if (isSelected) BoxShadow(
-              color: AppColors.primary.withOpacity(0.3),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
-            ),
+            if (isSelected)
+              BoxShadow(
+                color: AppColors.primary.withOpacity(0.3),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              ),
           ],
         ),
         child: Column(
@@ -808,18 +1116,32 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
             Stack(
               clipBehavior: Clip.none,
               children: [
-                Icon(icon, color: isSelected ? Colors.white : AppColors.primary, size: 28),
+                Icon(
+                  icon,
+                  color: isSelected ? Colors.white : AppColors.primary,
+                  size: 28,
+                ),
                 if (selectedCount > 0)
                   Positioned(
                     right: -8,
                     top: -8,
                     child: Container(
                       padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(color: Colors.orange, shape: BoxShape.circle),
-                      constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                      decoration: const BoxDecoration(
+                        color: Colors.orange,
+                        shape: BoxShape.circle,
+                      ),
+                      constraints: const BoxConstraints(
+                        minWidth: 16,
+                        minHeight: 16,
+                      ),
                       child: Text(
                         '$selectedCount',
-                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
                         textAlign: TextAlign.center,
                       ),
                     ),
@@ -843,15 +1165,23 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
 
   Widget _buildProblemItemList() {
     final items = _problemCategories[_activeProblemCategory] ?? [];
-    final filtered = items.where((item) => 
-      item.toLowerCase().contains(_problemSearchQuery.toLowerCase())
-    ).toList();
+    final filtered =
+        items
+            .where(
+              (item) => item.toLowerCase().contains(
+                _problemSearchQuery.toLowerCase(),
+              ),
+            )
+            .toList();
 
     if (filtered.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
-          child: Text('No problems found in $_activeProblemCategory', style: const TextStyle(color: AppColors.textGray)),
+          child: Text(
+            'No problems found in $_activeProblemCategory',
+            style: const TextStyle(color: AppColors.textGray),
+          ),
         ),
       );
     }
@@ -868,16 +1198,32 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
         return CheckboxListTile(
           value: isChecked,
           activeColor: AppColors.primary,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 0,
+          ),
           title: Row(
             children: [
               Text(item, style: const TextStyle(fontSize: 14)),
               if (isSuggested) ...[
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(color: Colors.orange.withOpacity(0.15), borderRadius: BorderRadius.circular(4)),
-                  child: const Text('Suggested', style: TextStyle(color: Colors.orange, fontSize: 10, fontWeight: FontWeight.bold)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    'Suggested',
+                    style: TextStyle(
+                      color: Colors.orange,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ],
             ],
@@ -910,21 +1256,35 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
         children: [
           IconButton(
             onPressed: () => _pickImage(item, ImageSource.camera),
-            icon: Icon(Icons.camera_alt_rounded, 
-              size: 16, 
-              color: hasImage ? Colors.green : AppColors.primary),
+            icon: Icon(
+              Icons.camera_alt_rounded,
+              size: 16,
+              color: hasImage ? Colors.green : AppColors.primary,
+            ),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
           ),
           const SizedBox(width: 8),
-          Text(item, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.primary)),
+          Text(
+            item,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.primary,
+            ),
+          ),
           const SizedBox(width: 4),
           GestureDetector(
-            onTap: () => setState(() {
-              _selectedProblems.remove(item);
-              _problemImages.remove(item);
-            }),
-            child: const Icon(Icons.close_rounded, size: 16, color: AppColors.primary),
+            onTap:
+                () => setState(() {
+                  _selectedProblems.remove(item);
+                  _problemImages.remove(item);
+                }),
+            child: const Icon(
+              Icons.close_rounded,
+              size: 16,
+              color: AppColors.primary,
+            ),
           ),
         ],
       ),
@@ -933,7 +1293,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
 
   Future<void> _pickImage(String problem, ImageSource source) async {
     final XFile? image = await _picker.pickImage(
-      source: source, 
+      source: source,
       imageQuality: 50,
       maxWidth: 1024,
       maxHeight: 1024,
@@ -946,7 +1306,6 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
       });
     }
   }
-
 
   Widget _costEstimationRowWidget(CostEstimationRow row) {
     // Find the product and its variants
@@ -967,38 +1326,63 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(row.productName, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
+          Text(
+            row.productName,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              color: AppColors.primary,
+            ),
+          ),
           const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
                 flex: 3,
                 child: DropdownButtonFormField<String>(
-                  value: variants.any((v) => v['label'] == row.pkgSize.text) ? row.pkgSize.text : null,
+                  initialValue:
+                      variants.any((v) => v['label'] == row.pkgSize.text)
+                          ? row.pkgSize.text
+                          : null,
                   decoration: const InputDecoration(
                     labelText: 'Pkg Size',
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                   ),
-                  items: variants.map((v) {
-                    return DropdownMenuItem<String>(
-                      value: v['label'].toString(),
-                      child: Text(v['label'].toString(), style: const TextStyle(fontSize: 12)),
-                    );
-                  }).toList(),
+                  items:
+                      variants.map((v) {
+                        return DropdownMenuItem<String>(
+                          value: v['label'].toString(),
+                          child: Text(
+                            v['label'].toString(),
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        );
+                      }).toList(),
                   onChanged: (val) {
-                    final variant = variants.firstWhere((v) => v['label'] == val, orElse: () => {});
+                    final variant = variants.firstWhere(
+                      (v) => v['label'] == val,
+                      orElse: () => {},
+                    );
                     if (variant.isNotEmpty) {
                       setState(() {
                         row.pkgSize.text = val ?? '';
-                        if (variant['mrp'] != null) row.mrp.text = variant['mrp'].toString();
-                        if (variant['offer_price'] != null) row.offerPrice.text = variant['offer_price'].toString();
+                        if (variant['mrp'] != null)
+                          row.mrp.text = variant['mrp'].toString();
+                        if (variant['offer_price'] != null)
+                          row.offerPrice.text =
+                              variant['offer_price'].toString();
                       });
                     }
                   },
                 ),
               ),
               const SizedBox(width: 8),
-              Expanded(flex: 2, child: _miniField(row.qty, 'Qty #', isNumber: true)),
+              Expanded(
+                flex: 2,
+                child: _miniField(row.qty, 'Qty #', isNumber: true),
+              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -1006,7 +1390,13 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
             children: [
               Expanded(child: _miniField(row.mrp, 'MRP', isNumber: true)),
               const SizedBox(width: 8),
-              Expanded(child: _miniField(row.offerPrice, 'Offer Price', isNumber: true)),
+              Expanded(
+                child: _miniField(
+                  row.offerPrice,
+                  'Offer Price',
+                  isNumber: true,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -1015,15 +1405,21 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
               row.qty.addListener(() => setInternalState(() {}));
               row.mrp.addListener(() => setInternalState(() {}));
               row.offerPrice.addListener(() => setInternalState(() {}));
-              
+
               final double q = double.tryParse(row.qty.text) ?? 0;
               final double p = double.tryParse(row.mrp.text) ?? 0;
               final double offer = double.tryParse(row.offerPrice.text) ?? p;
               return Align(
                 alignment: Alignment.centerRight,
-                child: Text('Total: ₹${q * offer}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                child: Text(
+                  'Total: ₹${q * offer}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               );
-            }
+            },
           ),
         ],
       ),
@@ -1041,7 +1437,11 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
     return total;
   }
 
-  Widget _miniField(TextEditingController controller, String label, {bool isNumber = false}) {
+  Widget _miniField(
+    TextEditingController controller,
+    String label, {
+    bool isNumber = false,
+  }) {
     return TextField(
       controller: controller,
       keyboardType: isNumber ? TextInputType.number : TextInputType.text,
@@ -1073,17 +1473,29 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                 child: Padding(
                   padding: const EdgeInsets.only(bottom: 8.0),
                   child: DropdownButtonFormField<String>(
-                    value: _productOptions.any((p) => p['label'] == row.product.text) ? row.product.text : null,
+                    initialValue:
+                        _productOptions.any(
+                              (p) => p['label'] == row.product.text,
+                            )
+                            ? row.product.text
+                            : null,
                     decoration: const InputDecoration(
                       labelText: 'Product Name',
-                      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
                     ),
-                    items: _productOptions.map((p) {
-                      return DropdownMenuItem<String>(
-                        value: p['label'].toString(),
-                        child: Text(p['label'].toString(), style: const TextStyle(fontSize: 14)),
-                      );
-                    }).toList(),
+                    items:
+                        _productOptions.map((p) {
+                          return DropdownMenuItem<String>(
+                            value: p['label'].toString(),
+                            child: Text(
+                              p['label'].toString(),
+                              style: const TextStyle(fontSize: 14),
+                            ),
+                          );
+                        }).toList(),
                     onChanged: (val) {
                       setState(() {
                         row.product.text = val ?? '';
@@ -1097,7 +1509,11 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
               if (_recommendationsList.length > 1)
                 IconButton(
                   onPressed: () => _removeRecommendationRow(index),
-                  icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
+                  icon: const Icon(
+                    Icons.delete_outline_rounded,
+                    color: Colors.red,
+                    size: 20,
+                  ),
                 ),
             ],
           ),
@@ -1106,17 +1522,29 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  value: _applicationOptions.any((a) => a['label'] == row.application.text) ? row.application.text : null,
+                  initialValue:
+                      _applicationOptions.any(
+                            (a) => a['label'] == row.application.text,
+                          )
+                          ? row.application.text
+                          : null,
                   decoration: const InputDecoration(
                     labelText: 'Application',
-                    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
                   ),
-                  items: _applicationOptions.map((a) {
-                    return DropdownMenuItem<String>(
-                      value: a['label'].toString(),
-                      child: Text(a['label'].toString(), style: const TextStyle(fontSize: 14)),
-                    );
-                  }).toList(),
+                  items:
+                      _applicationOptions.map((a) {
+                        return DropdownMenuItem<String>(
+                          value: a['label'].toString(),
+                          child: Text(
+                            a['label'].toString(),
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                        );
+                      }).toList(),
                   onChanged: (val) {
                     setState(() {
                       row.application.text = val ?? '';
@@ -1133,22 +1561,37 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
               Expanded(
                 child: Row(
                   children: [
-                    Expanded(flex: 2, child: _miniField(row.dose, 'Dose', isNumber: true)),
+                    Expanded(
+                      flex: 2,
+                      child: _miniField(row.dose, 'Dose', isNumber: true),
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       flex: 3,
                       child: DropdownButtonFormField<String>(
-                        value: _doseUnitOptions.any((u) => u['label'] == row.doseUnit) ? row.doseUnit : null,
+                        initialValue:
+                            _doseUnitOptions.any(
+                                  (u) => u['label'] == row.doseUnit,
+                                )
+                                ? row.doseUnit
+                                : null,
                         decoration: const InputDecoration(
                           labelText: 'Unit',
-                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
                         ),
-                        items: _doseUnitOptions.map((u) {
-                          return DropdownMenuItem<String>(
-                            value: u['label'].toString(),
-                            child: Text(u['label'].toString(), style: const TextStyle(fontSize: 12)),
-                          );
-                        }).toList(),
+                        items:
+                            _doseUnitOptions.map((u) {
+                              return DropdownMenuItem<String>(
+                                value: u['label'].toString(),
+                                child: Text(
+                                  u['label'].toString(),
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              );
+                            }).toList(),
                         onChanged: (val) => setState(() => row.doseUnit = val),
                       ),
                     ),
@@ -1167,18 +1610,32 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                     Expanded(
                       flex: 3,
                       child: DropdownButtonFormField<String>(
-                        value: _fillerMaterialOptions.any((m) => m['label'] == row.filler.text) ? row.filler.text : null,
+                        initialValue:
+                            _fillerMaterialOptions.any(
+                                  (m) => m['label'] == row.filler.text,
+                                )
+                                ? row.filler.text
+                                : null,
                         decoration: const InputDecoration(
                           labelText: 'Filler (Material)',
-                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
                         ),
-                        items: _fillerMaterialOptions.map((m) {
-                          return DropdownMenuItem<String>(
-                            value: m['label'].toString(),
-                            child: Text(m['label'].toString(), style: const TextStyle(fontSize: 12)),
-                          );
-                        }).toList(),
-                        onChanged: (val) => setState(() => row.filler.text = val ?? ''),
+                        items:
+                            _fillerMaterialOptions.map((m) {
+                              return DropdownMenuItem<String>(
+                                value: m['label'].toString(),
+                                child: Text(
+                                  m['label'].toString(),
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              );
+                            }).toList(),
+                        onChanged:
+                            (val) =>
+                                setState(() => row.filler.text = val ?? ''),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -1186,18 +1643,31 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                     Expanded(
                       flex: 2,
                       child: DropdownButtonFormField<String>(
-                        value: _fillerUnitOptions.any((u) => u['label'] == row.fillerUnit) ? row.fillerUnit : null,
+                        initialValue:
+                            _fillerUnitOptions.any(
+                                  (u) => u['label'] == row.fillerUnit,
+                                )
+                                ? row.fillerUnit
+                                : null,
                         decoration: const InputDecoration(
                           labelText: 'Qty/Unit',
-                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
                         ),
-                        items: _fillerUnitOptions.map((u) {
-                          return DropdownMenuItem<String>(
-                            value: u['label'].toString(),
-                            child: Text(u['label'].toString(), style: const TextStyle(fontSize: 12)),
-                          );
-                        }).toList(),
-                        onChanged: (val) => setState(() => row.fillerUnit = val),
+                        items:
+                            _fillerUnitOptions.map((u) {
+                              return DropdownMenuItem<String>(
+                                value: u['label'].toString(),
+                                child: Text(
+                                  u['label'].toString(),
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              );
+                            }).toList(),
+                        onChanged:
+                            (val) => setState(() => row.fillerUnit = val),
                       ),
                     ),
                   ],
@@ -1217,7 +1687,10 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
         controller: controller,
         decoration: InputDecoration(
           labelText: label,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 12,
+          ),
         ),
       ),
     );
@@ -1225,7 +1698,20 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
 
   String _formatDate(DateTime? date) {
     if (date == null) return '';
-    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     return '${date.day} ${months[date.month - 1]} ${date.year}';
   }
 }

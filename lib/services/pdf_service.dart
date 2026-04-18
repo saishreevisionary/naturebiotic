@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -21,8 +20,12 @@ class PdfService {
 
     final dateStr = DateFormat('dd MMM yyyy').format(DateTime.now());
 
-    final problemWidget = await _buildProblemSection(report['problem'] ?? '', font, boldFont);
-    
+    final problemWidget = await _buildProblemSection(
+      report['problem'] ?? '',
+      font,
+      boldFont,
+    );
+
     pw.Widget? signatureImage;
     if (report['signature_url'] != null) {
       try {
@@ -37,56 +40,74 @@ class PdfService {
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(32),
-        theme: pw.ThemeData.withFont(
-          base: font,
-          bold: boldFont,
-        ),
-        build: (context) => [
-          _buildHeader(dateStr),
-          pw.SizedBox(height: 20),
-          _buildInfoSection(farmName, cropName, farmerName),
-          pw.SizedBox(height: 20),
-          _buildSectionTitle('Problem Analysis'),
-          problemWidget,
-          pw.SizedBox(height: 15),
-          _buildSectionTitle('Previous Inputs History'),
-          _buildHistoryGrid(report['previous_inputs'] ?? 'No data provided', font, boldFont),
-          pw.SizedBox(height: 20),
-          _buildSectionTitle('Recommended Products & Treatments'),
-          _buildRecommendationsTable(report['recommendations'] ?? ''),
-          pw.SizedBox(height: 20),
-          _buildSectionTitle('Product Requirements & Estimations'),
-          _buildCostTable(report['estimated_cost'] ?? ''),
-          pw.Spacer(),
-          _buildFooter(signatureImage),
-        ],
+        theme: pw.ThemeData.withFont(base: font, bold: boldFont),
+        build:
+            (context) => [
+              _buildHeader(dateStr),
+              pw.SizedBox(height: 20),
+              _buildInfoSection(farmName, cropName, farmerName),
+              pw.SizedBox(height: 20),
+              _buildSectionTitle('Problem Analysis'),
+              problemWidget,
+              pw.SizedBox(height: 15),
+              _buildSectionTitle('Previous Inputs History'),
+              _buildHistoryGrid(
+                report['previous_inputs'] ?? 'No data provided',
+                font,
+                boldFont,
+              ),
+              pw.SizedBox(height: 20),
+              _buildSectionTitle('Recommended Products & Treatments'),
+              _buildRecommendationsTable(report['recommendations'] ?? ''),
+              pw.SizedBox(height: 20),
+              _buildSectionTitle('Product Requirements & Estimations'),
+              _buildCostTable(report['estimated_cost'] ?? ''),
+              pw.Spacer(),
+              _buildFooter(signatureImage),
+            ],
       ),
     );
 
     await Printing.sharePdf(
       bytes: await pdf.save(),
-      filename: 'NatureBiotic_AnalysisReport_${farmName.replaceAll(' ', '_')}.pdf',
+      filename:
+          'NatureBiotic_AnalysisReport_${farmName.replaceAll(' ', '_')}.pdf',
     );
   }
 
-  static pw.Widget _buildHistoryGrid(String history, pw.Font font, pw.Font bold) {
-    if (history.isEmpty) return pw.Text('No data provided', style: pw.TextStyle(fontSize: 10));
-    
+  static pw.Widget _buildHistoryGrid(
+    String history,
+    pw.Font font,
+    pw.Font bold,
+  ) {
+    if (history.isEmpty)
+      return pw.Text('No data provided', style: pw.TextStyle(fontSize: 10));
+
     // Check if it's the new aggregated format
     if (history.contains('\n\nHistorical Records:')) {
       final parts = history.split('\n\nHistorical Records:');
       final currentPart = parts[0];
       final historicalPart = parts[1];
-      
-      final historyRecords = historicalPart.split('\n--- ').where((p) => p.trim().isNotEmpty).toList();
-      
+
+      final historyRecords =
+          historicalPart
+              .split('\n--- ')
+              .where((p) => p.trim().isNotEmpty)
+              .toList();
+
       return pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.Text('Current Visit Pre-Visit Observations:', style: pw.TextStyle(fontSize: 10, font: bold)),
+          pw.Text(
+            'Current Visit Pre-Visit Observations:',
+            style: pw.TextStyle(fontSize: 10, font: bold),
+          ),
           pw.Text(currentPart, style: const pw.TextStyle(fontSize: 9)),
           pw.SizedBox(height: 10),
-          pw.Text('Historical Entries:', style: pw.TextStyle(fontSize: 10, font: bold)),
+          pw.Text(
+            'Historical Entries:',
+            style: pw.TextStyle(fontSize: 10, font: bold),
+          ),
           pw.SizedBox(height: 5),
           pw.Wrap(
             spacing: 15,
@@ -96,11 +117,15 @@ class PdfService {
                 // Format was: "--- $hDate ---\n$hInputs"
                 // But my split removed "--- "
                 final subParts = record.split(' ---\n');
-                if (subParts.length < 2) return pw.Text(record, style: const pw.TextStyle(fontSize: 8));
-                
+                if (subParts.length < 2)
+                  return pw.Text(
+                    record,
+                    style: const pw.TextStyle(fontSize: 8),
+                  );
+
                 final dateStr = subParts[0];
                 final inputs = subParts[1];
-                
+
                 return pw.Container(
                   width: 230,
                   padding: const pw.EdgeInsets.all(8),
@@ -111,7 +136,14 @@ class PdfService {
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Text(dateStr, style: pw.TextStyle(fontSize: 8, font: bold, color: PdfColors.green900)),
+                      pw.Text(
+                        dateStr,
+                        style: pw.TextStyle(
+                          fontSize: 8,
+                          font: bold,
+                          color: PdfColors.green900,
+                        ),
+                      ),
                       pw.Divider(color: PdfColors.grey300),
                       pw.Text(inputs, style: const pw.TextStyle(fontSize: 8)),
                     ],
@@ -134,8 +166,18 @@ class PdfService {
         pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
-            pw.Text('NATURE BIOTIC', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: PdfColors.green)),
-            pw.Text('Agricultural Analysis & Recommendation Report', style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
+            pw.Text(
+              'NATURE BIOTIC',
+              style: pw.TextStyle(
+                fontSize: 24,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.green,
+              ),
+            ),
+            pw.Text(
+              'Agricultural Analysis & Recommendation Report',
+              style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700),
+            ),
           ],
         ),
         pw.Text('Date: $date', style: const pw.TextStyle(fontSize: 10)),
@@ -165,8 +207,14 @@ class PdfService {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text(label, style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
-        pw.Text(value, style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+        pw.Text(
+          label,
+          style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+        ),
+        pw.Text(
+          value,
+          style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
+        ),
       ],
     );
   }
@@ -177,17 +225,29 @@ class PdfService {
       padding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 8),
       margin: const pw.EdgeInsets.only(bottom: 8),
       decoration: const pw.BoxDecoration(color: PdfColors.green100),
-      child: pw.Text(title, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.green900)),
+      child: pw.Text(
+        title,
+        style: pw.TextStyle(
+          fontSize: 12,
+          fontWeight: pw.FontWeight.bold,
+          color: PdfColors.green900,
+        ),
+      ),
     );
   }
 
   static pw.Widget _buildRecommendationsTable(String recommendations) {
-    final lines = recommendations.split('\n').where((l) => l.isNotEmpty).toList();
+    final lines =
+        recommendations.split('\n').where((l) => l.isNotEmpty).toList();
     if (lines.isEmpty) return pw.Text('No recommendations provided.');
 
     return pw.TableHelper.fromTextArray(
       context: null,
-      headerStyle: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+      headerStyle: pw.TextStyle(
+        fontSize: 10,
+        fontWeight: pw.FontWeight.bold,
+        color: PdfColors.white,
+      ),
       headerDecoration: const pw.BoxDecoration(color: PdfColors.green700),
       cellStyle: const pw.TextStyle(fontSize: 9),
       data: <List<String>>[
@@ -196,17 +256,24 @@ class PdfService {
           // Format from app: "Product Name (Application) - Dose: X, Filler: Y"
           final parts = line.split(' - ');
           if (parts.length < 2) return [line, '', '', ''];
-          
+
           final prodPart = parts[0]; // "Name (App)"
           final detailsPart = parts[1]; // "Dose: X, Filler: Y"
-          
-          final prodName = prodPart.contains('(') ? prodPart.split('(')[0].trim() : prodPart;
-          final app = prodPart.contains('(') ? prodPart.split('(')[1].replaceAll(')', '').trim() : '';
-          
+
+          final prodName =
+              prodPart.contains('(') ? prodPart.split('(')[0].trim() : prodPart;
+          final app =
+              prodPart.contains('(')
+                  ? prodPart.split('(')[1].replaceAll(')', '').trim()
+                  : '';
+
           final detailParts = detailsPart.split(', ');
           final dose = detailParts[0].replaceAll('Dose: ', '').trim();
-          final filler = detailParts.length > 1 ? detailParts[1].replaceAll('Filler: ', '').trim() : '';
-          
+          final filler =
+              detailParts.length > 1
+                  ? detailParts[1].replaceAll('Filler: ', '').trim()
+                  : '';
+
           return [prodName, app, dose, filler];
         }),
       ],
@@ -218,7 +285,14 @@ class PdfService {
     if (lines.isEmpty) return pw.Text('No estimation provided.');
 
     final tableData = <List<String>>[
-      ['Product Name', 'Pkg Size', 'Qty #', 'MRP', 'Offer Price', 'Total Value'],
+      [
+        'Product Name',
+        'Pkg Size',
+        'Qty #',
+        'MRP',
+        'Offer Price',
+        'Total Value',
+      ],
     ];
 
     String grandTotal = '0';
@@ -241,14 +315,32 @@ class PdfService {
       final prodPart = parts[0]; // "Product Name (Pkg: X)"
       final detailsPart = parts[1]; // "Qty: Y, MRP: Z, Offer: A, Total: B"
 
-      final prodName = prodPart.contains('(Pkg:') ? prodPart.split('(Pkg:')[0].trim() : prodPart;
-      final pkg = prodPart.contains('(Pkg:') ? prodPart.split('(Pkg:')[1].replaceAll(')', '').trim() : '';
+      final prodName =
+          prodPart.contains('(Pkg:')
+              ? prodPart.split('(Pkg:')[0].trim()
+              : prodPart;
+      final pkg =
+          prodPart.contains('(Pkg:')
+              ? prodPart.split('(Pkg:')[1].replaceAll(')', '').trim()
+              : '';
 
       final detailParts = detailsPart.split(', ');
-      final qty = detailParts.length > 0 ? detailParts[0].replaceAll('Qty: ', '').trim() : '';
-      final mrp = detailParts.length > 1 ? detailParts[1].replaceAll('MRP: ', '').trim() : '';
-      final offer = detailParts.length > 2 ? detailParts[2].replaceAll('Offer: ', '').trim() : '';
-      final total = detailParts.length > 3 ? detailParts[3].replaceAll('Total: ', '').trim() : '';
+      final qty =
+          detailParts.isNotEmpty
+              ? detailParts[0].replaceAll('Qty: ', '').trim()
+              : '';
+      final mrp =
+          detailParts.length > 1
+              ? detailParts[1].replaceAll('MRP: ', '').trim()
+              : '';
+      final offer =
+          detailParts.length > 2
+              ? detailParts[2].replaceAll('Offer: ', '').trim()
+              : '';
+      final total =
+          detailParts.length > 3
+              ? detailParts[3].replaceAll('Total: ', '').trim()
+              : '';
 
       tableData.add([prodName, pkg, qty, mrp, offer, total]);
     }
@@ -258,7 +350,11 @@ class PdfService {
       children: [
         pw.TableHelper.fromTextArray(
           context: null,
-          headerStyle: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+          headerStyle: pw.TextStyle(
+            fontSize: 10,
+            fontWeight: pw.FontWeight.bold,
+            color: PdfColors.white,
+          ),
           headerDecoration: const pw.BoxDecoration(color: PdfColors.green700),
           cellStyle: const pw.TextStyle(fontSize: 9),
           data: tableData,
@@ -267,23 +363,40 @@ class PdfService {
         pw.Row(
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
-            pw.Text('Next Visit Date: $nextVisit', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.green800)),
-            pw.Text('GRAND TOTAL: $grandTotal', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.green900)),
+            pw.Text(
+              'Next Visit Date: $nextVisit',
+              style: pw.TextStyle(
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.green800,
+              ),
+            ),
+            pw.Text(
+              'GRAND TOTAL: $grandTotal',
+              style: pw.TextStyle(
+                fontSize: 14,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.green900,
+              ),
+            ),
           ],
         ),
       ],
     );
   }
 
-  static Future<pw.Widget> _buildProblemSection(String problem, pw.Font font, pw.Font bold) async {
+  static Future<pw.Widget> _buildProblemSection(
+    String problem,
+    pw.Font font,
+    pw.Font bold,
+  ) async {
     final parts = problem.split(', ');
     List<pw.Widget> items = [];
-    
+
     for (var part in parts) {
       if (part.contains('{img:')) {
         final problemName = part.split('{img:')[0].trim();
         final imageUrl = part.split('{img:')[1].replaceAll('}', '').trim();
-        
+
         pw.Widget imageWidget;
         try {
           final image = await networkImage(imageUrl);
@@ -293,7 +406,10 @@ class PdfService {
             child: pw.Image(image, fit: pw.BoxFit.cover),
           );
         } catch (e) {
-          imageWidget = pw.Text('Error loading image', style: pw.TextStyle(fontSize: 8, color: PdfColors.red));
+          imageWidget = pw.Text(
+            'Error loading image',
+            style: pw.TextStyle(fontSize: 8, color: PdfColors.red),
+          );
         }
 
         items.add(
@@ -302,7 +418,10 @@ class PdfService {
             child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                pw.Text(problemName, style: pw.TextStyle(font: bold, fontSize: 10)),
+                pw.Text(
+                  problemName,
+                  style: pw.TextStyle(font: bold, fontSize: 10),
+                ),
                 pw.SizedBox(height: 5),
                 imageWidget,
                 pw.SizedBox(height: 10),
@@ -320,11 +439,7 @@ class PdfService {
       }
     }
 
-    return pw.Wrap(
-      spacing: 15,
-      runSpacing: 15,
-      children: items,
-    );
+    return pw.Wrap(spacing: 15, runSpacing: 15, children: items);
   }
 
   static Future<void> generateCallLogReport({
@@ -339,7 +454,7 @@ class PdfService {
     final dateFormat = DateFormat('dd MMM yyyy');
     final startStr = dateFormat.format(dateRange.start);
     final endStr = dateFormat.format(dateRange.end);
-    
+
     int totalSeconds = 0;
     for (var log in logs) {
       totalSeconds += (log['duration_seconds'] as int? ?? 0);
@@ -357,106 +472,189 @@ class PdfService {
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(32),
         theme: pw.ThemeData.withFont(base: font, bold: boldFont),
-        header: (context) => pw.Column(
-          children: [
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        header:
+            (context) => pw.Column(
               children: [
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('NATURE BIOTIC', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: PdfColors.green)),
-                    pw.Text('Executive Performance Report - Call Logs', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          'NATURE BIOTIC',
+                          style: pw.TextStyle(
+                            fontSize: 20,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.green,
+                          ),
+                        ),
+                        pw.Text(
+                          'Executive Performance Report - Call Logs',
+                          style: const pw.TextStyle(
+                            fontSize: 10,
+                            color: PdfColors.grey700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.end,
+                      children: [
+                        pw.Text(
+                          'Date range: $startStr - $endStr',
+                          style: const pw.TextStyle(fontSize: 8),
+                        ),
+                        pw.Text(
+                          'Generated: ${DateFormat('dd MMM yyyy HH:mm').format(DateTime.now())}',
+                          style: const pw.TextStyle(fontSize: 8),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.end,
-                  children: [
-                    pw.Text('Date range: $startStr - $endStr', style: const pw.TextStyle(fontSize: 8)),
-                    pw.Text('Generated: ${DateFormat('dd MMM yyyy HH:mm').format(DateTime.now())}', style: const pw.TextStyle(fontSize: 8)),
-                  ],
-                ),
+                pw.Divider(thickness: 1, color: PdfColors.grey300),
+                pw.SizedBox(height: 10),
               ],
             ),
-            pw.Divider(thickness: 1, color: PdfColors.grey300),
-            pw.SizedBox(height: 10),
-          ],
-        ),
-        build: (context) => [
-          pw.Container(
-            padding: const pw.EdgeInsets.all(10),
-            decoration: const pw.BoxDecoration(
-              color: PdfColors.grey100,
-              borderRadius: pw.BorderRadius.all(pw.Radius.circular(8)),
-            ),
-            child: pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
-              children: [
-                pw.Column(
+        build:
+            (context) => [
+              pw.Container(
+                padding: const pw.EdgeInsets.all(10),
+                decoration: const pw.BoxDecoration(
+                  color: PdfColors.grey100,
+                  borderRadius: pw.BorderRadius.all(pw.Radius.circular(8)),
+                ),
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
                   children: [
-                    pw.Text('EXECUTIVE NAME', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
-                    pw.Text(executiveName, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                    pw.Column(
+                      children: [
+                        pw.Text(
+                          'EXECUTIVE NAME',
+                          style: const pw.TextStyle(
+                            fontSize: 8,
+                            color: PdfColors.grey600,
+                          ),
+                        ),
+                        pw.Text(
+                          executiveName,
+                          style: pw.TextStyle(
+                            fontSize: 12,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    pw.Column(
+                      children: [
+                        pw.Text(
+                          'TOTAL CALLS',
+                          style: const pw.TextStyle(
+                            fontSize: 8,
+                            color: PdfColors.grey600,
+                          ),
+                        ),
+                        pw.Text(
+                          logs.length.toString(),
+                          style: pw.TextStyle(
+                            fontSize: 12,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    pw.Column(
+                      children: [
+                        pw.Text(
+                          'TOTAL DURATION',
+                          style: const pw.TextStyle(
+                            fontSize: 8,
+                            color: PdfColors.grey600,
+                          ),
+                        ),
+                        pw.Text(
+                          formatDuration(totalSeconds),
+                          style: pw.TextStyle(
+                            fontSize: 12,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.green900,
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
-                pw.Column(
-                  children: [
-                    pw.Text('TOTAL CALLS', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
-                    pw.Text(logs.length.toString(), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-                  ],
+              ),
+              pw.SizedBox(height: 20),
+              pw.TableHelper.fromTextArray(
+                headerStyle: pw.TextStyle(
+                  fontSize: 9,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.white,
                 ),
-                pw.Column(
-                  children: [
-                    pw.Text('TOTAL DURATION', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
-                    pw.Text(formatDuration(totalSeconds), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.green900)),
-                  ],
+                headerDecoration: const pw.BoxDecoration(
+                  color: PdfColors.green700,
                 ),
-              ],
-            ),
-          ),
-          pw.SizedBox(height: 20),
-          pw.TableHelper.fromTextArray(
-            headerStyle: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
-            headerDecoration: const pw.BoxDecoration(color: PdfColors.green700),
-            cellStyle: const pw.TextStyle(fontSize: 8),
-            columnWidths: {
-              0: const pw.FixedColumnWidth(80),
-              1: const pw.FixedColumnWidth(80),
-              2: const pw.FixedColumnWidth(40),
-            },
-            data: <List<String>>[
-              ['Date & Time', 'Farmer / Number', 'Duration', 'Call Summary'],
-              ...logs.map((log) {
-                final date = DateTime.parse(log['created_at']);
-                final farmerName = log['farmers']?['name'] ?? 'Direct Call';
-                final number = log['phone_number'] ?? 'N/A';
-                return [
-                  DateFormat('dd MMM, hh:mm a').format(date),
-                  '$farmerName\n$number',
-                  formatDuration(log['duration_seconds'] ?? 0),
-                  log['summary'] ?? 'No summary',
-                ];
-              }),
+                cellStyle: const pw.TextStyle(fontSize: 8),
+                columnWidths: {
+                  0: const pw.FixedColumnWidth(80),
+                  1: const pw.FixedColumnWidth(80),
+                  2: const pw.FixedColumnWidth(40),
+                },
+                data: <List<String>>[
+                  [
+                    'Date & Time',
+                    'Farmer / Number',
+                    'Duration',
+                    'Call Summary',
+                  ],
+                  ...logs.map((log) {
+                    final date = DateTime.parse(log['created_at']);
+                    final farmerName = log['farmers']?['name'] ?? 'Direct Call';
+                    final number = log['phone_number'] ?? 'N/A';
+                    return [
+                      DateFormat('dd MMM, hh:mm a').format(date),
+                      '$farmerName\n$number',
+                      formatDuration(log['duration_seconds'] ?? 0),
+                      log['summary'] ?? 'No summary',
+                    ];
+                  }),
+                ],
+              ),
             ],
-          ),
-        ],
-        footer: (context) => pw.Column(
-          children: [
-            pw.Divider(thickness: 1, color: PdfColors.grey300),
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        footer:
+            (context) => pw.Column(
               children: [
-                pw.Text('Nature Biotic Management Report', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey500)),
-                pw.Text('Page ${context.pageNumber} of ${context.pagesCount}', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey500)),
+                pw.Divider(thickness: 1, color: PdfColors.grey300),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text(
+                      'Nature Biotic Management Report',
+                      style: const pw.TextStyle(
+                        fontSize: 7,
+                        color: PdfColors.grey500,
+                      ),
+                    ),
+                    pw.Text(
+                      'Page ${context.pageNumber} of ${context.pagesCount}',
+                      style: const pw.TextStyle(
+                        fontSize: 7,
+                        color: PdfColors.grey500,
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
-          ],
-        ),
       ),
     );
 
     await Printing.sharePdf(
       bytes: await pdf.save(),
-      filename: 'CallLogReport_${executiveName.replaceAll(' ', '_')}_${startStr}_to_${endStr}.pdf',
+      filename:
+          'CallLogReport_${executiveName.replaceAll(' ', '_')}_${startStr}_to_$endStr.pdf',
     );
   }
 
@@ -473,7 +671,8 @@ class PdfService {
     final dateStr = DateFormat('dd MMM yyyy, hh:mm a').format(date);
     double grandTotal = 0;
     for (var item in items) {
-      grandTotal += (item['price'] as double? ?? 0) * (item['quantity'] as double? ?? 0);
+      grandTotal +=
+          (item['price'] as double? ?? 0) * (item['quantity'] as double? ?? 0);
     }
 
     pdf.addPage(
@@ -481,118 +680,194 @@ class PdfService {
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(32),
         theme: pw.ThemeData.withFont(base: font, bold: boldFont),
-        header: (context) => pw.Column(
-          children: [
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        header:
+            (context) => pw.Column(
               children: [
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('NATURE BIOTIC', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: PdfColors.green)),
-                    pw.Text('Stock Movement Challan', style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          'NATURE BIOTIC',
+                          style: pw.TextStyle(
+                            fontSize: 24,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.green,
+                          ),
+                        ),
+                        pw.Text(
+                          'Stock Movement Challan',
+                          style: const pw.TextStyle(
+                            fontSize: 12,
+                            color: PdfColors.grey700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.end,
+                      children: [
+                        pw.Text(
+                          'Date: $dateStr',
+                          style: const pw.TextStyle(fontSize: 9),
+                        ),
+                        pw.Text(
+                          'Type: ${transactionType.toUpperCase()}',
+                          style: pw.TextStyle(
+                            fontSize: 11,
+                            fontWeight: pw.FontWeight.bold,
+                            color:
+                                transactionType == 'RECEIVED'
+                                    ? PdfColors.green900
+                                    : PdfColors.orange900,
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                pw.Divider(thickness: 1, color: PdfColors.grey300),
+                pw.SizedBox(height: 10),
+              ],
+            ),
+        build:
+            (context) => [
+              pw.Row(
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        'RECIPIENT / FARM:',
+                        style: const pw.TextStyle(
+                          fontSize: 8,
+                          color: PdfColors.grey600,
+                        ),
+                      ),
+                      pw.Text(
+                        farmName,
+                        style: pw.TextStyle(
+                          fontSize: 14,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 20),
+              pw.TableHelper.fromTextArray(
+                headerStyle: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.white,
+                ),
+                headerDecoration: const pw.BoxDecoration(
+                  color: PdfColors.green700,
+                ),
+                cellStyle: const pw.TextStyle(fontSize: 9),
+                columnWidths: {
+                  0: const pw.FixedColumnWidth(30),
+                  1: const pw.FlexColumnWidth(3),
+                  2: const pw.FlexColumnWidth(1),
+                  3: const pw.FlexColumnWidth(1),
+                  4: const pw.FlexColumnWidth(1),
+                  5: const pw.FlexColumnWidth(1),
+                },
+                data: <List<String>>[
+                  ['S.No', 'Item Name', 'Size', 'Qty', 'Rate', 'Amount'],
+                  ...items.asMap().entries.map((entry) {
+                    final idx = entry.key + 1;
+                    final item = entry.value;
+                    final qty = item['quantity'] as double? ?? 0;
+                    final price = item['price'] as double? ?? 0;
+                    return [
+                      idx.toString(),
+                      item['name'] ?? 'Unknown',
+                      item['unit'] ?? 'N/A',
+                      qty.toString(),
+                      'Rs.${price.toStringAsFixed(2)}',
+                      'Rs.${(qty * price).toStringAsFixed(2)}',
+                    ];
+                  }),
+                ],
+              ),
+              pw.SizedBox(height: 20),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.end,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text(
+                        'TOTAL VALUE:',
+                        style: const pw.TextStyle(
+                          fontSize: 10,
+                          color: PdfColors.grey600,
+                        ),
+                      ),
+                      pw.Text(
+                        'Rs.${grandTotal.toStringAsFixed(2)}',
+                        style: pw.TextStyle(
+                          fontSize: 18,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.green900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              pw.Spacer(),
+              pw.Container(
+                padding: const pw.EdgeInsets.all(10),
+                decoration: const pw.BoxDecoration(
+                  color: PdfColors.grey50,
+                  borderRadius: pw.BorderRadius.all(pw.Radius.circular(8)),
+                ),
+                child: pw.Text(
+                  'Declaration: This is a computer generated document. It confirms that the above mentioned items have been ${transactionType.toLowerCase()} by the farm representative.',
+                  style: const pw.TextStyle(
+                    fontSize: 8,
+                    fontStyle: pw.FontStyle.italic,
+                  ),
+                ),
+              ),
+            ],
+        footer:
+            (context) => pw.Column(
+              children: [
+                pw.Divider(thickness: 1, color: PdfColors.grey300),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('Date: $dateStr', style: const pw.TextStyle(fontSize: 9)),
-                    pw.Text('Type: ${transactionType.toUpperCase()}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: transactionType == 'RECEIVED' ? PdfColors.green900 : PdfColors.orange900)),
+                    pw.Text(
+                      'Nature Biotic Stock Management System',
+                      style: const pw.TextStyle(
+                        fontSize: 7,
+                        color: PdfColors.grey500,
+                      ),
+                    ),
+                    pw.Text(
+                      'Page ${context.pageNumber} of ${context.pagesCount}',
+                      style: const pw.TextStyle(
+                        fontSize: 7,
+                        color: PdfColors.grey500,
+                      ),
+                    ),
                   ],
                 ),
               ],
             ),
-            pw.Divider(thickness: 1, color: PdfColors.grey300),
-            pw.SizedBox(height: 10),
-          ],
-        ),
-        build: (context) => [
-          pw.Row(
-            children: [
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text('RECIPIENT / FARM:', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
-                  pw.Text(farmName, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-                ],
-              ),
-            ],
-          ),
-          pw.SizedBox(height: 20),
-          pw.TableHelper.fromTextArray(
-            headerStyle: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
-            headerDecoration: const pw.BoxDecoration(color: PdfColors.green700),
-            cellStyle: const pw.TextStyle(fontSize: 9),
-            columnWidths: {
-              0: const pw.FixedColumnWidth(30),
-              1: const pw.FlexColumnWidth(3),
-              2: const pw.FlexColumnWidth(1),
-              3: const pw.FlexColumnWidth(1),
-              4: const pw.FlexColumnWidth(1),
-              5: const pw.FlexColumnWidth(1),
-            },
-            data: <List<String>>[
-              ['S.No', 'Item Name', 'Size', 'Qty', 'Rate', 'Amount'],
-              ...items.asMap().entries.map((entry) {
-                final idx = entry.key + 1;
-                final item = entry.value;
-                final qty = item['quantity'] as double? ?? 0;
-                final price = item['price'] as double? ?? 0;
-                return [
-                  idx.toString(),
-                  item['name'] ?? 'Unknown',
-                  item['unit'] ?? 'N/A',
-                  qty.toString(),
-                  'Rs.${price.toStringAsFixed(2)}',
-                  'Rs.${(qty * price).toStringAsFixed(2)}',
-                ];
-              }),
-            ],
-          ),
-          pw.SizedBox(height: 20),
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.end,
-            children: [
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.end,
-                children: [
-                  pw.Text('TOTAL VALUE:', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600)),
-                  pw.Text('Rs.${grandTotal.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.green900)),
-                ],
-              ),
-            ],
-          ),
-          pw.Spacer(),
-          pw.Container(
-            padding: const pw.EdgeInsets.all(10),
-            decoration: const pw.BoxDecoration(
-              color: PdfColors.grey50,
-              borderRadius: pw.BorderRadius.all(pw.Radius.circular(8)),
-            ),
-            child: pw.Text(
-              'Declaration: This is a computer generated document. It confirms that the above mentioned items have been ${transactionType.toLowerCase()} by the farm representative.',
-              style: const pw.TextStyle(fontSize: 8, fontStyle: pw.FontStyle.italic),
-            ),
-          ),
-        ],
-        footer: (context) => pw.Column(
-          children: [
-            pw.Divider(thickness: 1, color: PdfColors.grey300),
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Text('Nature Biotic Stock Management System', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey500)),
-                pw.Text('Page ${context.pageNumber} of ${context.pagesCount}', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey500)),
-              ],
-            ),
-          ],
-        ),
       ),
     );
 
     await Printing.sharePdf(
       bytes: await pdf.save(),
-      filename: 'NatureBiotic_Challan_${farmName.replaceAll(' ', '_')}_${DateFormat('ddMMMyy').format(date)}.pdf',
+      filename:
+          'NatureBiotic_Challan_${farmName.replaceAll(' ', '_')}_${DateFormat('ddMMMyy').format(date)}.pdf',
     );
   }
 
@@ -607,19 +882,29 @@ class PdfService {
             pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                pw.Text('Nature Biotic Executive Signature', style: const pw.TextStyle(fontSize: 8)),
+                pw.Text(
+                  'Nature Biotic Executive Signature',
+                  style: const pw.TextStyle(fontSize: 8),
+                ),
                 pw.SizedBox(height: 5),
                 if (signature != null)
-                  pw.Container(
-                    height: 30,
-                    child: signature,
-                  )
+                  pw.Container(height: 30, child: signature)
                 else
                   pw.SizedBox(height: 30),
-                pw.Container(width: 150, decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey300)))),
+                pw.Container(
+                  width: 150,
+                  decoration: const pw.BoxDecoration(
+                    border: pw.Border(
+                      bottom: pw.BorderSide(color: PdfColors.grey300),
+                    ),
+                  ),
+                ),
               ],
             ),
-            pw.Text('Thank you for choosing Nature Biotic for a sustainable future.', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey500)),
+            pw.Text(
+              'Thank you for choosing Nature Biotic for a sustainable future.',
+              style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey500),
+            ),
           ],
         ),
       ],
@@ -641,85 +926,134 @@ class PdfService {
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(32),
         theme: pw.ThemeData.withFont(base: font, bold: boldFont),
-        header: (context) => pw.Column(
-          children: [
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        header:
+            (context) => pw.Column(
               children: [
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('NATURE BIOTIC', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: PdfColors.green)),
-                    pw.Text('Consolidated Farm Stock Report', style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          'NATURE BIOTIC',
+                          style: pw.TextStyle(
+                            fontSize: 24,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.green,
+                          ),
+                        ),
+                        pw.Text(
+                          'Consolidated Farm Stock Report',
+                          style: const pw.TextStyle(
+                            fontSize: 12,
+                            color: PdfColors.grey700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    pw.Text(
+                      'Generated: $dateStr',
+                      style: const pw.TextStyle(fontSize: 9),
+                    ),
                   ],
                 ),
-                pw.Text('Generated: $dateStr', style: const pw.TextStyle(fontSize: 9)),
+                pw.Divider(thickness: 1, color: PdfColors.grey300),
+                pw.SizedBox(height: 10),
               ],
             ),
-            pw.Divider(thickness: 1, color: PdfColors.grey300),
-            pw.SizedBox(height: 10),
-          ],
-        ),
-        build: (context) => [
-          for (var farm in farmData) ...[
-            pw.Container(
-              width: double.infinity,
-              padding: const pw.EdgeInsets.all(8),
-              decoration: const pw.BoxDecoration(color: PdfColors.green50),
-              child: pw.Text(
-                'FARM: ${farm['farmName'].toString().toUpperCase()}',
-                style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.green900),
-              ),
-            ),
-            pw.SizedBox(height: 10),
-            if ((farm['balances'] as List).isEmpty)
-              pw.Padding(
-                padding: const pw.EdgeInsets.only(left: 8, bottom: 20),
-                child: pw.Text('No stock in hand for this farm.', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600)),
-              )
-            else ...[
-              pw.TableHelper.fromTextArray(
-                headerStyle: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.green700),
-                cellStyle: const pw.TextStyle(fontSize: 9),
-                columnWidths: {
-                  0: const pw.FlexColumnWidth(3),
-                  1: const pw.FlexColumnWidth(1),
-                  2: const pw.FlexColumnWidth(1),
-                },
-                data: <List<String>>[
-                  ['Item Name', 'Packet Size', 'Balance Qty'],
-                  ...(farm['balances'] as List).map((b) => [
-                    b['item'].toString(),
-                    b['unit'].toString(),
-                    b['balance'].toString().replaceAll(RegExp(r'\.0$'), ''),
-                  ]),
+        build:
+            (context) => [
+              for (var farm in farmData) ...[
+                pw.Container(
+                  width: double.infinity,
+                  padding: const pw.EdgeInsets.all(8),
+                  decoration: const pw.BoxDecoration(color: PdfColors.green50),
+                  child: pw.Text(
+                    'FARM: ${farm['farmName'].toString().toUpperCase()}',
+                    style: pw.TextStyle(
+                      fontSize: 14,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.green900,
+                    ),
+                  ),
+                ),
+                pw.SizedBox(height: 10),
+                if ((farm['balances'] as List).isEmpty)
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.only(left: 8, bottom: 20),
+                    child: pw.Text(
+                      'No stock in hand for this farm.',
+                      style: const pw.TextStyle(
+                        fontSize: 10,
+                        color: PdfColors.grey600,
+                      ),
+                    ),
+                  )
+                else ...[
+                  pw.TableHelper.fromTextArray(
+                    headerStyle: pw.TextStyle(
+                      fontSize: 10,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.white,
+                    ),
+                    headerDecoration: const pw.BoxDecoration(
+                      color: PdfColors.green700,
+                    ),
+                    cellStyle: const pw.TextStyle(fontSize: 9),
+                    columnWidths: {
+                      0: const pw.FlexColumnWidth(3),
+                      1: const pw.FlexColumnWidth(1),
+                      2: const pw.FlexColumnWidth(1),
+                    },
+                    data: <List<String>>[
+                      ['Item Name', 'Packet Size', 'Balance Qty'],
+                      ...(farm['balances'] as List).map(
+                        (b) => [
+                          b['item'].toString(),
+                          b['unit'].toString(),
+                          b['balance'].toString().replaceAll(
+                            RegExp(r'\.0$'),
+                            '',
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  pw.SizedBox(height: 25),
                 ],
-              ),
-              pw.SizedBox(height: 25),
+              ],
             ],
-          ],
-        ],
-        footer: (context) => pw.Column(
-          children: [
-            pw.Divider(thickness: 1, color: PdfColors.grey300),
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        footer:
+            (context) => pw.Column(
               children: [
-                pw.Text('Nature Biotic Stock Management System', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey500)),
-                pw.Text('Page ${context.pageNumber} of ${context.pagesCount}', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey500)),
+                pw.Divider(thickness: 1, color: PdfColors.grey300),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text(
+                      'Nature Biotic Stock Management System',
+                      style: const pw.TextStyle(
+                        fontSize: 7,
+                        color: PdfColors.grey500,
+                      ),
+                    ),
+                    pw.Text(
+                      'Page ${context.pageNumber} of ${context.pagesCount}',
+                      style: const pw.TextStyle(
+                        fontSize: 7,
+                        color: PdfColors.grey500,
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
-          ],
-        ),
       ),
     );
 
-    final filename = 'NatureBiotic_StockReport_${DateFormat('ddMMMyy').format(date)}.pdf';
-    await Printing.sharePdf(
-      bytes: await pdf.save(),
-      filename: filename,
-    );
+    final filename =
+        'NatureBiotic_StockReport_${DateFormat('ddMMMyy').format(date)}.pdf';
+    await Printing.sharePdf(bytes: await pdf.save(), filename: filename);
   }
 }
-

@@ -183,22 +183,22 @@ class _FarmSalesListScreenState extends State<FarmSalesListScreen> {
                         style: const TextStyle(color: AppColors.textGray, fontSize: 12),
                       ),
                       const SizedBox(height: 8),
-                      Row(
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           _buildMiniBadge(
                             Icons.inventory_2_outlined, 
                             '${data['total_items'].toInt()} Items', 
                             Colors.blueGrey
                           ),
-                          if (data['total_returned'] > 0) ...[
-                            const SizedBox(width: 8),
+                          if (data['total_returned'] > 0)
                             _buildMiniBadge(
                               Icons.replay_circle_filled_rounded, 
                               '${data['total_returned'].toInt()} Returned', 
                               Colors.redAccent
                             ),
-                          ],
-                          const SizedBox(width: 8),
                           _buildMiniBadge(
                             Icons.description_outlined, 
                             'View Challans', 

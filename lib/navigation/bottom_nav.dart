@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:nature_biotic/core/theme.dart';
 import 'package:nature_biotic/features/dashboard/screens/dashboard_screen.dart';
 import 'package:nature_biotic/features/farmers/screens/farmer_list_screen.dart';
-import 'package:nature_biotic/features/farms/screens/farm_list_screen.dart';
-import 'package:nature_biotic/features/reports/screens/reports_list_screen.dart';
+import 'package:nature_biotic/features/calls/screens/executive_dialer_screen.dart';
+import 'package:nature_biotic/features/reports/screens/farm_pdf_folder_screen.dart';
+import 'package:nature_biotic/features/inventory/screens/store_stock_screen.dart';
 import 'package:nature_biotic/features/profile/screens/profile_screen.dart';
+import 'package:nature_biotic/services/supabase_service.dart';
 
 class BottomNav extends StatefulWidget {
   const BottomNav({super.key});
@@ -15,29 +18,85 @@ class BottomNav extends StatefulWidget {
 
 class _BottomNavState extends State<BottomNav> {
   int _currentIndex = 0;
+  String _userRole = 'executive';
+  bool _isLoading = true;
 
-  final List<Widget> _screens = [
-    const DashboardScreen(),
-    const FarmerListScreen(),
-    const FarmListScreen(),
-    const ReportsListScreen(),
-    const ProfileScreen(),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadUserRole();
+  }
+
+  Future<void> _loadUserRole() async {
+    try {
+      final profile = await SupabaseService.getProfile();
+      if (mounted) {
+        setState(() {
+          _userRole = profile?['role'] ?? 'executive';
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  List<Widget> _getScreens() {
+    if (_userRole == 'store') {
+      return [
+        const StoreStockScreen(),
+        const ProfileScreen(),
+      ];
+    }
+    
+    return [
+      const DashboardScreen(),
+      const FarmerListScreen(),
+      const ExecutiveDialerScreen(),
+      const StoreStockScreen(),
+      const FarmPdfFolderScreen(),
+    ];
+  }
+
+  List<BottomNavigationBarItem> _getNavItems() {
+    if (_userRole == 'store') {
+      return const [
+        BottomNavigationBarItem(icon: Icon(Icons.inventory_2_rounded), label: 'Stock'),
+        BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'Profile'),
+      ];
+    }
+
+    return const [
+      BottomNavigationBarItem(icon: Icon(Icons.dashboard_rounded), label: 'Dashboard'),
+      BottomNavigationBarItem(icon: Icon(Icons.people_rounded), label: 'Visits'),
+      BottomNavigationBarItem(icon: Icon(Icons.call_rounded), label: 'Nature Biotic'),
+      BottomNavigationBarItem(icon: Icon(Icons.inventory_2_rounded), label: 'Stock'),
+      BottomNavigationBarItem(icon: Icon(Icons.folder_shared_rounded), label: 'Reports'),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    final screens = _getScreens();
     final bool isWide = MediaQuery.sizeOf(context).width > 1100;
+    final int safeIndex = screens.isEmpty ? 0 : _currentIndex.clamp(0, screens.length - 1);
 
     if (isWide) {
       return Scaffold(
         backgroundColor: AppColors.background,
         body: Row(
           children: [
-            _buildDesktopSidebar(),
+            _buildDesktopSidebar(screens),
             Expanded(
               child: IndexedStack(
-                index: _currentIndex,
-                children: _screens,
+                index: safeIndex,
+                children: screens,
               ),
             ),
           ],
@@ -47,33 +106,49 @@ class _BottomNavState extends State<BottomNav> {
 
     return Scaffold(
       body: IndexedStack(
-        index: _currentIndex,
-        children: _screens,
+        index: safeIndex,
+        children: screens,
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: Colors.white,
-        selectedItemColor: AppColors.primary,
-        unselectedItemColor: AppColors.textGray.withOpacity(0.5),
-        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.dashboard_rounded), label: 'Dashboard'),
-          BottomNavigationBarItem(icon: Icon(Icons.people_rounded), label: 'Farmers'),
-          BottomNavigationBarItem(icon: Icon(Icons.agriculture_rounded), label: 'Farms'),
-          BottomNavigationBarItem(icon: Icon(Icons.description_rounded), label: 'Reports'),
-          BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'Profile'),
-        ],
-      ),
+      bottomNavigationBar: screens.length <= 1 
+        ? null 
+        : Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.04),
+                  blurRadius: 20,
+                  offset: const Offset(0, -5),
+                ),
+              ],
+            ),
+            child: BottomNavigationBar(
+              currentIndex: safeIndex,
+              onTap: (index) {
+                setState(() {
+                  _currentIndex = index;
+                });
+              },
+              type: BottomNavigationBarType.fixed,
+              backgroundColor: Colors.white,
+              selectedItemColor: AppColors.primary,
+              unselectedItemColor: AppColors.textGray.withOpacity(0.4),
+              selectedLabelStyle: GoogleFonts.outfit(
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              ),
+              unselectedLabelStyle: GoogleFonts.outfit(
+                fontWeight: FontWeight.w500,
+                fontSize: 11,
+              ),
+              elevation: 0,
+              items: _getNavItems(),
+            ),
+          ),
     );
   }
 
-  Widget _buildDesktopSidebar() {
+  Widget _buildDesktopSidebar(List<Widget> screens) {
     return Container(
       width: 260,
       decoration: BoxDecoration(
@@ -134,13 +209,15 @@ class _BottomNavState extends State<BottomNav> {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Column(
-                children: [
-                  _sidebarItem(0, Icons.dashboard_rounded, 'Dashboard'),
-                  _sidebarItem(1, Icons.people_rounded, 'Farmers'),
-                  _sidebarItem(2, Icons.agriculture_rounded, 'Farms'),
-                  _sidebarItem(3, Icons.description_rounded, 'Reports'),
-                  _sidebarItem(4, Icons.person_rounded, 'Profile'),
-                ],
+                children: _userRole == 'store' 
+                  ? [_sidebarItem(0, Icons.inventory_2_rounded, 'Stock')]
+                  : [
+                    _sidebarItem(0, Icons.dashboard_rounded, 'Dashboard'),
+                    _sidebarItem(1, Icons.people_rounded, 'Visits'),
+                    _sidebarItem(2, Icons.call_rounded, 'Nature Biotic'),
+                    _sidebarItem(3, Icons.inventory_2_rounded, 'Stock'),
+                    _sidebarItem(4, Icons.folder_shared_rounded, 'Reports'),
+                  ],
               ),
             ),
           ),

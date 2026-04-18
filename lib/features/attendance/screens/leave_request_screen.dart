@@ -13,7 +13,7 @@ class LeaveRequestScreen extends StatefulWidget {
 class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
   final _formKey = GlobalKey<FormState>();
   final _reasonController = TextEditingController();
-  
+
   String _leaveType = 'Casual Leave';
   DateTimeRange? _selectedDateRange;
   bool _isLoading = false;
@@ -64,7 +64,10 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedDateRange == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select date range'), backgroundColor: Colors.orange),
+        const SnackBar(
+          content: Text('Please select date range'),
+          backgroundColor: Colors.orange,
+        ),
       );
       return;
     }
@@ -73,14 +76,19 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
     try {
       await SupabaseService.requestLeave({
         'leave_type': _leaveType,
-        'start_date': DateFormat('yyyy-MM-dd').format(_selectedDateRange!.start),
+        'start_date': DateFormat(
+          'yyyy-MM-dd',
+        ).format(_selectedDateRange!.start),
         'end_date': DateFormat('yyyy-MM-dd').format(_selectedDateRange!.end),
         'reason': _reasonController.text.trim(),
       });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Leave Request Submitted'), backgroundColor: AppColors.primary),
+          const SnackBar(
+            content: Text('Leave Request Submitted'),
+            backgroundColor: AppColors.primary,
+          ),
         );
         Navigator.pop(context);
       }
@@ -99,9 +107,7 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Request Leave'),
-      ),
+      appBar: AppBar(title: const Text('Request Leave')),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 800),
@@ -112,10 +118,16 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Request Details', 
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textBlack)),
+                  const Text(
+                    'Request Details',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textBlack,
+                    ),
+                  ),
                   const SizedBox(height: 16),
-                  
+
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
@@ -125,41 +137,60 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
                     child: Column(
                       children: [
                         DropdownButtonFormField<String>(
-                          value: _leaveType,
+                          initialValue: _leaveType,
                           decoration: const InputDecoration(
                             labelText: 'Leave Type',
                             fillColor: Colors.white,
                           ),
-                          items: _leaveTypes.map((type) => DropdownMenuItem(
-                            value: type,
-                            child: Text(type),
-                          )).toList(),
+                          items:
+                              _leaveTypes
+                                  .map(
+                                    (type) => DropdownMenuItem(
+                                      value: type,
+                                      child: Text(type),
+                                    ),
+                                  )
+                                  .toList(),
                           onChanged: (v) => setState(() => _leaveType = v!),
                         ),
-                        
+
                         const SizedBox(height: 16),
-                        
+
                         InkWell(
                           onTap: _selectDateRange,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(16),
                             ),
                             child: Row(
                               children: [
-                                const Icon(Icons.date_range_rounded, color: AppColors.primary),
+                                const Icon(
+                                  Icons.date_range_rounded,
+                                  color: AppColors.primary,
+                                ),
                                 const SizedBox(width: 16),
                                 Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Text('Date Range', style: TextStyle(color: AppColors.textGray, fontSize: 12)),
+                                    const Text(
+                                      'Date Range',
+                                      style: TextStyle(
+                                        color: AppColors.textGray,
+                                        fontSize: 12,
+                                      ),
+                                    ),
                                     Text(
                                       _selectedDateRange == null
                                           ? 'Select Dates'
                                           : '${DateFormat('MMM d').format(_selectedDateRange!.start)} - ${DateFormat('MMM d').format(_selectedDateRange!.end)}',
-                                      style: const TextStyle(fontWeight: FontWeight.bold),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -167,9 +198,9 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
                             ),
                           ),
                         ),
-                        
+
                         const SizedBox(height: 16),
-                        
+
                         TextFormField(
                           controller: _reasonController,
                           maxLines: 4,
@@ -183,16 +214,19 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
                       ],
                     ),
                   ),
-                  
+
                   const SizedBox(height: 48),
-                  
+
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: _isLoading ? null : _handleSubmit,
-                      child: _isLoading 
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : const Text('Submit Request'),
+                      child:
+                          _isLoading
+                              ? const CircularProgressIndicator(
+                                color: Colors.white,
+                              )
+                              : const Text('Submit Request'),
                     ),
                   ),
                 ],

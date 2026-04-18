@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'dart:ui';
 import 'package:intl/intl.dart';
 import 'package:nature_biotic/core/theme.dart';
 import 'package:nature_biotic/services/supabase_service.dart';
@@ -207,7 +209,10 @@ class _FarmDetailScreenState extends State<FarmDetailScreen> with WidgetsBinding
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: Text(_farm['name'] ?? _farm['place'] ?? 'Farm Details'),
+        title: Text(
+          'Farm Details',
+          style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
+        ),
       ),
       body: Center(
         child: ConstrainedBox(
@@ -219,30 +224,60 @@ class _FarmDetailScreenState extends State<FarmDetailScreen> with WidgetsBinding
               children: [
                 // Top Summary Card
                 Container(
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: AppColors.secondary,
-                    borderRadius: BorderRadius.circular(24),
+                    gradient: const LinearGradient(
+                      colors: [AppColors.primary, Color(0xFF2E7D32)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(28),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primary.withOpacity(0.3),
+                        blurRadius: 20,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
                   ),
                   child: Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Icon(Icons.agriculture_rounded, size: 36, color: Colors.white),
+                          ),
                         ),
-                        child: const Icon(Icons.agriculture_rounded, size: 32, color: AppColors.primary),
                       ),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 20),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('Registration Date', 
-                              style: TextStyle(color: AppColors.textGray, fontSize: 12)),
-                            Text(_formatDate(_farm['created_at']), 
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            Text(
+                              'Registration Date', 
+                              style: GoogleFonts.outfit(
+                                color: Colors.white.withOpacity(0.8), 
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              )
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _formatDate(_farm['created_at']), 
+                              style: GoogleFonts.outfit(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800, 
+                                fontSize: 20,
+                              )
+                            ),
                           ],
                         ),
                       ),
@@ -259,34 +294,61 @@ class _FarmDetailScreenState extends State<FarmDetailScreen> with WidgetsBinding
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.shadow.withOpacity(0.05),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
+                          color: Colors.black.withOpacity(0.04),
+                          blurRadius: 15,
+                          offset: const Offset(0, 5),
                         ),
                       ],
+                      border: Border.all(color: Colors.black.withOpacity(0.02)),
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.person_pin_rounded, color: AppColors.primary, size: 20),
-                        const SizedBox(width: 12),
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.admin_panel_settings_rounded, color: AppColors.primary, size: 20),
+                        ),
+                        const SizedBox(width: 16),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('Assigned Executive', 
-                                style: TextStyle(color: AppColors.textGray, fontSize: 10)),
-                              Text(executiveName, 
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                              Text(
+                                'Assigned Executive', 
+                                style: GoogleFonts.outfit(
+                                  color: AppColors.textGray.withOpacity(0.6), 
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                )
+                              ),
+                              Text(
+                                executiveName, 
+                                style: GoogleFonts.outfit(
+                                  fontWeight: FontWeight.w700, 
+                                  fontSize: 15,
+                                  color: AppColors.textBlack,
+                                )
+                              ),
                             ],
                           ),
                         ),
                         TextButton(
                           onPressed: _showAssignDialog,
                           style: TextButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            backgroundColor: AppColors.primary.withOpacity(0.05),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
-                          child: const Text('Change', style: TextStyle(fontSize: 12)),
+                          child: Text(
+                            'Change', 
+                            style: GoogleFonts.outfit(
+                              fontSize: 12, 
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.primary,
+                            )
+                          ),
                         ),
                       ],
                     ),
@@ -302,44 +364,80 @@ class _FarmDetailScreenState extends State<FarmDetailScreen> with WidgetsBinding
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.shadow.withOpacity(0.05),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
+                          color: Colors.black.withOpacity(0.04),
+                          blurRadius: 15,
+                          offset: const Offset(0, 5),
                         ),
                       ],
+                      border: Border.all(color: Colors.black.withOpacity(0.02)),
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.person_pin_rounded, color: Colors.blue, size: 20),
-                        const SizedBox(width: 12),
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.person_rounded, color: Colors.blue, size: 20),
+                        ),
+                        const SizedBox(width: 16),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('Farm Owner (Farmer)', 
-                                style: TextStyle(color: AppColors.textGray, fontSize: 10)),
-                              Text(_farmer?['name'] ?? 'N/A', 
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                              Text(
+                                'Farm Owner (Farmer)', 
+                                style: GoogleFonts.outfit(
+                                  color: AppColors.textGray.withOpacity(0.6), 
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                )
+                              ),
+                              Row(
+                                children: [
+                                  Text(
+                                    _farmer?['name'] ?? 'N/A', 
+                                    style: GoogleFonts.outfit(
+                                      fontWeight: FontWeight.w700, 
+                                      fontSize: 15,
+                                      color: AppColors.textBlack,
+                                    )
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Icon(Icons.verified_rounded, size: 14, color: Colors.blue),
+                                ],
+                              ),
                             ],
                           ),
                         ),
                         if (_farmer?['mobile'] != null)
-                          IconButton(
-                            onPressed: _initiateCall,
-                            icon: const Icon(Icons.call, size: 20, color: Colors.green),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.green,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: IconButton(
+                              onPressed: _initiateCall,
+                              icon: const Icon(Icons.call_rounded, color: Colors.white, size: 18),
+                              constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                            ),
                           ),
-                        const SizedBox(width: 8),
-                        const Icon(Icons.verified_user_rounded, size: 16, color: Colors.blue),
                       ],
                     ),
                   ),
                 ],
     
-                const SizedBox(height: 24),
-                const Text('Farm Information', 
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textBlack)),
+                const SizedBox(height: 32),
+                Text(
+                  'Farm Information', 
+                  style: GoogleFonts.outfit(
+                    fontSize: 20, 
+                    fontWeight: FontWeight.w800, 
+                    color: AppColors.textBlack,
+                    letterSpacing: -0.5,
+                  )
+                ),
                 const SizedBox(height: 16),
                 
                 // Grid of Info Cards
@@ -352,15 +450,15 @@ class _FarmDetailScreenState extends State<FarmDetailScreen> with WidgetsBinding
                       crossAxisCount: isWide ? 3 : 2,
                       mainAxisSpacing: 16,
                       crossAxisSpacing: 16,
-                      childAspectRatio: isWide ? 3.0 : 2.2,
+                      childAspectRatio: isWide ? 2.5 : 1.8,
                       children: [
-                        _infoCard(Icons.location_on_outlined, 'Place', _farm['place'] ?? 'N/A'),
-                        _infoCard(Icons.square_foot_rounded, 'Area', '${_farm['area'] ?? '0'} Acres'),
-                        _infoCard(Icons.waves_rounded, 'Soil', _farm['soil_type'] ?? 'N/A'),
-                        _infoCard(Icons.opacity_rounded, 'Irrigation', _farm['irrigation_type'] ?? 'N/A'),
-                        _infoCard(Icons.water_drop_outlined, 'Source', _farm['water_source'] ?? 'N/A'),
-                        _infoCard(Icons.inventory_2_outlined, 'Qty', _farm['water_quantity'] ?? 'N/A'),
-                        _infoCard(Icons.flash_on_outlined, 'Power', _farm['power_source'] ?? 'N/A'),
+                        _infoCard(Icons.location_on_rounded, 'Place', _farm['place'] ?? 'N/A'),
+                        _infoCard(Icons.straighten_rounded, 'Area', '${_farm['area'] ?? '0'} Acres'),
+                        _infoCard(Icons.grain_rounded, 'Soil', _farm['soil_type'] ?? 'N/A'),
+                        _infoCard(Icons.water_rounded, 'Irrigation', _farm['irrigation_type'] ?? 'N/A'),
+                        _infoCard(Icons.waves_rounded, 'Source', _farm['water_source'] ?? 'N/A'),
+                        _infoCard(Icons.inventory_2_rounded, 'Qty', _farm['water_quantity'] ?? 'N/A'),
+                        _infoCard(Icons.bolt_rounded, 'Power', _farm['power_source'] ?? 'N/A'),
                         GestureDetector(
                           onTap: () {
                             Navigator.push(
@@ -403,8 +501,15 @@ class _FarmDetailScreenState extends State<FarmDetailScreen> with WidgetsBinding
                 const SizedBox(height: 24),
                 
                 if (_getContacts().isNotEmpty) ...[
-                  const Text('Additional Contacts', 
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textBlack)),
+                  const SizedBox(height: 32),
+                  Text(
+                    'Additional Contacts', 
+                    style: GoogleFonts.outfit(
+                      fontSize: 18, 
+                      fontWeight: FontWeight.w800, 
+                      color: AppColors.textBlack,
+                    )
+                  ),
                   const SizedBox(height: 16),
                   ListView.separated(
                     shrinkWrap: true,
@@ -420,11 +525,12 @@ class _FarmDetailScreenState extends State<FarmDetailScreen> with WidgetsBinding
                           borderRadius: BorderRadius.circular(20),
                           boxShadow: [
                             BoxShadow(
-                              color: AppColors.shadow.withOpacity(0.05),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
+                              color: Colors.black.withOpacity(0.04),
+                              blurRadius: 15,
+                              offset: const Offset(0, 5),
                             ),
                           ],
+                          border: Border.all(color: Colors.black.withOpacity(0.02)),
                         ),
                         child: Row(
                           children: [
@@ -434,26 +540,35 @@ class _FarmDetailScreenState extends State<FarmDetailScreen> with WidgetsBinding
                                 color: AppColors.secondary.withOpacity(0.3),
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: const Icon(Icons.person_pin_rounded, color: AppColors.primary, size: 20),
+                              child: const Icon(Icons.contact_phone_rounded, color: AppColors.primary, size: 20),
                             ),
-                            const SizedBox(width: 12),
+                            const SizedBox(width: 16),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(contact['name'] ?? 'Additional Contact', 
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                  Text(contact['phone'] ?? 'No number', 
-                                    style: const TextStyle(color: AppColors.textGray, fontSize: 11)),
+                                  Text(
+                                    contact['name'] ?? 'Additional Contact', 
+                                    style: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 14)
+                                  ),
+                                  Text(
+                                    contact['phone'] ?? 'No number', 
+                                    style: GoogleFonts.outfit(color: AppColors.textGray.withOpacity(0.6), fontSize: 12, fontWeight: FontWeight.w500)
+                                  ),
                                 ],
                               ),
                             ),
                             if (contact['phone'] != null && contact['phone'].toString().isNotEmpty)
-                              IconButton(
-                                onPressed: () => _callAdditionalContact(contact['name'] ?? 'Contact', contact['phone'].toString()),
-                                icon: const Icon(Icons.call, size: 20, color: Colors.green),
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(),
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.green,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: IconButton(
+                                  onPressed: () => _callAdditionalContact(contact['name'] ?? 'Contact', contact['phone'].toString()),
+                                  icon: const Icon(Icons.call_rounded, color: Colors.white, size: 18),
+                                  constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                                ),
                               ),
                           ],
                         ),
@@ -463,16 +578,47 @@ class _FarmDetailScreenState extends State<FarmDetailScreen> with WidgetsBinding
                   const SizedBox(height: 24),
                 ],
 
-                const Text('Crops in this Farm', 
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textBlack)),
+                const SizedBox(height: 32),
+                Text(
+                  'Crops in this Farm', 
+                  style: GoogleFonts.outfit(
+                    fontSize: 20, 
+                    fontWeight: FontWeight.w800, 
+                    color: AppColors.textBlack,
+                    letterSpacing: -0.5,
+                  )
+                ),
                 const SizedBox(height: 16),
                 if (_crops.isEmpty)
-                  const Text('No crops added to this farm yet.', style: TextStyle(color: AppColors.textGray, fontSize: 13))
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: Colors.black.withOpacity(0.02)),
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(Icons.eco_rounded, size: 48, color: AppColors.primary.withOpacity(0.1)),
+                        const SizedBox(height: 12),
+                        Text(
+                          'No crops added yet', 
+                          style: GoogleFonts.outfit(
+                            color: AppColors.textGray, 
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          )
+                        ),
+                      ],
+                    ),
+                  )
                 else
                   SizedBox(
-                    height: 140,
+                    height: 200,
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
                       itemCount: _crops.length,
                       itemBuilder: (context, index) {
                         final crop = _crops[index];
@@ -492,13 +638,17 @@ class _FarmDetailScreenState extends State<FarmDetailScreen> with WidgetsBinding
                       _loadCrops();
                     }
                   },
-                  icon: const Icon(Icons.add_rounded),
-                  label: const Text('Add New Crop to Farm'),
+                  icon: const Icon(Icons.add_task_rounded),
+                  label: const Text('Add New Crop'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
                     foregroundColor: AppColors.primary,
-                    side: const BorderSide(color: AppColors.primary),
-                    minimumSize: const Size(double.infinity, 54),
+                    side: BorderSide(color: AppColors.primary.withOpacity(0.5)),
+                    minimumSize: const Size(double.infinity, 64),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    elevation: 0,
                   ),
                 ),
                 const SizedBox(height: 40),
@@ -525,44 +675,58 @@ class _FarmDetailScreenState extends State<FarmDetailScreen> with WidgetsBinding
         );
       },
       child: Container(
-        width: 180,
-        margin: const EdgeInsets.only(right: 16),
-        padding: const EdgeInsets.all(16),
+        width: 200,
+        margin: const EdgeInsets.only(right: 16, bottom: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: AppColors.shadow.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 15,
+              offset: const Offset(0, 5),
             ),
           ],
+          border: Border.all(color: Colors.black.withOpacity(0.02)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                const Icon(Icons.eco_rounded, color: Colors.green, size: 20),
-                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.eco_rounded, color: Colors.green, size: 18),
+                ),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     crop['name'] ?? 'N/A',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    style: GoogleFonts.outfit(
+                      fontWeight: FontWeight.w800, 
+                      fontSize: 16,
+                      color: AppColors.textBlack,
+                    ),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            Text('Variety: ${crop['variety'] ?? 'N/A'}', 
-              style: const TextStyle(fontSize: 10, color: AppColors.textGray),
+            const SizedBox(height: 12),
+            Text(
+              'Variety: ${crop['variety'] ?? 'N/A'}', 
+              style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textGray.withOpacity(0.6), fontWeight: FontWeight.w600),
               overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 4),
-            Text('Area: ${crop['acre'] ?? 'N/A'}', 
-              style: const TextStyle(fontSize: 10, color: AppColors.textGray),
+            Text(
+              'Area: ${crop['acre'] ?? 'N/A'} Acre', 
+              style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textGray.withOpacity(0.6), fontWeight: FontWeight.w600),
             ),
             const Spacer(),
             Row(
@@ -571,13 +735,24 @@ class _FarmDetailScreenState extends State<FarmDetailScreen> with WidgetsBinding
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Count: ${crop['count'] ?? 'N/A'}', 
-                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.primary)),
-                    Text(crop['age'] ?? 'N/A', 
-                      style: const TextStyle(fontSize: 9, color: AppColors.textGray)),
+                    Text(
+                      '${crop['count'] ?? 'N/A'} Nos', 
+                      style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.primary)
+                    ),
+                    Text(
+                      crop['age'] ?? 'N/A', 
+                      style: GoogleFonts.outfit(fontSize: 10, color: AppColors.textGray.withOpacity(0.5), fontWeight: FontWeight.w700)
+                    ),
                   ],
                 ),
-                const Icon(Icons.arrow_forward_rounded, size: 14, color: AppColors.textGray),
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: AppColors.background,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.chevron_right_rounded, size: 16, color: AppColors.primary),
+                ),
               ],
             ),
           ],
@@ -588,33 +763,51 @@ class _FarmDetailScreenState extends State<FarmDetailScreen> with WidgetsBinding
 
   Widget _infoCard(IconData icon, String label, String value, {bool isLink = false}) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: isLink ? AppColors.primary.withOpacity(0.05) : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: isLink ? Border.all(color: AppColors.primary.withOpacity(0.2)) : null,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isLink ? AppColors.primary.withOpacity(0.2) : Colors.black.withOpacity(0.01),
+        ),
         boxShadow: [
           BoxShadow(
-            color: AppColors.shadow.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
       child: Row(
         children: [
-          Icon(icon, color: AppColors.primary, size: 18),
-          const SizedBox(width: 10),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: isLink ? AppColors.primary.withOpacity(0.1) : AppColors.background.withOpacity(0.8),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: AppColors.primary, size: 20),
+          ),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(label, style: const TextStyle(color: AppColors.textGray, fontSize: 9)),
-                Text(value, 
-                  style: TextStyle(
-                    fontSize: 12, 
-                    fontWeight: FontWeight.bold,
+                Text(
+                  label, 
+                  style: GoogleFonts.outfit(
+                    color: AppColors.textGray.withOpacity(0.6), 
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  )
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value, 
+                  style: GoogleFonts.outfit(
+                    fontSize: 14, 
+                    fontWeight: FontWeight.w700,
                     color: isLink ? AppColors.primary : AppColors.textBlack,
                     decoration: isLink ? TextDecoration.underline : null,
                   ),

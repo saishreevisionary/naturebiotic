@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'dart:ui';
 import 'package:nature_biotic/core/theme.dart';
 import 'package:nature_biotic/services/supabase_service.dart';
 import 'package:nature_biotic/features/farmers/screens/add_farmer_screen.dart';
@@ -65,111 +67,188 @@ class _FarmerListScreenState extends State<FarmerListScreen> {
     }
   }
 
+
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Farmers'),
-        actions: [
-          IconButton(onPressed: _loadFarmers, icon: const Icon(Icons.refresh_rounded)),
-        ],
-      ),
       body: _isLoading 
         ? const Center(child: CircularProgressIndicator())
-        : Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 800),
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
-                    child: TextField(
-                      controller: _searchController,
-                      onChanged: (v) => setState(() {}),
-                      decoration: InputDecoration(
-                        hintText: 'Search Farmers...',
-                        prefixIcon: const Icon(Icons.search_rounded),
-                        fillColor: AppColors.secondary.withOpacity(0.3),
-                        suffixIcon: _searchController.text.isNotEmpty 
-                            ? IconButton(
-                                icon: const Icon(Icons.clear_rounded),
+        : SafeArea(
+            bottom: false,
+            child: CustomScrollView(
+              slivers: [
+                SliverAppBar(
+                  expandedHeight: 120,
+                  floating: true,
+                  pinned: true,
+                  backgroundColor: AppColors.background.withOpacity(0.8),
+                  flexibleSpace: FlexibleSpaceBar(
+                    background: ClipRRect(
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                        child: Container(color: Colors.transparent),
+                      ),
+                    ),
+                  ),
+                  title: Text(
+                    'Farmers',
+                    style: GoogleFonts.outfit(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 24,
+                      color: AppColors.textBlack,
+                    ),
+                  ),
+                  actions: [
+                    Container(
+                      margin: const EdgeInsets.only(right: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 10,
+                          )
+                        ]
+                      ),
+                      child: IconButton(
+                        onPressed: _loadFarmers, 
+                        icon: const Icon(Icons.refresh_rounded, color: AppColors.primary)
+                      ),
+                    ),
+                  ],
+                ),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+                    child: Column(
+                      children: [
+                        Hero(
+                          tag: 'search_bar',
+                          child: Container(
+                            decoration: BoxDecoration(
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.04),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 8),
+                                )
+                              ],
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: TextField(
+                              controller: _searchController,
+                              onChanged: (v) => setState(() {}),
+                              decoration: InputDecoration(
+                                hintText: 'Search by name, village...',
+                                prefixIcon: const Icon(Icons.search_rounded, color: AppColors.primary),
+                                suffixIcon: _searchController.text.isNotEmpty 
+                                    ? IconButton(
+                                        icon: const Icon(Icons.clear_rounded),
+                                        onPressed: () {
+                                          _searchController.clear();
+                                          setState(() {});
+                                        },
+                                      )
+                                    : null,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          physics: const BouncingScrollPhysics(),
+                          child: Row(
+                            children: [
+                              FilterChipWidget(
+                                label: 'Hot', 
+                                color: AppColors.hot,
+                                isSelected: _selectedCategory == 'Hot',
+                                onTap: () => setState(() => _selectedCategory = _selectedCategory == 'Hot' ? null : 'Hot'),
+                              ),
+                              const SizedBox(width: 12),
+                              FilterChipWidget(
+                                label: 'Warm', 
+                                color: AppColors.warm,
+                                isSelected: _selectedCategory == 'Warm',
+                                onTap: () => setState(() => _selectedCategory = _selectedCategory == 'Warm' ? null : 'Warm'),
+                              ),
+                              const SizedBox(width: 12),
+                              FilterChipWidget(
+                                label: 'Cold', 
+                                color: AppColors.cold,
+                                isSelected: _selectedCategory == 'Cold',
+                                onTap: () => setState(() => _selectedCategory = _selectedCategory == 'Cold' ? null : 'Cold'),
+                              ),
+                              const SizedBox(width: 20),
+                              TextButton.icon(
                                 onPressed: () {
-                                  _searchController.clear();
-                                  setState(() {});
+                                  setState(() {
+                                    _selectedCategory = null;
+                                    _searchController.clear();
+                                  });
                                 },
-                              )
-                            : null,
-                      ),
+                                icon: const Icon(Icons.backspace_outlined, size: 16),
+                                label: const Text('Clear Filters'),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: AppColors.textGray,
+                                  textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          FilterChipWidget(
-                            label: 'Hot', 
-                            color: Colors.red,
-                            isSelected: _selectedCategory == 'Hot',
-                            onTap: () => setState(() => _selectedCategory = _selectedCategory == 'Hot' ? null : 'Hot'),
+                ),
+                Builder(
+                  builder: (context) {
+                    final query = _searchController.text.toLowerCase();
+                    final filtered = _farmers.where((f) {
+                      final name = (f['name'] ?? '').toString().toLowerCase();
+                      final village = (f['village'] ?? '').toString().toLowerCase();
+                      final mobile = (f['mobile'] ?? '').toString().toLowerCase();
+                      final category = f['category'];
+                      
+                      final matchesQuery = name.contains(query) || village.contains(query) || mobile.contains(query);
+                      final matchesCategory = _selectedCategory == null || category == _selectedCategory;
+                      
+                      return matchesQuery && matchesCategory;
+                    }).toList();
+
+                    if (filtered.isEmpty) {
+                      return SliverFillRemaining(
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.person_search_rounded, size: 64, color: AppColors.textGray.withOpacity(0.2)),
+                              const SizedBox(height: 16),
+                              Text(
+                                'No farmers found',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textGray,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 8),
-                          FilterChipWidget(
-                            label: 'Warm', 
-                            color: Colors.orange,
-                            isSelected: _selectedCategory == 'Warm',
-                            onTap: () => setState(() => _selectedCategory = _selectedCategory == 'Warm' ? null : 'Warm'),
-                          ),
-                          const SizedBox(width: 8),
-                          FilterChipWidget(
-                            label: 'Cold', 
-                            color: Colors.blue,
-                            isSelected: _selectedCategory == 'Cold',
-                            onTap: () => setState(() => _selectedCategory = _selectedCategory == 'Cold' ? null : 'Cold'),
-                          ),
-                          const SizedBox(width: 16),
-                          TextButton(
-                            onPressed: () {
-                              setState(() {
-                                _selectedCategory = null;
-                                _searchController.clear();
-                              });
-                            },
-                            child: const Text('Clear All', style: TextStyle(color: AppColors.primary)),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Builder(
-                      builder: (context) {
-                        final query = _searchController.text.toLowerCase();
-                        final filtered = _farmers.where((f) {
-                          final name = (f['name'] ?? '').toString().toLowerCase();
-                          final village = (f['village'] ?? '').toString().toLowerCase();
-                          final mobile = (f['mobile'] ?? '').toString().toLowerCase();
-                          final category = f['category'];
-                          
-                          final matchesQuery = name.contains(query) || village.contains(query) || mobile.contains(query);
-                          final matchesCategory = _selectedCategory == null || category == _selectedCategory;
-                          
-                          return matchesQuery && matchesCategory;
-                        }).toList();
-    
-                        if (filtered.isEmpty) {
-                          return const Center(child: Text('No farmers found.'));
-                        }
-    
-                        return ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
-                          itemCount: filtered.length,
-                          itemBuilder: (context, index) {
+                        ),
+                      );
+                    }
+
+                    return SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                      sliver: SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
                             final farmer = filtered[index];
                             return EntranceAnimation(
-                              delay: 100 + (index * 100),
+                              delay: 50 + (index * 50),
                               child: FarmerCard(
                                 id: farmer['id'].toString(),
                                 name: farmer['name'] ?? 'N/A',
@@ -190,16 +269,18 @@ class _FarmerListScreenState extends State<FarmerListScreen> {
                               ),
                             );
                           },
-                        );
-                      }
-                    ),
-                  ),
-                ],
-              ),
+                          childCount: filtered.length,
+                        ),
+                      ),
+                    );
+                  }
+                ),
+                const SliverToBoxAdapter(child: SizedBox(height: 100)),
+              ],
             ),
           ),
       floatingActionButton: EntranceAnimation(
-        delay: 1200,
+        delay: 500,
         child: ScaleButton(
           onTap: () async {
             await Navigator.push(
@@ -208,11 +289,21 @@ class _FarmerListScreenState extends State<FarmerListScreen> {
             );
             _loadFarmers();
           },
-          child: FloatingActionButton(
-            heroTag: 'farmer_fab',
-            onPressed: null,
-            backgroundColor: AppColors.primary,
-            child: const Icon(Icons.add_rounded, color: Colors.white),
+          child: Container(
+            height: 64,
+            width: 64,
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primary.withOpacity(0.3),
+                  blurRadius: 15,
+                  offset: const Offset(0, 8),
+                )
+              ],
+            ),
+            child: const Icon(Icons.add_rounded, color: Colors.white, size: 32),
           ),
         ),
       ),
@@ -221,10 +312,10 @@ class _FarmerListScreenState extends State<FarmerListScreen> {
 
   Color _getCategoryColor(String? category) {
     switch (category) {
-      case 'Hot': return Colors.red;
-      case 'Warm': return Colors.orange;
-      case 'Cold': return Colors.blue;
-      default: return Colors.orange;
+      case 'Hot': return AppColors.hot;
+      case 'Warm': return AppColors.warm;
+      case 'Cold': return AppColors.cold;
+      default: return AppColors.warm;
     }
   }
 }
@@ -247,26 +338,37 @@ class FilterChipWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? color : color.withOpacity(0.1),
+          color: isSelected ? color : Colors.white,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: color.withOpacity(0.5)),
+          border: Border.all(
+            color: isSelected ? color : color.withOpacity(0.2),
+            width: 1.5,
+          ),
           boxShadow: isSelected ? [
             BoxShadow(
               color: color.withOpacity(0.3),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            )
+          ] : [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.02),
               blurRadius: 4,
               offset: const Offset(0, 2),
             )
-          ] : null,
+          ],
         ),
         child: Text(
           label,
           style: TextStyle(
             color: isSelected ? Colors.white : color,
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.5,
           ),
         ),
       ),
@@ -292,81 +394,157 @@ class FarmerCard extends StatelessWidget {
     this.onTap,
   });
 
+  String _getInitials(String name) {
+    if (name.isEmpty) return 'F';
+    final parts = name.trim().split(' ');
+    if (parts.length > 1) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    } else if (parts[0].length > 1) {
+      return parts[0].substring(0, 2).toUpperCase();
+    }
+    return parts[0][0].toUpperCase();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 20),
       decoration: BoxDecoration(
-        color: AppColors.secondary,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: const [
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
           BoxShadow(
-            color: AppColors.shadow,
-            blurRadius: 8,
-            offset: Offset(0, 4),
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
           ),
         ],
+        border: Border.all(color: Colors.black.withOpacity(0.03), width: 1),
       ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-          Hero(
-            tag: 'farmer_icon_$id',
-            child: Container(
-              height: 60,
-              width: 60,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Icon(Icons.person_rounded, color: AppColors.primary, size: 30),
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(24),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
               children: [
-                Text(
-                  name,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textBlack,
-                  ),
-                ),
-                Text(
-                  village,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textGray,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: categoryColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    category,
-                    style: TextStyle(
-                      color: categoryColor,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
+                Hero(
+                  tag: 'farmer_icon_$id',
+                  child: Container(
+                    height: 64,
+                    width: 64,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          categoryColor.withOpacity(0.8),
+                          categoryColor,
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: categoryColor.withOpacity(0.3),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
+                    child: Center(
+                      child: Text(
+                        _getInitials(name),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 20),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        style: GoogleFonts.outfit(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textBlack,
+                          letterSpacing: -0.2,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(Icons.location_on_rounded, size: 14, color: AppColors.textGray.withOpacity(0.6)),
+                          const SizedBox(width: 4),
+                          Text(
+                            village,
+                            style: GoogleFonts.outfit(
+                              fontSize: 14,
+                              color: AppColors.textGray.withOpacity(0.8),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: categoryColor.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: BoxDecoration(
+                                color: categoryColor,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              category.toUpperCase(),
+                              style: TextStyle(
+                                color: categoryColor,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.background,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(
+                    Icons.chevron_right_rounded,
+                    size: 20,
+                    color: AppColors.primary,
                   ),
                 ),
               ],
             ),
-          ),
-          const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: AppColors.textGray),
-            ],
           ),
         ),
       ),

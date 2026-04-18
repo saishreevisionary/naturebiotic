@@ -266,13 +266,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _statItem(_stats['farmers'].toString(), 'Farmers'),
-                      _divider(),
-                      _statItem(_stats['farms'].toString(), 'Farms'),
-                      _divider(),
-                      _statItem(_stats['reports'].toString(), 'Reports'),
-                    ],
+                    children: _profile?['role'] == 'store' 
+                      ? [
+                        _statItem(_stats['stock']?.toString() ?? '0', 'Stock Items'),
+                        _divider(),
+                        _statItem(_stats['trans']?.toString() ?? '0', 'Total Trans'),
+                        _divider(),
+                        _statItem(_stats['pending']?.toString() ?? '0', 'Pending'),
+                      ]
+                      : [
+                        _statItem(_stats['farmers']?.toString() ?? '0', 'Farmers'),
+                        _divider(),
+                        _statItem(_stats['farms']?.toString() ?? '0', 'Farms'),
+                        _divider(),
+                        _statItem(_stats['reports']?.toString() ?? '0', 'Reports'),
+                      ],
                   ),
                 ),
                 const SizedBox(height: 32),

@@ -61,6 +61,38 @@ class SupabaseService {
     });
   }
 
+  // Create Store Account (Admin only)
+  static Future<void> createStoreAccount({
+    required String username,
+    required String password,
+    required String fullName,
+  }) async {
+    final email = '$username@naturebiotic.local';
+    
+    // Create auth user
+    final response = await client.auth.signUp(
+      email: email,
+      password: password,
+      data: {
+        'username': username,
+        'full_name': fullName,
+        'role': 'store',
+      },
+    );
+
+    if (response.user == null) {
+      throw 'Failed to create store account';
+    }
+
+    // Create profile record
+    await client.from('profiles').insert({
+      'id': response.user!.id,
+      'full_name': fullName,
+      'username': username,
+      'role': 'store',
+    });
+  }
+
   // Get current user profile
   static Future<Map<String, dynamic>?> getProfile() async {
     try {
@@ -92,6 +124,20 @@ class SupabaseService {
     await client.from('profiles').update({
       'registered_device_id': null,
     }).eq('id', userId);
+  }
+
+  static Future<List<Map<String, dynamic>>> getExecutives() async {
+    try {
+      final response = await client
+          .from('profiles')
+          .select('id, username, full_name, sales_target')
+          .eq('role', 'executive')
+          .order('full_name');
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      debugPrint('Error in getExecutives: $e');
+      return [];
+    }
   }
 
   static Future<bool> isDeviceAuthorized() async {
@@ -148,20 +194,25 @@ class SupabaseService {
 
   // Farmer CRUD
   static Future<List<Map<String, dynamic>>> getFarmers() async {
-    final profile = await getProfile();
-    var query = client.from('farmers').select();
-    
-    if (profile?['role'] == 'executive') {
-      // For executives, show only farmers they created
-      query = query.eq('created_by', client.auth.currentUser!.id);
+    try {
+      final profile = await getProfile();
+      var query = client.from('farmers').select();
+      
+      if (profile?['role'] == 'executive') {
+        // For executives, show only farmers they created
+        query = query.eq('created_by', client.auth.currentUser!.id);
+      }
+      
+      return await query.order('created_at');
+    } catch (e) {
+      debugPrint('Error in getFarmers: $e');
+      return [];
     }
-    
-    return await query.order('created_at');
   }
 
   static Future<void> addFarmer(Map<String, dynamic> farmerData) async {
     await client.from('farmers').insert({
-      ...farmerData,
+      ..._cleanPayload(farmerData),
       'created_by': client.auth.currentUser?.id,
     });
   }
@@ -169,7 +220,7 @@ class SupabaseService {
   static Future<void> addFarmersBulk(List<Map<String, dynamic>> farmersData) async {
     final userId = client.auth.currentUser?.id;
     final farmersWithCreatedBy = farmersData.map((farmer) => {
-      ...farmer,
+      ..._cleanPayload(farmer),
       'created_by': userId,
     }).toList();
     
@@ -177,7 +228,7 @@ class SupabaseService {
   }
 
   static Future<void> updateFarmer(String id, Map<String, dynamic> farmerData) async {
-    await client.from('farmers').update(farmerData).eq('id', id);
+    await client.from('farmers').update(_cleanPayload(farmerData)).eq('id', id);
   }
 
   static Future<void> deleteFarmer(String id) async {
@@ -225,13 +276,13 @@ class SupabaseService {
 
   static Future<void> addFarm(Map<String, dynamic> farmData) async {
     await client.from('farms').insert({
-      ...farmData,
+      ..._cleanPayload(farmData),
       'created_by': client.auth.currentUser?.id,
     });
   }
 
   static Future<void> updateFarm(String id, Map<String, dynamic> farmData) async {
-    await client.from('farms').update(farmData).eq('id', id);
+    await client.from('farms').update(_cleanPayload(farmData)).eq('id', id);
   }
 
   static Future<void> deleteFarm(dynamic id) async {
@@ -247,21 +298,20 @@ class SupabaseService {
     return List<Map<String, dynamic>>.from(response);
   }
 
-  // Get all executive profiles
-  static Future<List<Map<String, dynamic>>> getExecutives() async {
-    return await client
-        .from('profiles')
-        .select()
-        .eq('role', 'executive')
-        .order('full_name');
-  }
-
   // Assign farm to executive
   static Future<void> assignFarm(String farmId, String? executiveId) async {
     await client
         .from('farms')
         .update({'assigned_to': executiveId})
         .eq('id', farmId);
+  }
+
+  // Update sales target for executive
+  static Future<void> updateSalesTarget(String userId, double target) async {
+    await client
+        .from('profiles')
+        .update({'sales_target': target})
+        .eq('id', userId);
   }
 
   // Get profile by ID
@@ -306,17 +356,17 @@ class SupabaseService {
   }
 
   static Future<void> addCrop(Map<String, dynamic> cropData) async {
-    await client.from('crops').insert(cropData);
+    await client.from('crops').insert(_cleanPayload(cropData));
   }
 
   static Future<void> updateCrop(String id, Map<String, dynamic> cropData) async {
-    await client.from('crops').update(cropData).eq('id', id);
+    await client.from('crops').update(_cleanPayload(cropData)).eq('id', id);
   }
 
   // Stock Transaction Methods
   static Future<void> addStockTransaction(Map<String, dynamic> data) async {
     await client.from('stock_transactions').insert({
-      ...data,
+      ..._cleanPayload(data),
       'executive_id': client.auth.currentUser?.id,
     });
   }
@@ -338,11 +388,25 @@ class SupabaseService {
     return List<Map<String, dynamic>>.from(response);
   }
 
+  static Future<List<Map<String, dynamic>>> getStoreTransactions() async {
+    try {
+      final response = await client.from('store_transactions')
+          .select('*, profiles!store_transactions_executive_id_fkey(full_name)')
+          .order('created_at', ascending: false);
+      
+      if (response == null) return [];
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      debugPrint('Error in getStoreTransactions: $e');
+      return [];
+    }
+  }
+
   static Future<void> addReport(Map<String, dynamic> reportData) async {
     debugPrint('DEBUG: addReport - Inserting report with ID: ${reportData['id']}');
     try {
       await client.from('reports').insert({
-        ...reportData,
+        ..._cleanPayload(reportData),
         'created_by': client.auth.currentUser?.id,
       });
       debugPrint('DEBUG: addReport - Successfully inserted report with ID: ${reportData['id']}');
@@ -387,28 +451,33 @@ class SupabaseService {
   }
 
   static Future<List<Map<String, dynamic>>> getReports({String? columns}) async {
-    final user = client.auth.currentUser;
-    final profile = await getProfile();
-    
-    if (profile?['role'] == 'executive' && user != null) {
-      // Executives only see reports for farms assigned to them
-      // Fallback: Just get all reports created by this executive
-      final response = await client
-          .from('reports')
-          .select(columns ?? '*, farms(name, assigned_to, farmers(name)), crops(name)')
-          .eq('created_by', user.id)
-          .order('created_at', ascending: false);
+    try {
+      final user = client.auth.currentUser;
+      final profile = await getProfile();
       
-      final reportsList = List<Map<String, dynamic>>.from(response);
-      debugPrint('DEBUG: getReports - FALLBACK fetch by created_by returned ${reportsList.length} reports');
-      return reportsList;
-    } else {
-      // Admins see all reports
-      final response = await client
-          .from('reports')
-          .select(columns ?? '*, farms(name, farmers(name)), crops(name)')
-          .order('created_at', ascending: false);
-      return List<Map<String, dynamic>>.from(response);
+      if (profile?['role'] == 'executive' && user != null) {
+        // Executives only see reports for farms assigned to them
+        // Fallback: Just get all reports created by this executive
+        final response = await client
+            .from('reports')
+            .select(columns ?? '*, farms(name, assigned_to, farmers(name)), crops(name)')
+            .eq('created_by', user.id)
+            .order('created_at', ascending: false);
+        
+        final reportsList = List<Map<String, dynamic>>.from(response);
+        debugPrint('DEBUG: getReports - FALLBACK fetch by created_by returned ${reportsList.length} reports');
+        return reportsList;
+      } else {
+        // Admins see all reports
+        final response = await client
+            .from('reports')
+            .select(columns ?? '*, farms(name, farmers(name)), crops(name)')
+            .order('created_at', ascending: false);
+        return List<Map<String, dynamic>>.from(response);
+      }
+    } catch (e) {
+      debugPrint('Error in getReports: $e');
+      return [];
     }
   }
 
@@ -417,9 +486,10 @@ class SupabaseService {
     DateTime? startDate,
     DateTime? endDate,
   }) async {
-    var query = client
-        .from('reports')
-        .select('*, farms!inner(name, assigned_to, farmers(name)), crops(name)')
+    try {
+      var query = client
+          .from('reports')
+          .select('*, farms!inner(name, assigned_to, farmers(name)), crops(name)')
         .eq('created_by', userId);
 
     if (startDate != null) {
@@ -431,40 +501,49 @@ class SupabaseService {
 
     final response = await query.order('created_at', ascending: false);
     return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      debugPrint('Error in getReportsByExecutive: $e');
+      return [];
+    }
   }
 
   static Future<List<Map<String, dynamic>>> getRecentActivities() async {
-    // Combine 5 latest farmers and 5 latest reports
-    final farmers = await getFarmers();
-    final reports = await getReports();
-    
-    List<Map<String, dynamic>> activities = [];
-    
-    for (var f in farmers.take(5)) {
-      activities.add({
-        'type': 'new_farmer',
-        'title': 'Farmer Added',
-        'subtitle': '${f['name']} was added',
-        'created_at': f['created_at'],
-      });
+    try {
+      // Combine 5 latest farmers and 5 latest reports
+      final farmers = await getFarmers();
+      final reports = await getReports();
+      
+      List<Map<String, dynamic>> activities = [];
+      
+      for (var f in farmers.take(5)) {
+        activities.add({
+          'type': 'new_farmer',
+          'title': 'Farmer Added',
+          'subtitle': '${f['name']} was added',
+          'created_at': f['created_at'],
+        });
+      }
+      
+      for (var r in reports.take(5)) {
+        final farmName = r['farms']?['name'] ?? 'Unknown Farm';
+        activities.add({
+          'type': 'report_generated',
+          'title': 'Report Generated',
+          'subtitle': 'Analysis for $farmName',
+          'created_at': r['created_at'],
+        });
+      }
+      
+      // Sort combined activities by created_at descending
+      activities.sort((a, b) => 
+          DateTime.parse(b['created_at'].toString()).compareTo(
+          DateTime.parse(a['created_at'].toString())));
+          
+      return activities.take(5).toList();
+    } catch (e) {
+      debugPrint('Error in getRecentActivities: $e');
+      return [];
     }
-    
-    for (var r in reports.take(5)) {
-      final farmName = r['farms']?['name'] ?? 'Unknown Farm';
-      activities.add({
-        'type': 'report_generated',
-        'title': 'Report Generated',
-        'subtitle': 'Analysis for $farmName',
-        'created_at': r['created_at'],
-      });
-    }
-    
-    // Sort combined activities by created_at descending
-    activities.sort((a, b) => 
-        DateTime.parse(b['created_at'].toString()).compareTo(
-        DateTime.parse(a['created_at'].toString())));
-        
-    return activities.take(5).toList();
   }
 
   static Future<String> uploadImage(Uint8List bytes, String fileName, String bucketId) async {
@@ -500,6 +579,18 @@ class SupabaseService {
     final profile = await getProfile();
     final role = profile?['role'];
 
+    if (role == 'store') {
+      final stock = await getStoreStock();
+      final transResponse = await client.from('store_transactions').select('id').eq('status', 'ACCEPTED').count(CountOption.exact);
+      final pendingResponse = await client.from('store_transactions').select('id').eq('status', 'PENDING').count(CountOption.exact);
+      
+      return {
+        'stock': stock.length,
+        'trans': transResponse.count ?? 0,
+        'pending': pendingResponse.count ?? 0,
+      };
+    }
+
     // Farmers count
     var farmersQuery = client.from('farmers').select('id');
     if (role == 'executive') farmersQuery = farmersQuery.eq('created_by', userId);
@@ -518,9 +609,9 @@ class SupabaseService {
     final reportsRes = await reportsQuery.count(CountOption.exact);
 
     return {
-      'farmers': farmersRes.count,
-      'farms': farmsRes.count,
-      'reports': reportsRes.count,
+      'farmers': farmersRes.count ?? 0,
+      'farms': farmsRes.count ?? 0,
+      'reports': reportsRes.count ?? 0,
     };
   }
 
@@ -528,7 +619,7 @@ class SupabaseService {
   static Future<void> updateProfile(Map<String, dynamic> data) async {
     final userId = client.auth.currentUser?.id;
     if (userId == null) return;
-    await client.from('profiles').update(data).eq('id', userId);
+    await client.from('profiles').update(_cleanPayload(data)).eq('id', userId);
   }
 
   // Update password
@@ -568,14 +659,123 @@ class SupabaseService {
     return options;
   }
 
+  // --- Store Management Methods ---
+
+  static Future<void> addStoreTransaction(Map<String, dynamic> data) async {
+    final cleanData = _cleanPayload(data);
+    // Ensure nested profiles mapping isn't sent in raw insert if it's there
+    cleanData.remove('profiles');
+    await client.from('store_transactions').insert(cleanData);
+  }
+
+  static Future<List<Map<String, dynamic>>> getPendingStoreTransactions() async {
+    try {
+      final user = client.auth.currentUser;
+      if (user == null) return [];
+      
+      final profile = await getProfile();
+      final role = profile?['role'];
+
+      var query = client.from('store_transactions').select('*, profiles!store_transactions_executive_id_fkey(full_name)').eq('status', 'PENDING');
+
+      if (role == 'executive') {
+        // Executive only sees pending deliveries sent TO them
+        query = query.eq('executive_id', user.id).eq('transaction_type', 'DELIVERY');
+      } else if (role == 'store') {
+        // Store only sees pending returns sent TO the store
+        query = query.eq('transaction_type', 'RETURN');
+      } else {
+        // Admin sees all
+      }
+
+      final response = await query.order('created_at', ascending: false);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      debugPrint('Error in getPendingStoreTransactions: $e');
+      return [];
+    }
+  }
+
+  static Future<void> updateStoreTransactionStatus(String transactionId, String status) async {
+    try {
+      await client.from('store_transactions').update({
+        'status': status,
+        'accepted_at': status == 'ACCEPTED' ? DateTime.now().toIso8601String() : null,
+      }).eq('id', transactionId);
+    } catch (e) {
+      debugPrint('Error updateStoreTransactionStatus: $e');
+      rethrow;
+    }
+  }
+
+  static Future<Map<String, double>> getStoreStock() async {
+    try {
+      final transactions = await getStoreTransactions();
+      return _calculateStock(transactions);
+    } catch (e) {
+      debugPrint('Error in getStoreStock: $e');
+      return {};
+    }
+  }
+
+  static Future<Map<String, double>> getUnifiedStoreStock() async {
+    try {
+      // 1. Get remote transactions
+      final remote = await getStoreTransactions();
+      
+      // 2. Get local transactions (if not web)
+      List<Map<String, dynamic>> local = [];
+      if (!kIsWeb) {
+        local = await LocalDatabaseService.getData('store_transactions');
+      }
+
+      // 3. Merge (prefer remote if same ID)
+      final Map<String, Map<String, dynamic>> merged = {};
+      
+      // Add local first as they might be newer (pending sync)
+      for (var tx in local) {
+        merged[tx['id'].toString()] = tx;
+      }
+      
+      // Add remote (overwrites local with authoritative cloud data if IDs match)
+      for (var tx in remote) {
+        merged[tx['id'].toString()] = tx;
+      }
+
+      return _calculateStock(merged.values.toList());
+    } catch (e) {
+      debugPrint('Error in getUnifiedStoreStock: $e');
+      return await getStoreStock(); // Fallback to remote only
+    }
+  }
+
+  static Map<String, double> _calculateStock(List<Map<String, dynamic>>? transactions) {
+    Map<String, double> stock = {};
+    if (transactions == null) return stock;
+
+    for (var tx in transactions.where((t) => t['status'] == 'ACCEPTED' || t['transaction_type'] == 'PURCHASE')) {
+      final item = tx['item_name']?.toString() ?? 'Unknown';
+      final qty = double.tryParse(tx['quantity']?.toString() ?? '0') ?? 0.0;
+      final type = tx['transaction_type']?.toString();
+
+      if (type == 'PURCHASE' || type == 'RETURN') {
+        stock[item] = (stock[item] ?? 0.0) + qty;
+      } else if (type == 'DELIVERY') {
+        stock[item] = (stock[item] ?? 0.0) - qty;
+      }
+    }
+    return stock;
+  }
+
   static Future<Map<String, dynamic>> addDropdownOption(String type, String label, {int? parentId, double? mrp, double? offerPrice}) async {
-    final response = await client.from('dropdown_options').insert({
+    final data = {
       'type': type,
       'label': label,
       'parent_id': parentId,
       'mrp': mrp,
       'offer_price': offerPrice,
-    }).select().single();
+    };
+    final response = await client.from('dropdown_options').insert(_cleanPayload(data)).select().single();
     return response;
   }
 
@@ -695,14 +895,14 @@ class SupabaseService {
     if (userId == null) throw 'User not authenticated';
 
     await client.from('attendance').insert({
-      ...data,
+      ..._cleanPayload(data),
       'user_id': userId,
       'status': 'present',
     });
   }
 
   static Future<void> checkOut(String attendanceId, Map<String, dynamic> data) async {
-    await client.from('attendance').update(data).eq('id', attendanceId);
+    await client.from('attendance').update(_cleanPayload(data)).eq('id', attendanceId);
   }
 
   static Future<List<Map<String, dynamic>>> getAttendanceLogs({String? userId}) async {
@@ -722,7 +922,7 @@ class SupabaseService {
     if (userId == null) throw 'User not authenticated';
 
     await client.from('leaves').insert({
-      ...leaveData,
+      ..._cleanPayload(leaveData),
       'user_id': userId,
       'status': 'Pending',
     });
@@ -856,7 +1056,7 @@ class SupabaseService {
       : logData['farmer_id'];
 
     await client.from('call_logs').insert({
-      ...logData,
+      ..._cleanPayload(logData),
       'farmer_id': farmerId,
       'executive_id': client.auth.currentUser?.id,
       'created_at': DateTime.now().toIso8601String(),
@@ -894,5 +1094,126 @@ class SupabaseService {
   // Sign out
   static Future<void> signOut() async {
     await client.auth.signOut();
+  }
+
+  // --- Individual Executive Stock Logic ---
+
+  static Future<Map<String, double>> getExecutiveStock({String? userId}) async {
+    try {
+      final targetUserId = userId ?? client.auth.currentUser?.id;
+      if (targetUserId == null) return {};
+
+      // 1. Get deliveries TO executive and returns FROM executive (all statuses)
+      final storeTxsResponse = await client.from('store_transactions')
+          .select()
+          .eq('executive_id', targetUserId);
+      
+      // 2. Get field usage
+      final usageResponse = await client.from('stock_transactions')
+          .select()
+          .eq('executive_id', targetUserId);
+
+      if (storeTxsResponse == null || usageResponse == null) return {};
+
+      final txs = List<Map<String, dynamic>>.from(storeTxsResponse);
+      final usage = List<Map<String, dynamic>>.from(usageResponse);
+
+      Map<String, double> stock = {};
+
+      // Add accepted deliveries (ignoring pending/rejected deliveries)
+      for (var tx in txs.where((t) => t['transaction_type'] == 'DELIVERY' && t['status'] == 'ACCEPTED')) {
+        final item = tx['item_name']?.toString() ?? 'Unknown';
+        final qty = double.tryParse(tx['quantity']?.toString() ?? '0') ?? 0.0;
+        stock[item] = (stock[item] ?? 0.0) + qty;
+      }
+
+      // Subtract pending or accepted returns (executive handed them over)
+      for (var tx in txs.where((t) => t['transaction_type'] == 'RETURN' && (t['status'] == 'ACCEPTED' || t['status'] == 'PENDING'))) {
+        final item = tx['item_name']?.toString() ?? 'Unknown';
+        final qty = double.tryParse(tx['quantity']?.toString() ?? '0') ?? 0.0;
+        stock[item] = (stock[item] ?? 0.0) - qty;
+      }
+
+      // Subtract field usage (ignore 'RECEIVED' types which are now used for collections)
+      for (var u in usage) {
+        if (u['transaction_type'] == 'RECEIVED') continue;
+
+        final item = u['item_name']?.toString() ?? 'Unknown';
+        final qty = double.tryParse(u['quantity']?.toString() ?? '0') ?? 0.0;
+        stock[item] = (stock[item] ?? 0.0) - qty;
+      }
+
+      return stock;
+    } catch (e) {
+      debugPrint('Error in getExecutiveStock: $e');
+      return {};
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getExecutiveTransactions(String userId) async {
+    try {
+      // Get all store transactions and stock transactions related to this executive
+      final storeTxsResponse = await client.from('store_transactions')
+          .select('*, profiles!store_transactions_executive_id_fkey(full_name)')
+          .eq('executive_id', userId)
+          .order('created_at', ascending: false);
+
+      final usageResponse = await client.from('stock_transactions')
+          .select('*, farms(name)')
+          .eq('executive_id', userId)
+          .order('created_at', ascending: false);
+
+      final List<Map<String, dynamic>> combined = [];
+      
+      final txs = storeTxsResponse != null ? List<Map<String, dynamic>>.from(storeTxsResponse) : [];
+      final usage = usageResponse != null ? List<Map<String, dynamic>>.from(usageResponse) : [];
+      
+      for (var tx in txs) {
+        combined.add({
+          ...tx,
+          'category': 'store', // To distinguish between warehouse and field transactions
+        });
+      }
+
+      for (var u in usage) {
+        if (u['transaction_type'] == 'RECEIVED') continue; // Skip collections
+        combined.add({
+          ...u,
+          'category': 'field',
+        });
+      }
+
+      // Sort by date
+      combined.sort((a, b) => 
+          DateTime.parse(b['created_at']?.toString() ?? DateTime.now().toIso8601String()).compareTo(
+          DateTime.parse(a['created_at']?.toString() ?? DateTime.now().toIso8601String())));
+
+      return combined;
+    } catch (e) {
+      debugPrint('Error in getExecutiveTransactions: $e');
+      return [];
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getExecutiveStockUsage() async {
+    final userId = client.auth.currentUser?.id;
+    if (userId == null) return [];
+
+    final response = await client.from('stock_transactions')
+        .select('*, farms(name)')
+        .eq('executive_id', userId)
+        .order('created_at', ascending: false)
+        .limit(20);
+        
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  // --- Utility Methods ---
+
+  /// Removes all keys starting with '_' to prevent sending local-only metadata to Supabase.
+  static Map<String, dynamic> _cleanPayload(Map<String, dynamic> data) {
+    final cleaned = Map<String, dynamic>.from(data);
+    cleaned.removeWhere((key, _) => key.startsWith('_'));
+    return cleaned;
   }
 }
