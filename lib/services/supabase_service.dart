@@ -93,6 +93,38 @@ class SupabaseService {
     });
   }
 
+  // Create Manager Account (Admin only)
+  static Future<void> createManagerAccount({
+    required String username,
+    required String password,
+    required String fullName,
+  }) async {
+    final email = '$username@naturebiotic.local';
+
+    // Create auth user
+    final response = await client.auth.signUp(
+      email: email,
+      password: password,
+      data: {
+        'username': username,
+        'full_name': fullName,
+        'role': 'manager',
+      },
+    );
+
+    if (response.user == null) {
+      throw 'Failed to create manager account';
+    }
+
+    // Create profile record
+    await client.from('profiles').insert({
+      'id': response.user!.id,
+      'full_name': fullName,
+      'username': username,
+      'role': 'manager',
+    });
+  }
+
   // Get current user profile
   static Future<Map<String, dynamic>?> getProfile() async {
     try {
@@ -253,6 +285,18 @@ class SupabaseService {
     await client.from(tableName).delete().eq('id', id);
   }
 
+  // Generic Verify Record
+  static Future<void> verifyItem(String tableName, dynamic id) async {
+    final userId = client.auth.currentUser?.id;
+    if (userId == null) throw 'User not authenticated';
+
+    await client.from(tableName).update({
+      'is_verified': true,
+      'verified_by': userId,
+      'verified_at': DateTime.now().toIso8601String(),
+    }).eq('id', id);
+  }
+
   // Farm CRUD
   static Future<List<Map<String, dynamic>>> getFarms() async {
     final user = client.auth.currentUser;
@@ -289,7 +333,7 @@ class SupabaseService {
     await client.from('farms').delete().eq('id', id);
   }
 
-  static Future<List<Map<String, dynamic>>> getFarmsByFarmer(String farmerId) async {
+  static Future<List<Map<String, dynamic>>> getFarmsByFarmer(dynamic farmerId) async {
     final response = await client
         .from('farms')
         .select()
@@ -324,7 +368,7 @@ class SupabaseService {
   }
 
   // Crop CRUD
-  static Future<List<Map<String, dynamic>>> getCrops(String farmId) async {
+  static Future<List<Map<String, dynamic>>> getCrops(dynamic farmId) async {
     final response = await client
         .from('crops')
         .select()
@@ -1206,6 +1250,116 @@ class SupabaseService {
         .limit(20);
         
     return List<Map<String, dynamic>>.from(response);
+  }
+
+  // --- Expense Management Logic ---
+
+  static Future<void> allotExpenseFunds(String executiveId, double amount) async {
+    await client.from('expenses').insert({
+      'executive_id': executiveId,
+      'amount_allotted': amount,
+      'allotment_status': 'PENDING',
+      'status': 'ACTIVE',
+      'created_at': DateTime.now().toIso8601String(),
+    });
+  }
+
+  static Future<void> receiveExpenseFunds(String expenseId) async {
+    await client.from('expenses').update({
+      'allotment_status': 'RECEIVED',
+      'updated_at': DateTime.now().toIso8601String(),
+    }).eq('id', expenseId);
+  }
+
+  static Future<void> updateTripStart({
+    required String expenseId,
+    required String vehicleType,
+    required String ownership,
+    required double odometer,
+    String? photoUrl,
+  }) async {
+    await client.from('expenses').update({
+      'vehicle_type': vehicleType,
+      'vehicle_ownership': ownership,
+      'start_odometer_reading': odometer,
+      'start_odometer_photo': photoUrl,
+      'updated_at': DateTime.now().toIso8601String(),
+    }).eq('id', expenseId);
+  }
+
+  static Future<void> addExpenseItem({
+    required String expenseId,
+    required String category,
+    required double amount,
+    String? courierName,
+    String? photoUrl,
+    String? notes,
+  }) async {
+    await client.from('expense_items').insert({
+      'expense_id': expenseId,
+      'category': category,
+      'amount': amount,
+      'courier_name': courierName,
+      'bill_photo': photoUrl,
+      'notes': notes,
+      'created_at': DateTime.now().toIso8601String(),
+    });
+  }
+
+  static Future<void> updateTripEnd({
+    required String expenseId,
+    required double odometer,
+    String? photoUrl,
+  }) async {
+    await client.from('expenses').update({
+      'end_odometer_reading': odometer,
+      'end_odometer_photo': photoUrl,
+      'updated_at': DateTime.now().toIso8601String(),
+    }).eq('id', expenseId);
+  }
+
+  static Future<void> submitReturn(String expenseId, double amount) async {
+    await client.from('expenses').update({
+      'return_amount': amount,
+      'return_status': 'PENDING',
+      'updated_at': DateTime.now().toIso8601String(),
+    }).eq('id', expenseId);
+  }
+
+  static Future<void> approveReturn(String expenseId) async {
+    await client.from('expenses').update({
+      'return_status': 'APPROVED',
+      'status': 'CLOSED',
+      'updated_at': DateTime.now().toIso8601String(),
+    }).eq('id', expenseId);
+  }
+
+  static Future<Map<String, dynamic>?> getActiveExpenseForExecutive(String userId) async {
+    final response = await client.from('expenses')
+        .select('*, expense_items(*)')
+        .eq('executive_id', userId)
+        .eq('status', 'ACTIVE')
+        .order('created_at', ascending: false)
+        .limit(1)
+        .maybeSingle();
+    return response;
+  }
+
+  static Future<List<Map<String, dynamic>>> getExpenseHistory({String? userId}) async {
+    var query = client.from('expenses').select('*, profiles(full_name), expense_items(*)');
+    if (userId != null) {
+      query = query.eq('executive_id', userId);
+    }
+    final response = await query.order('created_at', ascending: false);
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  static Future<Map<String, dynamic>> getExpenseById(String id) async {
+    final response = await client.from('expenses')
+        .select('*, profiles(full_name), expense_items(*)')
+        .eq('id', id)
+        .single();
+    return response;
   }
 
   // --- Utility Methods ---

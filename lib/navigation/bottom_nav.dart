@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:nature_biotic/core/theme.dart';
 import 'package:nature_biotic/features/dashboard/screens/dashboard_screen.dart';
-import 'package:nature_biotic/features/farmers/screens/farmer_list_screen.dart';
 import 'package:nature_biotic/features/calls/screens/executive_dialer_screen.dart';
 import 'package:nature_biotic/features/reports/screens/farm_pdf_folder_screen.dart';
 import 'package:nature_biotic/features/inventory/screens/store_stock_screen.dart';
 import 'package:nature_biotic/features/profile/screens/profile_screen.dart';
 import 'package:nature_biotic/services/supabase_service.dart';
+import 'package:nature_biotic/features/expenses/screens/executive_expenses_screen.dart';
+import 'package:nature_biotic/features/expenses/screens/manager_expenses_screen.dart';
 
 class BottomNav extends StatefulWidget {
   const BottomNav({super.key});
@@ -45,17 +46,16 @@ class _BottomNavState extends State<BottomNav> {
 
   List<Widget> _getScreens() {
     if (_userRole == 'store') {
-      return [
-        const StoreStockScreen(),
-        const ProfileScreen(),
-      ];
+      return [const StoreStockScreen(), const ProfileScreen()];
     }
-    
+
     return [
       const DashboardScreen(),
-      const FarmerListScreen(),
       const ExecutiveDialerScreen(),
       const StoreStockScreen(),
+      _userRole == 'manager'
+          ? const ManagerExpenseControl()
+          : const ExecutiveExpenseDashboard(),
       const FarmPdfFolderScreen(),
     ];
   }
@@ -63,17 +63,38 @@ class _BottomNavState extends State<BottomNav> {
   List<BottomNavigationBarItem> _getNavItems() {
     if (_userRole == 'store') {
       return const [
-        BottomNavigationBarItem(icon: Icon(Icons.inventory_2_rounded), label: 'Stock'),
-        BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'Profile'),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.inventory_2_rounded),
+          label: 'Stock',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.person_rounded),
+          label: 'Profile',
+        ),
       ];
     }
 
     return const [
-      BottomNavigationBarItem(icon: Icon(Icons.dashboard_rounded), label: 'Dashboard'),
-      BottomNavigationBarItem(icon: Icon(Icons.people_rounded), label: 'Visits'),
-      BottomNavigationBarItem(icon: Icon(Icons.call_rounded), label: 'Nature Biotic'),
-      BottomNavigationBarItem(icon: Icon(Icons.inventory_2_rounded), label: 'Stock'),
-      BottomNavigationBarItem(icon: Icon(Icons.folder_shared_rounded), label: 'Reports'),
+      BottomNavigationBarItem(
+        icon: Icon(Icons.dashboard_rounded),
+        label: 'Dashboard',
+      ),
+      BottomNavigationBarItem(
+        icon: Icon(Icons.call_rounded),
+        label: 'Nature Biotic',
+      ),
+      BottomNavigationBarItem(
+        icon: Icon(Icons.inventory_2_rounded),
+        label: 'Stock',
+      ),
+      BottomNavigationBarItem(
+        icon: Icon(Icons.payments_rounded),
+        label: 'Expenses',
+      ),
+      BottomNavigationBarItem(
+        icon: Icon(Icons.folder_shared_rounded),
+        label: 'Reports',
+      ),
     ];
   }
 
@@ -85,7 +106,8 @@ class _BottomNavState extends State<BottomNav> {
 
     final screens = _getScreens();
     final bool isWide = MediaQuery.sizeOf(context).width > 1100;
-    final int safeIndex = screens.isEmpty ? 0 : _currentIndex.clamp(0, screens.length - 1);
+    final int safeIndex =
+        screens.isEmpty ? 0 : _currentIndex.clamp(0, screens.length - 1);
 
     if (isWide) {
       return Scaffold(
@@ -93,58 +115,51 @@ class _BottomNavState extends State<BottomNav> {
         body: Row(
           children: [
             _buildDesktopSidebar(screens),
-            Expanded(
-              child: IndexedStack(
-                index: safeIndex,
-                children: screens,
-              ),
-            ),
+            Expanded(child: IndexedStack(index: safeIndex, children: screens)),
           ],
         ),
       );
     }
 
     return Scaffold(
-      body: IndexedStack(
-        index: safeIndex,
-        children: screens,
-      ),
-      bottomNavigationBar: screens.length <= 1 
-        ? null 
-        : Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
-                  blurRadius: 20,
-                  offset: const Offset(0, -5),
+      body: IndexedStack(index: safeIndex, children: screens),
+      bottomNavigationBar:
+          screens.length <= 1
+              ? null
+              : Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.04),
+                      blurRadius: 20,
+                      offset: const Offset(0, -5),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            child: BottomNavigationBar(
-              currentIndex: safeIndex,
-              onTap: (index) {
-                setState(() {
-                  _currentIndex = index;
-                });
-              },
-              type: BottomNavigationBarType.fixed,
-              backgroundColor: Colors.white,
-              selectedItemColor: AppColors.primary,
-              unselectedItemColor: AppColors.textGray.withOpacity(0.4),
-              selectedLabelStyle: GoogleFonts.outfit(
-                fontWeight: FontWeight.w700,
-                fontSize: 12,
+                child: BottomNavigationBar(
+                  currentIndex: safeIndex,
+                  onTap: (index) {
+                    setState(() {
+                      _currentIndex = index;
+                    });
+                  },
+                  type: BottomNavigationBarType.fixed,
+                  backgroundColor: Colors.white,
+                  selectedItemColor: AppColors.primary,
+                  unselectedItemColor: AppColors.textGray.withOpacity(0.4),
+                  selectedLabelStyle: GoogleFonts.outfit(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                  unselectedLabelStyle: GoogleFonts.outfit(
+                    fontWeight: FontWeight.w500,
+                    fontSize: 11,
+                  ),
+                  elevation: 0,
+                  items: _getNavItems(),
+                ),
               ),
-              unselectedLabelStyle: GoogleFonts.outfit(
-                fontWeight: FontWeight.w500,
-                fontSize: 11,
-              ),
-              elevation: 0,
-              items: _getNavItems(),
-            ),
-          ),
     );
   }
 
@@ -174,7 +189,11 @@ class _BottomNavState extends State<BottomNav> {
                     color: AppColors.primary,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(Icons.eco_rounded, color: Colors.white, size: 28),
+                  child: const Icon(
+                    Icons.eco_rounded,
+                    color: Colors.white,
+                    size: 28,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 const Column(
@@ -209,15 +228,20 @@ class _BottomNavState extends State<BottomNav> {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Column(
-                children: _userRole == 'store' 
-                  ? [_sidebarItem(0, Icons.inventory_2_rounded, 'Stock')]
-                  : [
-                    _sidebarItem(0, Icons.dashboard_rounded, 'Dashboard'),
-                    _sidebarItem(1, Icons.people_rounded, 'Visits'),
-                    _sidebarItem(2, Icons.call_rounded, 'Nature Biotic'),
-                    _sidebarItem(3, Icons.inventory_2_rounded, 'Stock'),
-                    _sidebarItem(4, Icons.folder_shared_rounded, 'Reports'),
-                  ],
+                children:
+                    _userRole == 'store'
+                        ? [_sidebarItem(0, Icons.inventory_2_rounded, 'Stock')]
+                        : [
+                          _sidebarItem(0, Icons.dashboard_rounded, 'Dashboard'),
+                          _sidebarItem(1, Icons.call_rounded, 'Nature Biotic'),
+                          _sidebarItem(2, Icons.inventory_2_rounded, 'Stock'),
+                          _sidebarItem(3, Icons.payments_rounded, 'Expenses'),
+                          _sidebarItem(
+                            4,
+                            Icons.folder_shared_rounded,
+                            'Reports',
+                          ),
+                        ],
               ),
             ),
           ),
@@ -229,15 +253,30 @@ class _BottomNavState extends State<BottomNav> {
               children: [
                 const CircleAvatar(
                   backgroundColor: AppColors.secondary,
-                  child: Icon(Icons.admin_panel_settings_rounded, color: AppColors.primary),
+                  child: Icon(
+                    Icons.admin_panel_settings_rounded,
+                    color: AppColors.primary,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Management', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                      Text('System Console', style: TextStyle(color: AppColors.textGray.withOpacity(0.7), fontSize: 11)),
+                      const Text(
+                        'Management',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                      Text(
+                        'System Console',
+                        style: TextStyle(
+                          color: AppColors.textGray.withOpacity(0.7),
+                          fontSize: 11,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -261,21 +300,30 @@ class _BottomNavState extends State<BottomNav> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
-              color: isSelected ? AppColors.primary.withOpacity(0.08) : Colors.transparent,
+              color:
+                  isSelected
+                      ? AppColors.primary.withOpacity(0.08)
+                      : Colors.transparent,
               borderRadius: BorderRadius.circular(16),
             ),
             child: Row(
               children: [
                 Icon(
                   icon,
-                  color: isSelected ? AppColors.primary : AppColors.textGray.withOpacity(0.5),
+                  color:
+                      isSelected
+                          ? AppColors.primary
+                          : AppColors.textGray.withOpacity(0.5),
                   size: 22,
                 ),
                 const SizedBox(width: 16),
                 Text(
                   label,
                   style: TextStyle(
-                    color: isSelected ? AppColors.primary : AppColors.textGray.withOpacity(0.7),
+                    color:
+                        isSelected
+                            ? AppColors.primary
+                            : AppColors.textGray.withOpacity(0.7),
                     fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                     fontSize: 14,
                   ),
@@ -294,6 +342,69 @@ class _BottomNavState extends State<BottomNav> {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildComingSoonScreen(String title) {
+    return Container(
+      color: AppColors.background,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.05),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.construction_rounded,
+                size: 80,
+                color: AppColors.primary.withOpacity(0.2),
+              ),
+            ),
+            const SizedBox(height: 32),
+            Text(
+              title,
+              style: GoogleFonts.outfit(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textBlack,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.secondary,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                'COMING SOON',
+                style: GoogleFonts.outfit(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.primary,
+                  letterSpacing: 2,
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 48),
+              child: Text(
+                'We are building a comprehensive expense tracking module for your team. Stay tuned!',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(
+                  color: AppColors.textGray,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

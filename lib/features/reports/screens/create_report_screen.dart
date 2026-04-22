@@ -35,6 +35,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
   List<Map<String, dynamic>> _doseUnitOptions = [];
   List<Map<String, dynamic>> _fillerUnitOptions = [];
   List<Map<String, dynamic>> _fillerMaterialOptions = [];
+  List<Map<String, dynamic>> _perUnitOptions = [];
   List<String> _suggestedProblems = [];
 
   // Selection
@@ -104,12 +105,17 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
   final _additionalNotesController = TextEditingController();
 
   // Previous Inputs Categories
-  final _pesticidesController = TextEditingController();
-  final _fungicidesController = TextEditingController();
-  final _fertilizersController = TextEditingController();
-  final _stimulantController = TextEditingController();
-  final _herbicideController = TextEditingController();
-  DateTime? _selectedInputDate;
+  Map<String, List<PreviousInputRow>> _previousInputsMap = {
+    'Pesticides': [PreviousInputRow()],
+    'Fungicides': [PreviousInputRow()],
+    'Fertilizers': [PreviousInputRow()],
+    'Bio Stimulant': [PreviousInputRow()],
+    'Herbicide': [PreviousInputRow()],
+  };
+
+  // Crop/Farm Metadata for Calculations
+  double _cropAcre = 0.0;
+  int _cropCount = 0;
 
   // Recommendations Categories
   final List<RecommendationRow> _recommendationsList = [];
@@ -134,17 +140,20 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
     _loadFarms();
     _fetchProblemData();
     _addRecommendationRow();
+    if (widget.preSelectedCropId != null) {
+      _loadCropDetails(widget.preSelectedCropId!);
+    }
   }
 
   @override
   void dispose() {
     _signatureController.dispose();
     _additionalNotesController.dispose();
-    _pesticidesController.dispose();
-    _fungicidesController.dispose();
-    _fertilizersController.dispose();
-    _stimulantController.dispose();
-    _herbicideController.dispose();
+    for (var rows in _previousInputsMap.values) {
+      for (var row in rows) {
+        row.controller.dispose();
+      }
+    }
     super.dispose();
   }
 
@@ -195,7 +204,68 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
           _costEstimations.add(newRow);
         }
       }
+      
+      _autoCalculateQuantities();
     });
+  }
+
+  void _autoCalculateQuantities() {
+    for (var row in _costEstimations) {
+      // Find matching recommendation
+      final rec = _recommendationsList.firstWhere(
+        (r) => r.product.text == row.productName,
+        orElse: () => RecommendationRow(),
+      );
+
+      if (rec.product.text.isEmpty) continue;
+
+      final double dose = double.tryParse(rec.dose.text) ?? 0;
+      if (dose == 0) continue;
+
+      double totalRequired = 0;
+      final perUnit = rec.perUnit?.toLowerCase() ?? '';
+      
+      if (perUnit.contains('acre')) {
+        totalRequired = dose * _cropAcre;
+      } else if (perUnit.contains('plant')) {
+        totalRequired = dose * _cropCount;
+      } else {
+        // Default to 1 if no unit matched
+        totalRequired = dose;
+      }
+
+      // Match with package size
+      final pkgSizeStr = row.pkgSize.text;
+      if (pkgSizeStr.isEmpty) continue;
+
+      // Parse pkg size (e.g. "250ml" or "1kg")
+      final double pkgValue =
+          double.tryParse(pkgSizeStr.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0;
+      if (pkgValue == 0) continue;
+
+      // Calculate quantity
+      final double qty = totalRequired / pkgValue;
+      row.qty.text = qty.ceil().toString();
+    }
+  }
+
+  Future<void> _loadCropDetails(String cropId) async {
+    try {
+      final crops = await SupabaseService.getCrops(_selectedFarmId ?? widget.preSelectedFarmId ?? '');
+      final crop = crops.firstWhere((c) => c['id'].toString() == cropId);
+      
+      setState(() {
+        // Parse acre (e.g. "2.5 Acres")
+        final acreStr = crop['acre'] as String? ?? '';
+        _cropAcre = double.tryParse(acreStr.split(' ')[0]) ?? 0.0;
+        
+        // Parse count (e.g. "500 Plants")
+        final countStr = crop['count'] as String? ?? '';
+        _cropCount = int.tryParse(countStr.split(' ')[0]) ?? 0;
+      });
+    } catch (e) {
+      debugPrint('Error loading crop details for calculation: $e');
+    }
   }
 
   Future<void> _loadFarms() async {
@@ -227,6 +297,9 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
             crop['dropdown_options']['id'].toString(),
           );
           if (cropIntId != null) _loadSuggestedProblems(cropIntId);
+        }
+        if (widget.preSelectedFarmId != null && widget.preSelectedCropId != null) {
+          _currentStep = 1;
         }
       } else {
         _selectedCropId = null;
@@ -266,6 +339,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
       final fillerMaterials = await SupabaseService.getDropdownOptions(
         'filler_material',
       );
+      final perUnits = await SupabaseService.getDropdownOptions('per_unit');
 
       setState(() {
         _productOptions = products;
@@ -273,6 +347,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
         _doseUnitOptions = doseUnits;
         _fillerUnitOptions = fillerUnits;
         _fillerMaterialOptions = fillerMaterials;
+        _perUnitOptions = perUnits;
       });
 
       if (categories.isEmpty) return;
@@ -296,57 +371,84 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
     } catch (_) {}
   }
 
+  Map<String, dynamic>? _lastReport;
+
   Future<void> _loadLastReportData(String farmId, String cropId) async {
+    if (_cropAcre == 0 && _cropCount == 0) {
+      await _loadCropDetails(cropId);
+    }
     final lastReport = await SupabaseService.getLastReportForCrop(
       farmId,
       cropId,
     );
-    if (lastReport == null) return;
+    setState(() => _lastReport = lastReport);
+  }
 
-    final history = lastReport['previous_inputs'] as String?;
-    final createdAt = lastReport['created_at'];
+  void _importLastReportData() {
+    if (_lastReport == null) return;
+    final history = _lastReport!['previous_inputs'] as String?;
 
     setState(() {
-      if (createdAt != null) {
-        try {
-          _selectedInputDate = DateTime.parse(createdAt.toString());
-        } catch (_) {}
-      }
-
       if (history != null && history.isNotEmpty) {
+        // Clear existing and import
+        _previousInputsMap = {
+          'Pesticides': [],
+          'Fungicides': [],
+          'Fertilizers': [],
+          'Bio Stimulant': [],
+          'Herbicide': [],
+        };
+
         final lines = history.split('\n');
         for (var line in lines) {
-          if (line.startsWith('Date:')) {
-            // Optional: specifically parse the date string if it differs from createdAt
-          } else if (line.startsWith('Pesticides:')) {
-            _pesticidesController.text =
-                line.replaceFirst('Pesticides:', '').trim();
+          String category = '';
+          String content = '';
+          if (line.startsWith('Pesticides:')) {
+            category = 'Pesticides';
+            content = line.replaceFirst('Pesticides:', '').trim();
           } else if (line.startsWith('Fungicides:')) {
-            _fungicidesController.text =
-                line.replaceFirst('Fungicides:', '').trim();
+            category = 'Fungicides';
+            content = line.replaceFirst('Fungicides:', '').trim();
           } else if (line.startsWith('Fertilizers:')) {
-            _fertilizersController.text =
-                line.replaceFirst('Fertilizers:', '').trim();
+            category = 'Fertilizers';
+            content = line.replaceFirst('Fertilizers:', '').trim();
           } else if (line.startsWith('Bio Stimulant:')) {
-            _stimulantController.text =
-                line.replaceFirst('Bio Stimulant:', '').trim();
+            category = 'Bio Stimulant';
+            content = line.replaceFirst('Bio Stimulant:', '').trim();
           } else if (line.startsWith('Herbicide:')) {
-            _herbicideController.text =
-                line.replaceFirst('Herbicide:', '').trim();
+            category = 'Herbicide';
+            content = line.replaceFirst('Herbicide:', '').trim();
+          }
+
+          if (category.isNotEmpty) {
+            // Split by comma if there are multiple items
+            final items = content.split(',');
+            for (var item in items) {
+              final trimmed = item.trim();
+              if (trimmed.isNotEmpty) {
+                final row = PreviousInputRow();
+                row.controller.text = trimmed;
+                _previousInputsMap[category]!.add(row);
+              }
+            }
+          }
+        }
+
+        // Ensure at least one row exists if empty
+        for (var cat in _previousInputsMap.keys) {
+          if (_previousInputsMap[cat]!.isEmpty) {
+            _previousInputsMap[cat]!.add(PreviousInputRow());
           }
         }
       }
     });
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Last visit history pre-filled automatically'),
-          duration: Duration(seconds: 2),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Last visit data imported'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   Future<void> _handleSave() async {
@@ -421,26 +523,53 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
       }
 
       String finalHistory = '';
-      if (_selectedInputDate != null) {
-        finalHistory += 'Date: ${_formatDate(_selectedInputDate)}\n';
+
+      for (var entry in _previousInputsMap.entries) {
+        final category = entry.key;
+        final rows = entry.value;
+        String categoryContent = '';
+
+        for (var row in rows) {
+          final text = row.controller.text.trim();
+          if (text.isEmpty && row.image == null && row.date == null) continue;
+
+          String itemString = text;
+          if (row.date != null) {
+            itemString += (itemString.isEmpty ? '' : ' ') + '[Date: ${_formatDate(row.date)}]';
+          }
+
+          if (row.image != null) {
+            try {
+              final fileName =
+                  'prev_${DateTime.now().millisecondsSinceEpoch}_${row.imageName ?? 'image.jpg'}';
+              final url = await SupabaseService.uploadImage(
+                row.image!,
+                fileName,
+                'reports',
+              );
+              itemString += (itemString.isEmpty ? '' : ' ') + '{img: $url}';
+            } catch (e) {
+              debugPrint('Error uploading previous input image: $e');
+            }
+          }
+
+          if (itemString.isNotEmpty) {
+            categoryContent += (categoryContent.isEmpty ? '' : ', ') + itemString;
+          }
+        }
+
+        if (categoryContent.isNotEmpty) {
+          finalHistory += '$category: $categoryContent\n';
+        }
       }
-      if (_pesticidesController.text.isNotEmpty)
-        finalHistory += 'Pesticides: ${_pesticidesController.text.trim()}\n';
-      if (_fungicidesController.text.isNotEmpty)
-        finalHistory += 'Fungicides: ${_fungicidesController.text.trim()}\n';
-      if (_fertilizersController.text.isNotEmpty)
-        finalHistory += 'Fertilizers: ${_fertilizersController.text.trim()}\n';
-      if (_stimulantController.text.isNotEmpty)
-        finalHistory += 'Bio Stimulant: ${_stimulantController.text.trim()}\n';
-      if (_herbicideController.text.isNotEmpty)
-        finalHistory += 'Herbicide: ${_herbicideController.text.trim()}\n';
 
       String finalRecommendations = '';
       for (var row in _recommendationsList) {
         if (row.product.text.isNotEmpty) {
           finalRecommendations +=
               '${row.product.text} (${row.application.text}) - '
-              'Dose: ${row.dose.text}, Filler: ${row.filler.text}\n';
+              'Dose: ${row.dose.text} ${row.doseUnit ?? ""} per ${row.perUnit ?? ""}, '
+              'Filler: ${row.filler.text} ${row.fillerQty.text} ${row.fillerUnit ?? ""}\n';
         }
       }
 
@@ -667,8 +796,10 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                                 });
                                 if (value != null) {
                                   final cropIntId = int.tryParse(value);
-                                  if (cropIntId != null)
+                                  if (cropIntId != null) {
                                     _loadSuggestedProblems(cropIntId);
+                                    _loadCropDetails(value);
+                                  }
                                   if (_selectedFarmId != null) {
                                     _loadLastReportData(
                                       _selectedFarmId!,
@@ -817,71 +948,29 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
               ),
               Step(
                 title: const Text('Previous Inputs'),
-                subtitle:
-                    _selectedInputDate != null
-                        ? Text(
-                          'Date: ${_formatDate(_selectedInputDate)}',
-                          style: const TextStyle(
-                            color: AppColors.primary,
-                            fontSize: 12,
-                          ),
-                        )
-                        : null,
+                subtitle: const Text(
+                  'List products used since last visit',
+                  style: TextStyle(fontSize: 10, color: AppColors.primary),
+                ),
                 isActive: _currentStep >= 2,
                 content: Column(
                   children: [
-                    _inputField(_pesticidesController, 'Pesticides'),
-                    _inputField(_fungicidesController, 'Fungicides'),
-                    _inputField(_fertilizersController, 'Fertilizers'),
-                    _inputField(_stimulantController, 'Bio Stimulant'),
-                    _inputField(_herbicideController, 'Herbicide'),
-                    const SizedBox(height: 12),
-                    InkWell(
-                      onTap: () async {
-                        final date = await showDatePicker(
-                          context: context,
-                          initialDate: DateTime.now(),
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime.now(),
-                        );
-                        if (date != null)
-                          setState(() => _selectedInputDate = date);
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: AppColors.secondary),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              _selectedInputDate == null
-                                  ? 'Select Crop Input Date'
-                                  : 'Date: ${_formatDate(_selectedInputDate)}',
-                              style: TextStyle(
-                                color:
-                                    _selectedInputDate == null
-                                        ? AppColors.textGray
-                                        : AppColors.primary,
-                                fontWeight:
-                                    _selectedInputDate != null
-                                        ? FontWeight.bold
-                                        : FontWeight.normal,
-                              ),
-                            ),
-                            const Icon(
-                              Icons.calendar_month_rounded,
-                              color: AppColors.primary,
-                            ),
-                          ],
+                    if (_lastReport != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16.0),
+                        child: ElevatedButton.icon(
+                          onPressed: _importLastReportData,
+                          icon: const Icon(Icons.history_rounded),
+                          label: const Text('Import from Last Visit'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary.withOpacity(0.1),
+                            foregroundColor: AppColors.primary,
+                            elevation: 0,
+                            minimumSize: const Size(double.infinity, 45),
+                          ),
                         ),
                       ),
-                    ),
+                    ..._previousInputsMap.keys.map((category) => _buildPreviousInputCategory(category)),
                   ],
                 ),
               ),
@@ -1373,6 +1462,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                         if (variant['offer_price'] != null)
                           row.offerPrice.text =
                               variant['offer_price'].toString();
+                        _autoCalculateQuantities();
                       });
                     }
                   },
@@ -1563,11 +1653,22 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                   children: [
                     Expanded(
                       flex: 2,
-                      child: _miniField(row.dose, 'Dose', isNumber: true),
+                      child: TextField(
+                        controller: row.dose,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Dose',
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                        ),
+                        onChanged: (_) => _syncCostEstimations(),
+                      ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      flex: 3,
+                      flex: 2,
                       child: DropdownButtonFormField<String>(
                         initialValue:
                             _doseUnitOptions.any(
@@ -1592,7 +1693,42 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                                 ),
                               );
                             }).toList(),
-                        onChanged: (val) => setState(() => row.doseUnit = val),
+                        onChanged: (val) {
+                          setState(() => row.doseUnit = val);
+                          _syncCostEstimations();
+                        },
+                      ),
+                    ),
+                    Expanded(
+                      flex: 2,
+                      child: DropdownButtonFormField<String>(
+                        initialValue:
+                            _perUnitOptions.any(
+                                  (u) => u['label'] == row.perUnit,
+                                )
+                                ? row.perUnit
+                                : null,
+                        decoration: const InputDecoration(
+                          labelText: 'Per',
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                        ),
+                        items:
+                            _perUnitOptions.map((u) {
+                              return DropdownMenuItem<String>(
+                                value: u['label'].toString(),
+                                child: Text(
+                                  u['label'].toString(),
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              );
+                            }).toList(),
+                        onChanged: (val) {
+                          setState(() => row.perUnit = val);
+                          _syncCostEstimations();
+                        },
                       ),
                     ),
                   ],
@@ -1639,6 +1775,12 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                       ),
                     ),
                     const SizedBox(width: 8),
+                    // Filler Qty
+                    Expanded(
+                      flex: 2,
+                      child: _miniField(row.fillerQty, 'Qty', isNumber: true),
+                    ),
+                    const SizedBox(width: 8),
                     // Filler Unit Dropdown
                     Expanded(
                       flex: 2,
@@ -1680,20 +1822,148 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
     );
   }
 
-  Widget _inputField(TextEditingController controller, String label) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12.0),
-      child: TextField(
-        controller: controller,
-        decoration: InputDecoration(
-          labelText: label,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 12,
-          ),
+  Widget _buildPreviousInputCategory(String category) {
+    final rows = _previousInputsMap[category] ?? [];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              category,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                color: AppColors.textBlack,
+              ),
+            ),
+            IconButton(
+              onPressed: () {
+                setState(() {
+                  _previousInputsMap[category]!.add(PreviousInputRow());
+                });
+              },
+              icon: const Icon(Icons.add_circle_outline_rounded, size: 20),
+              color: AppColors.primary,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
+          ],
         ),
-      ),
+        const SizedBox(height: 8),
+        ...rows.asMap().entries.map((entry) {
+          final index = entry.key;
+          final row = entry.value;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: row.controller,
+                        decoration: InputDecoration(
+                          hintText: 'Product Name...',
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          suffixIcon: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (row.image != null)
+                                const Icon(Icons.check_circle, color: Colors.green, size: 16),
+                              IconButton(
+                                icon: Icon(
+                                  row.image == null ? Icons.camera_alt_rounded : Icons.image_rounded,
+                                  size: 20,
+                                  color: row.image == null ? AppColors.textGray : AppColors.primary,
+                                ),
+                                onPressed: () => _pickPreviousInputImage(category, index),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (rows.length > 1)
+                      IconButton(
+                        onPressed: () {
+                          setState(() {
+                            _previousInputsMap[category]!.removeAt(index);
+                          });
+                        },
+                        icon: const Icon(Icons.remove_circle_outline_rounded, color: Colors.red, size: 18),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                InkWell(
+                  onTap: () async {
+                    final date = await showDatePicker(
+                      context: context,
+                      initialDate: row.date ?? DateTime.now(),
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime.now(),
+                    );
+                    if (date != null) {
+                      setState(() => row.date = date);
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: row.date == null ? Colors.transparent : AppColors.primary.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: row.date == null ? AppColors.secondary.withOpacity(0.5) : AppColors.primary.withOpacity(0.3),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.calendar_today_rounded,
+                          size: 12,
+                          color: row.date == null ? AppColors.textGray : AppColors.primary,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          row.date == null ? 'Select Input Date' : _formatDate(row.date),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: row.date == null ? AppColors.textGray : AppColors.primary,
+                            fontWeight: row.date == null ? FontWeight.normal : FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+        const Divider(height: 24),
+      ],
     );
+  }
+
+  Future<void> _pickPreviousInputImage(String category, int index) async {
+    final XFile? image = await _picker.pickImage(
+      source: ImageSource.camera,
+      imageQuality: 70,
+    );
+    if (image != null) {
+      final bytes = await image.readAsBytes();
+      setState(() {
+        _previousInputsMap[category]![index].image = bytes;
+        _previousInputsMap[category]![index].imageName = image.name;
+      });
+    }
   }
 
   String _formatDate(DateTime? date) {
@@ -1716,11 +1986,20 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
   }
 }
 
+class PreviousInputRow {
+  final controller = TextEditingController();
+  Uint8List? image;
+  String? imageName;
+  DateTime? date;
+}
+
 class RecommendationRow {
   final product = TextEditingController();
   final application = TextEditingController();
   final dose = TextEditingController();
   String? doseUnit;
+  String? perUnit;
+  final fillerQty = TextEditingController();
   final filler = TextEditingController();
   String? fillerUnit;
 }

@@ -238,8 +238,9 @@ class SyncManager {
         if (operation == 'INSERT') await SupabaseService.addCrop(cleanPayload);
         break;
       case 'reports':
-        if (operation == 'INSERT')
+        if (operation == 'INSERT') {
           await SupabaseService.addReport(cleanPayload);
+        }
         break;
       case 'attendance':
         if (cleanPayload['check_out_time'] != null &&
@@ -250,16 +251,19 @@ class SyncManager {
         }
         break;
       case 'call_logs':
-        if (operation == 'INSERT')
+        if (operation == 'INSERT') {
           await SupabaseService.addCallLog(cleanPayload);
+        }
         break;
       case 'stock_transactions':
-        if (operation == 'INSERT')
+        if (operation == 'INSERT') {
           await SupabaseService.addStockTransaction(cleanPayload);
+        }
         break;
       case 'store_transactions':
-        if (operation == 'INSERT')
+        if (operation == 'INSERT') {
           await SupabaseService.addStoreTransaction(cleanPayload);
+        }
         break;
     }
   }

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:ui';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:nature_biotic/core/theme.dart';
 import 'package:nature_biotic/services/supabase_service.dart';
 import 'package:nature_biotic/services/local_database_service.dart';
@@ -12,6 +14,14 @@ import 'package:nature_biotic/features/dashboard/screens/farm_sales_list_screen.
 import 'package:nature_biotic/features/auth/screens/login_logs_screen.dart';
 import 'package:nature_biotic/features/profile/screens/profile_screen.dart';
 import 'package:nature_biotic/features/dashboard/screens/visit_calendar_screen.dart';
+import 'package:nature_biotic/features/auth/screens/login_screen.dart';
+import 'package:nature_biotic/features/farmers/screens/farmer_list_screen.dart';
+import 'package:nature_biotic/features/farms/screens/farm_list_screen.dart';
+import 'package:nature_biotic/features/crops/screens/crop_list_screen.dart';
+import 'package:nature_biotic/features/farmers/screens/farmer_detail_screen.dart';
+import 'package:nature_biotic/features/farms/screens/farm_detail_screen.dart';
+import 'package:nature_biotic/features/crops/screens/crop_detail_screen.dart';
+import 'package:nature_biotic/features/reports/screens/report_generator_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -23,6 +33,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen>
     with SingleTickerProviderStateMixin {
   bool _isAdmin = false;
+  bool _isManager = false;
   String _userName = 'User';
   String _avatarUrl = '';
   bool _isLoading = true;
@@ -94,6 +105,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     try {
       final profile = await SupabaseService.getProfile();
       final isAdmin = profile?['role'] == 'admin';
+      final isManager = profile?['role'] == 'manager';
       final attendance = await SupabaseService.getTodayAttendance();
 
       final farmers = await SupabaseService.getFarmers();
@@ -143,6 +155,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       if (mounted) {
         setState(() {
           _isAdmin = isAdmin;
+          _isManager = isManager;
           _userName = profile?['full_name']?.split(' ')[0] ?? 'User';
           _avatarUrl = profile?['avatar_url'] ?? '';
           _todayAttendance = attendance;
@@ -303,29 +316,86 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     _filteredTransactions = validTransactions;
 
-    // Process Reminders (Follow-up Dates from Reports)
+    // Process Reminders
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
-    final reportsToProcess = _allReports ?? [];
-    _reminders =
-        reportsToProcess.where((report) {
-          if (report['follow_up_date'] == null) return false;
-          try {
-            final followUp = DateTime.parse(report['follow_up_date']);
-            // Show if today or in the future
-            return followUp.isAfter(today.subtract(const Duration(seconds: 1)));
-          } catch (_) {
-            return false;
-          }
-        }).toList();
+    if (_isManager) {
+      // Process Unverified Items for Managers
+      final List<Map<String, dynamic>> pending = [];
 
-    // Sort reminders by date (soonest first)
-    _reminders.sort((a, b) {
-      final dateA = DateTime.parse(a['follow_up_date']);
-      final dateB = DateTime.parse(b['follow_up_date']);
-      return dateA.compareTo(dateB);
-    });
+      for (var f in _allFarmers) {
+        if (f['is_verified'] != true) {
+          pending.add({
+            'reminder_type': 'farmer',
+            'title': f['name'] ?? 'Unknown Farmer',
+            'subtitle': 'New Farmer Entry',
+            'follow_up_date': f['created_at'] ?? now.toIso8601String(),
+            'data': f,
+          });
+        }
+      }
+
+      for (var f in _allFarms) {
+        if (f['is_verified'] != true) {
+          pending.add({
+            'reminder_type': 'farm',
+            'title': f['name'] ?? 'Unknown Farm',
+            'subtitle': 'New Farm Entry',
+            'follow_up_date': f['created_at'] ?? now.toIso8601String(),
+            'data': f,
+          });
+        }
+      }
+
+      for (var c in _allCrops) {
+        if (c['is_verified'] != true) {
+          pending.add({
+            'reminder_type': 'crop',
+            'title': c['name'] ?? 'Unknown Crop',
+            'subtitle': 'New Crop Entry',
+            'follow_up_date': c['created_at'] ?? now.toIso8601String(),
+            'data': c,
+          });
+        }
+      }
+
+      for (var r in _allReports) {
+        if (r['is_verified'] != true) {
+          pending.add({
+            'reminder_type': 'report',
+            'title': 'Visit Report',
+            'subtitle': 'Analysis Verification',
+            'follow_up_date': r['created_at'] ?? now.toIso8601String(),
+            'data': r,
+          });
+        }
+      }
+
+      // Sort by date (oldest first for verification priority)
+      pending.sort((a, b) => (a['follow_up_date'] ?? '').compareTo(b['follow_up_date'] ?? ''));
+      _reminders = pending;
+    } else {
+      // Process Standard Reminders (Follow-up Dates from Reports) for Executives
+      final reportsToProcess = _allReports ?? [];
+      _reminders = reportsToProcess.where((report) {
+        if (report['follow_up_date'] == null) return false;
+        try {
+          final followUp = DateTime.parse(report['follow_up_date']);
+          // Show if today or in the future
+          return followUp.isAfter(today.subtract(const Duration(seconds: 1)));
+        } catch (_) {
+          return false;
+        }
+      }).toList();
+
+      // Sort reminders by date (soonest first)
+      _reminders.sort((a, b) {
+        final dateA = DateTime.parse(a['follow_up_date']);
+        final dateB = DateTime.parse(b['follow_up_date']);
+        return dateA.compareTo(dateB);
+      });
+    }
   }
 
   DateTimeRange _getDateRangeForPeriod(String period) {
@@ -527,17 +597,17 @@ class _DashboardScreenState extends State<DashboardScreen>
                   opacity: _scrollOpacity,
                   child: Transform.scale(
                     scale: _scrollScale,
-                    child: _buildHeroSection(),
+                    child: _buildPremiumHeader(),
                   ),
                 ),
               ),
-              const SizedBox(height: 44),
+              const SizedBox(height: 20),
               _buildFilterBar(),
-              const SizedBox(height: 44),
+              const SizedBox(height: 20),
+              EntranceAnimation(delay: 350, child: _buildSalesCard()),
+              const SizedBox(height: 32),
               if (!_isAdmin) _buildRemindersSection(),
               const SizedBox(height: 40),
-              EntranceAnimation(delay: 350, child: _buildSalesCard()),
-              const SizedBox(height: 44),
               _buildStatsGrid(isWide: false),
               const SizedBox(height: 32),
               if (_isAdmin)
@@ -563,7 +633,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildHeroSection(),
+                _buildPremiumHeader(),
                 const SizedBox(height: 52),
                 const Text(
                   'Quick Overview',
@@ -576,12 +646,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                 const SizedBox(height: 32),
                 _buildStatsGrid(isWide: true),
                 const SizedBox(height: 72),
-                const Text(
-                  'Financial Progress',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 32),
-                _buildSalesCard(),
                 const SizedBox(height: 52),
                 if (!_isAdmin) ...[
                   const Text(
@@ -620,9 +684,16 @@ class _DashboardScreenState extends State<DashboardScreen>
                   'Dashboard Filters',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 12),
                 _buildFilterBar(),
-                const SizedBox(height: 50),
+                const SizedBox(height: 24),
+                const Text(
+                  'Financial Progress',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 24),
+                _buildSalesCard(),
+                const SizedBox(height: 44),
                 if (!_isAdmin) _buildRemindersSection(),
                 const SizedBox(height: 40),
                 if (_isAdmin) ...[
@@ -657,7 +728,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               () => Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const ReportsListScreen(),
+                  builder: (context) => const FarmerListScreen(),
                 ),
               ),
           isHorizontal: true,
@@ -679,7 +750,13 @@ class _DashboardScreenState extends State<DashboardScreen>
                   value: _farmerCount.toString(),
                   icon: Icons.people_alt_rounded,
                   gradient: const [Color(0xFF4CAF50), Color(0xFF2E7D32)],
-                  onTap: null,
+                  onTap:
+                      () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const FarmerListScreen(),
+                        ),
+                      ),
                   isSmall: true,
                 ),
                 StatCard(
@@ -687,7 +764,13 @@ class _DashboardScreenState extends State<DashboardScreen>
                   value: _farmCount.toString(),
                   icon: Icons.agriculture_rounded,
                   gradient: const [Color(0xFF8BC34A), Color(0xFF558B2F)],
-                  onTap: null,
+                  onTap:
+                      () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const FarmListScreen(),
+                        ),
+                      ),
                   isSmall: true,
                 ),
                 StatCard(
@@ -695,7 +778,13 @@ class _DashboardScreenState extends State<DashboardScreen>
                   value: _cropCount.toString(),
                   icon: Icons.eco_rounded,
                   gradient: const [Color(0xFF009688), Color(0xFF00695C)],
-                  onTap: null,
+                  onTap:
+                      () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const CropListScreen(),
+                        ),
+                      ),
                   isSmall: true,
                 ),
               ],
@@ -837,9 +926,9 @@ class _DashboardScreenState extends State<DashboardScreen>
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Upcoming Visits',
-                style: TextStyle(
+              Text(
+                _isManager ? 'Verification Pending' : 'Upcoming Visits',
+                style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
                   color: AppColors.textBlack,
@@ -865,8 +954,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                       ),
                     ),
                     const SizedBox(width: 4),
-                    const Icon(
-                      Icons.calendar_month_rounded,
+                    Icon(
+                      _isManager ? Icons.verified_user_rounded : Icons.calendar_month_rounded,
                       color: AppColors.primary,
                       size: 14,
                     ),
@@ -876,9 +965,9 @@ class _DashboardScreenState extends State<DashboardScreen>
             ],
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 18),
         SizedBox(
-          height: 195, // Increased height for the new action row
+          height: 175, // INCREASED: To prevent bottom overflow while remaining compact
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
@@ -886,29 +975,49 @@ class _DashboardScreenState extends State<DashboardScreen>
             itemBuilder: (context, index) {
               final reminder = _reminders[index];
               final date = DateTime.parse(reminder['follow_up_date']);
-              final farm = _allFarms.firstWhere(
-                (f) => f['id'] == reminder['farm_id'],
-                orElse: () => {},
-              );
-              final crop = _allCrops.firstWhere(
-                (c) => c['id'] == reminder['crop_id'],
-                orElse: () => {},
-              );
+              
+              String title = reminder['title'] ?? 'Unknown';
+              String subtitle = reminder['subtitle'] ?? 'Action Required';
+              IconData mainIcon = Icons.eco_rounded;
+              
+              if (_isManager) {
+                final type = reminder['reminder_type'];
+                switch (type) {
+                  case 'farmer': mainIcon = Icons.person_rounded; break;
+                  case 'farm': mainIcon = Icons.agriculture_rounded; break;
+                  case 'crop': mainIcon = Icons.eco_rounded; break;
+                  case 'report': mainIcon = Icons.assignment_rounded; break;
+                }
+              } else {
+                final farm = _allFarms.firstWhere(
+                  (f) => f['id'] == reminder['farm_id'],
+                  orElse: () => <String, dynamic>{},
+                );
+                final crop = _allCrops.firstWhere(
+                  (c) => c['id'] == reminder['crop_id'],
+                  orElse: () => <String, dynamic>{},
+                );
+                title = farm['name'] ?? 'Unknown Farm';
+                subtitle = crop['name'] ?? 'General Checkup';
+              }
 
               return Container(
                 width:
                     MediaQuery.sizeOf(context).width *
-                    0.82, // STRETCHED: Nearly full width
-                margin: const EdgeInsets.only(right: 24),
+                    0.72, // REDUCED: 72% width creates a clear 'PEEK' for the next card
+                margin: const EdgeInsets.only(right: 16),
                 decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(28),
-                  border: Border.all(color: AppColors.secondary, width: 1.5),
+                  color: const Color(0xFFF1F8E9), // Soft Nature Tint
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: AppColors.primary.withOpacity(0.12),
+                    width: 1,
+                  ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.04),
-                      blurRadius: 20,
-                      offset: const Offset(0, 10),
+                      color: Colors.black.withOpacity(0.03),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
                     ),
                   ],
                 ),
@@ -919,13 +1028,13 @@ class _DashboardScreenState extends State<DashboardScreen>
                       right: -20,
                       bottom: -20,
                       child: Icon(
-                        Icons.eco_rounded,
+                        mainIcon,
                         size: 120,
                         color: AppColors.primary.withOpacity(0.03),
                       ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.all(24),
+                      padding: const EdgeInsets.all(16),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -944,14 +1053,14 @@ class _DashboardScreenState extends State<DashboardScreen>
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    const Icon(
-                                      Icons.history_toggle_off_rounded,
+                                    Icon(
+                                      _isManager ? Icons.pending_actions_rounded : Icons.history_toggle_off_rounded,
                                       color: AppColors.primary,
                                       size: 14,
                                     ),
                                     const SizedBox(width: 6),
                                     Text(
-                                      _getReminderLabel(date),
+                                      _isManager ? reminder['reminder_type'].toString().toUpperCase() : _getReminderLabel(date),
                                       style: const TextStyle(
                                         color: AppColors.primary,
                                         fontSize: 11,
@@ -973,7 +1082,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            farm['name'] ?? 'Unknown Farm',
+                            title,
                             style: const TextStyle(
                               color: AppColors.textBlack,
                               fontWeight: FontWeight.bold,
@@ -985,15 +1094,15 @@ class _DashboardScreenState extends State<DashboardScreen>
                           const SizedBox(height: 6),
                           Row(
                             children: [
-                              const Icon(
-                                Icons.eco_outlined,
+                              Icon(
+                                _isManager ? Icons.info_outline_rounded : Icons.eco_outlined,
                                 color: AppColors.accent,
                                 size: 14,
                               ),
                               const SizedBox(width: 6),
                               Expanded(
                                 child: Text(
-                                  crop['name'] ?? 'General Checkup',
+                                  subtitle,
                                   style: TextStyle(
                                     color: AppColors.textGray.withOpacity(0.9),
                                     fontSize: 13,
@@ -1005,43 +1114,84 @@ class _DashboardScreenState extends State<DashboardScreen>
                             ],
                           ),
                           const Spacer(),
-                          // Action Row to fill space
+                          // Compact Action Row
                           Row(
                             children: [
                               Expanded(
-                                child: ElevatedButton(
-                                  onPressed: () {
-                                    // Navigate to farm or report
-                                  },
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppColors.primary,
-                                    foregroundColor: Colors.white,
-                                    minimumSize: const Size(0, 42),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
+                                child: Container(
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                      colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)],
                                     ),
-                                    elevation: 0,
+                                    borderRadius: BorderRadius.circular(10),
                                   ),
-                                  child: const Text(
-                                    'View Farm Details',
-                                    style: TextStyle(fontSize: 12),
+                                  child: ElevatedButton(
+                                    onPressed: () {
+                                      if (_isManager) {
+                                        final type = reminder['reminder_type'];
+                                        final data = reminder['data'];
+                                        Widget target;
+                                        switch (type) {
+                                          case 'farmer':
+                                            target = FarmerDetailScreen(farmer: data);
+                                            break;
+                                          case 'farm':
+                                            target = FarmDetailScreen(farm: data);
+                                            break;
+                                          case 'crop':
+                                            target = CropDetailScreen(crop: data);
+                                            break;
+                                          case 'report':
+                                            target = ReportGeneratorScreen(report: data);
+                                            break;
+                                          default:
+                                            return;
+                                        }
+                                        Navigator.push(context, MaterialPageRoute(builder: (context) => target));
+                                      } else {
+                                        // Executive logic for reminders (visits)
+                                        // ... navigate to visit or report creation
+                                      }
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.transparent,
+                                      foregroundColor: Colors.white,
+                                      shadowColor: Colors.transparent,
+                                      padding: EdgeInsets.zero,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      _isManager ? 'Review & Verify' : 'View Details',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 12),
+                              const SizedBox(width: 8),
                               Container(
+                                width: 36,
+                                height: 36,
                                 decoration: BoxDecoration(
-                                  color: AppColors.secondary,
-                                  borderRadius: BorderRadius.circular(12),
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: AppColors.primary.withOpacity(0.1),
+                                  ),
                                 ),
                                 child: IconButton(
                                   onPressed: () {},
                                   icon: const Icon(
-                                    Icons.directions_rounded,
+                                    Icons.directions_outlined,
                                     color: AppColors.primary,
-                                    size: 20,
+                                    size: 16,
                                   ),
-                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
                                 ),
                               ),
                             ],
@@ -1059,132 +1209,263 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  Widget _buildHeroSection() {
-    String greeting = 'Good ${_getGreeting()}';
+  Widget _buildPremiumHeader() {
+    String greeting = 'Hi ${_userName.split(' ')[0]}';
 
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [AppColors.primary, AppColors.primary.withBlue(100)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(30),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withOpacity(0.3),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Colors.white.withOpacity(0.95),
+                const Color(0xFFF1F8E9).withOpacity(0.9), // Soft Mint Green
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: AppColors.primary.withOpacity(0.15),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withOpacity(0.08),
+                blurRadius: 24,
+                offset: const Offset(0, 10),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '$greeting,',
-                  style: const TextStyle(color: Colors.white70, fontSize: 16),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '$_userName!',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const Text(
-                  'Keep growing with Nature Biotic',
-                  style: TextStyle(color: Colors.white60, fontSize: 13),
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton.icon(
-                  onPressed:
-                      () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const AttendanceScreen(),
+          child: Row(
+            children: [
+              // Profile & Greeting
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const ProfileScreen()),
+                  ).then((_) => _loadDashboardData()),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: AppColors.primary, width: 1),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.primary.withOpacity(0.2),
+                                  blurRadius: 10,
+                                ),
+                              ],
+                            ),
+                          ),
+                          Hero(
+                            tag: 'top_profile_avatar',
+                            child: CircleAvatar(
+                              radius: 16,
+                              backgroundColor: AppColors.secondary,
+                              backgroundImage: _avatarUrl.isNotEmpty ? NetworkImage(_avatarUrl) : null,
+                              child: _avatarUrl.isEmpty
+                                  ? const Icon(Icons.person, size: 16, color: AppColors.primary)
+                                  : null,
+                            ),
+                          ),
+                          Positioned(
+                            right: -1,
+                            bottom: -1,
+                            child: Container(
+                              padding: const EdgeInsets.all(1.5),
+                              decoration: const BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 2)],
+                              ),
+                              child: const Icon(Icons.verified_rounded, size: 10, color: Colors.blue),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(width: 10),
+                      Flexible(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Good ${_getGreeting()}',
+                              style: GoogleFonts.outfit(
+                                color: AppColors.textGray.withOpacity(0.6),
+                                fontSize: 9,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.5,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              greeting,
+                              style: GoogleFonts.outfit(
+                                color: const Color(0xFF2E3440), // Darker charcoal
+                                fontSize: 15,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: -0.2,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
                         ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Action Hub
+              Row(
+                children: [
+                  _headerActionIcon(
+                    icon: Icons.search_rounded,
+                    backgroundColor: Colors.blueGrey.shade50.withOpacity(0.5),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const FarmerListScreen()),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  // Premium Attendance Button
+                  if (!_isManager)
+                    GestureDetector(
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const AttendanceScreen()),
                       ).then((_) => _loadDashboardData()),
-                  icon: const Icon(Icons.camera_enhance_rounded, size: 18),
-                  label: const Text('Check In'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: AppColors.primary,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [
+                              Color(0xFF2E7D32), // Forest Green
+                              Color(0xFF1B5E20), // Deep Nature Green
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF1B5E20).withOpacity(0.35),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.camera_enhance_rounded, color: Colors.white, size: 15),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Check In',
+                              style: GoogleFonts.outfit(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                    minimumSize: const Size(120, 44),
+                  const SizedBox(width: 6),
+                  _headerActionIcon(
+                    icon: Icons.power_settings_new_rounded,
+                    color: Colors.redAccent,
+                    backgroundColor: Colors.red.shade50.withOpacity(0.5),
+                    onTap: _handleLogout,
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
+            ],
           ),
-          GestureDetector(
-            onTap:
-                () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const ProfileScreen(),
-                  ),
-                ).then((_) => _loadDashboardData()),
-            child: Stack(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(3),
-                  decoration: const BoxDecoration(
-                    color: Colors.white24,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Hero(
-                    tag: 'profile_avatar',
-                    child: CircleAvatar(
-                      radius: 35,
-                      backgroundColor: AppColors.secondary,
-                      backgroundImage:
-                          _avatarUrl.isNotEmpty
-                              ? NetworkImage(_avatarUrl)
-                              : null,
-                      child:
-                          _avatarUrl.isEmpty
-                              ? const Icon(
-                                Icons.person,
-                                size: 35,
-                                color: AppColors.primary,
-                              )
-                              : null,
-                    ),
-                  ),
-                ),
-                Positioned(
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.verified_rounded,
-                      size: 16,
-                      color: Colors.blue,
-                    ),
-                  ),
-                ),
-              ],
+        ),
+      ),
+    );
+  }
+
+  Widget _headerActionIcon(
+      {required IconData icon, required VoidCallback onTap, Color? color, Color? backgroundColor}) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: backgroundColor,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: color ?? AppColors.textBlack.withOpacity(0.7), size: 20),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleLogout() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Text('Logout', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+        content: Text('Are you sure you want to exit?', style: GoogleFonts.outfit()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Cancel', style: TextStyle(color: AppColors.textGray.withOpacity(0.6))),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade50,
+              foregroundColor: Colors.red,
+              elevation: 0,
+              minimumSize: const Size(100, 45),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
+            child: const Text('Logout'),
           ),
         ],
       ),
     );
+
+    if (confirm == true) {
+      await SupabaseService.signOut();
+      if (mounted) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginScreen()),
+          (route) => false,
+        );
+      }
+    }
   }
+
+  // DELETED: _buildHeroSection and _buildTopActions old implementations
 
   String _getGreeting() {
     final hour = DateTime.now().hour;
@@ -1292,31 +1573,97 @@ class _DashboardScreenState extends State<DashboardScreen>
           );
         },
         borderRadius: BorderRadius.circular(28),
-        child: Container(
-          width: double.infinity,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF1E3A8A), Color(0xFF3B82F6)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(28),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF3B82F6).withOpacity(0.3),
-                blurRadius: 15,
-                offset: const Offset(0, 8),
+          child: Stack(
+            children: [
+              // Elite Nature Masterpiece Background (FIXED: Added Positioned.fill)
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [
+                        Color(0xFF1A237E), // Deep Indigo
+                        Color(0xFF1B5E20), // Forest Green
+                        Color(0xFF2E7D32), // Nature Green
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(28),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF1B5E20).withOpacity(0.4),
+                        blurRadius: 24,
+                        offset: const Offset(0, 12),
+                      ),
+                    ],
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.1),
+                      width: 1.5,
+                    ),
+                  ),
+                ),
+              ),
+              // Decorative Layer: Glowing Orbs
+              Positioned(
+                left: -40,
+                top: -40,
+                child: Container(
+                  width: 150,
+                  height: 150,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        const Color(0xFF3F51B5).withOpacity(0.2),
+                        Colors.transparent,
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                right: -20,
+                top: 20,
+                child: Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        const Color(0xFF81C784).withOpacity(0.15),
+                        Colors.transparent,
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              // Eco-Watermark / Pattern Layer
+              Positioned(
+                right: -10,
+                bottom: -10,
+                child: Opacity(
+                  opacity: 0.05,
+                  child: Transform.rotate(
+                    angle: -0.2,
+                    child: const Icon(
+                      Icons.eco_rounded,
+                      size: 180,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+              // Content Layer
+              Padding(
+                padding: const EdgeInsets.all(20.0),
+                child:
+                    _isAdmin
+                        ? _buildAdminSalesContent(currencyFormat)
+                        : _buildExecutiveSalesContent(currencyFormat),
               ),
             ],
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child:
-                _isAdmin
-                    ? _buildAdminSalesContent(currencyFormat)
-                    : _buildExecutiveSalesContent(currencyFormat),
-          ),
-        ),
       ),
     );
   }
@@ -1459,52 +1806,100 @@ class _DashboardScreenState extends State<DashboardScreen>
     return Expanded(
       child: Material(
         color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(20),
           child: Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white.withOpacity(0.05)),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.15),
+                width: 1.2,
+              ),
+              gradient: LinearGradient(
+                colors: [
+                  color.withOpacity(0.15),
+                  Colors.white.withOpacity(0.05),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Icon(icon, size: 14, color: color),
-                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: color.withOpacity(0.2),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: color.withOpacity(0.3)),
+                      ),
+                      child: Icon(icon, size: 12, color: Colors.white),
+                    ),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        label,
-                        style: TextStyle(
+                        label.toUpperCase(),
+                        style: GoogleFonts.outfit(
                           color: Colors.white.withOpacity(0.6),
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
                         ),
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   child: Text(
                     currencyFormat.format(value.isFinite ? value : 0.0),
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                    style: GoogleFonts.outfit(
+                      color: color.withOpacity(0.95), // Vibrant Color restoration
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -0.5,
+                      shadows: [
+                        Shadow(
+                          color: Colors.black.withOpacity(0.3),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                        Shadow(
+                          color: color.withOpacity(0.4),
+                          blurRadius: 10,
+                        ),
+                      ],
                     ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Vibrant Glowing Pill Indicator
+                Container(
+                  width: 32,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [color, color.withOpacity(0.7)],
+                    ),
+                    borderRadius: BorderRadius.circular(10),
+                    boxShadow: [
+                      BoxShadow(
+                        color: color.withOpacity(0.5),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
-        ),
       ),
     );
   }

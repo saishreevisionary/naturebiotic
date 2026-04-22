@@ -24,11 +24,24 @@ class ReportGeneratorScreen extends StatefulWidget {
 class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
   bool _isLoadingHistory = false;
   List<Map<String, dynamic>> _history = [];
+  String? _userRole;
+  bool _isVerified = false;
 
   @override
   void initState() {
     super.initState();
+    _isVerified = widget.report?['is_verified'] == true;
+    _loadUserRole();
     _loadHistory();
+  }
+
+  Future<void> _loadUserRole() async {
+    final profile = await SupabaseService.getProfile();
+    if (mounted) {
+      setState(() {
+        _userRole = profile?['role'];
+      });
+    }
   }
 
   Future<void> _loadHistory() async {
@@ -97,8 +110,9 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
   @override
   Widget build(BuildContext context) {
     final report = widget.report;
-    if (report == null)
+    if (report == null) {
       return const Scaffold(body: Center(child: Text('No report data.')));
+    }
 
     final currentHistory = report['previous_inputs'] ?? '';
 
@@ -176,6 +190,45 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
                   ),
                 ),
                 const SizedBox(height: 32),
+
+                if (_userRole == 'manager' && !_isVerified) ...[
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      try {
+                        await SupabaseService.verifyItem(
+                          'reports',
+                          widget.report?['id'],
+                        );
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Report Verified Successfully'),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                          setState(() => _isVerified = true);
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Verification failed: $e'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      }
+                    },
+                    icon: const Icon(Icons.verified_user_rounded),
+                    label: const Text('Verify This Analysis'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(double.infinity, 54),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
 
                 // Action Buttons
                 ElevatedButton.icon(
@@ -465,7 +518,7 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
             // Rows
             ...lines.map((line) {
               final parts = line.split(' - ');
-              if (parts.length < 2)
+              if (parts.length < 2) {
                 return TableRow(
                   children: [
                     Padding(
@@ -477,6 +530,7 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
                     const SizedBox(),
                   ],
                 );
+              }
 
               final prodPart = parts[0];
               final detailsPart = parts[1];

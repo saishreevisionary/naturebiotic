@@ -215,8 +215,9 @@ class _AddFarmerScreenState extends State<AddFarmerScreen> {
           }
         }
 
-        if (farmers.isEmpty)
+        if (farmers.isEmpty) {
           throw 'No valid farmer records found. Ensure CSV has a "name" column.';
+        }
 
         await SupabaseService.addFarmersBulk(farmers);
 
@@ -387,8 +388,9 @@ class _AddFarmerScreenState extends State<AddFarmerScreen> {
                           ],
                           validator: (v) {
                             if (v == null || v.isEmpty) return 'Required';
-                            if (v.length != 10)
+                            if (v.length != 10) {
                               return 'Enter exactly 10 digits';
+                            }
                             return null;
                           },
                         ),

@@ -39,6 +39,7 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
     'application_method': 'Application Methods',
     'dose_unit': 'Dose Units',
     'filler_unit': 'Filler Units',
+    'per_unit': 'Per Units (e.g. L, Acre, Plant)',
   };
 
   @override

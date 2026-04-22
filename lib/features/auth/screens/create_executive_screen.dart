@@ -28,6 +28,12 @@ class _CreateStaffScreenState extends State<CreateStaffScreen> {
           password: _passwordController.text.trim(),
           fullName: _fullNameController.text.trim(),
         );
+      } else if (_selectedRole == 'manager') {
+        await SupabaseService.createManagerAccount(
+          username: _usernameController.text.trim(),
+          password: _passwordController.text.trim(),
+          fullName: _fullNameController.text.trim(),
+        );
       } else {
         await SupabaseService.createStoreAccount(
           username: _usernameController.text.trim(),
@@ -117,8 +123,21 @@ class _CreateStaffScreenState extends State<CreateStaffScreen> {
   Widget _buildRoleSelector() {
     return SegmentedButton<String>(
       segments: const [
-        ButtonSegment(value: 'executive', label: Text('Executive'), icon: Icon(Icons.person_rounded)),
-        ButtonSegment(value: 'store', label: Text('Store'), icon: Icon(Icons.inventory_2_rounded)),
+        ButtonSegment(
+          value: 'executive',
+          label: Text('Executive'),
+          icon: Icon(Icons.person_rounded),
+        ),
+        ButtonSegment(
+          value: 'manager',
+          label: Text('Manager'),
+          icon: Icon(Icons.verified_user_rounded),
+        ),
+        ButtonSegment(
+          value: 'store',
+          label: Text('Store'),
+          icon: Icon(Icons.inventory_2_rounded),
+        ),
       ],
       selected: {_selectedRole},
       onSelectionChanged: (val) => setState(() => _selectedRole = val.first),

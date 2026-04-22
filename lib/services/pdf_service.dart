@@ -80,8 +80,9 @@ class PdfService {
     pw.Font font,
     pw.Font bold,
   ) {
-    if (history.isEmpty)
+    if (history.isEmpty) {
       return pw.Text('No data provided', style: pw.TextStyle(fontSize: 10));
+    }
 
     // Check if it's the new aggregated format
     if (history.contains('\n\nHistorical Records:')) {
@@ -117,11 +118,12 @@ class PdfService {
                 // Format was: "--- $hDate ---\n$hInputs"
                 // But my split removed "--- "
                 final subParts = record.split(' ---\n');
-                if (subParts.length < 2)
+                if (subParts.length < 2) {
                   return pw.Text(
                     record,
                     style: const pw.TextStyle(fontSize: 8),
                   );
+                }
 
                 final dateStr = subParts[0];
                 final inputs = subParts[1];

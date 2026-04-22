@@ -10,7 +10,7 @@ class LocalDatabaseService {
   static Database? _database;
   static Future<Database?>? _initFuture;
   static const String _databaseName = "nature_biotic_local.db";
-  static const int _databaseVersion = 8;
+  static const int _databaseVersion = 9;
 
   static Future<Database?> get database async {
     if (kIsWeb) return null;
@@ -152,6 +152,21 @@ class LocalDatabaseService {
         debugPrint('DB Upgrade Error (v8): $e');
       }
     }
+    if (oldVersion < 9) {
+      // Migration to version 9: Add is_verified to core tables
+      try {
+        final tables = ['farmers', 'farms', 'crops', 'reports'];
+        for (var table in tables) {
+          try {
+            await db.execute('ALTER TABLE $table ADD COLUMN is_verified INTEGER DEFAULT 0');
+            await db.execute('ALTER TABLE $table ADD COLUMN verified_by TEXT');
+            await db.execute('ALTER TABLE $table ADD COLUMN verified_at TEXT');
+          } catch (_) { /* Progressively add columns */ }
+        }
+      } catch (e) {
+        debugPrint('DB Upgrade Error (v9): $e');
+      }
+    }
   }
 
   static Future<void> _onCreate(Database db, int version) async {
@@ -165,7 +180,10 @@ class LocalDatabaseService {
         address TEXT,
         category TEXT,
         created_by TEXT,
-        created_at TEXT
+        created_at TEXT,
+        is_verified INTEGER DEFAULT 0,
+        verified_by TEXT,
+        verified_at TEXT
       )
     ''');
 
@@ -186,7 +204,10 @@ class LocalDatabaseService {
         assigned_to TEXT,
         contacts TEXT,
         created_by TEXT,
-        created_at TEXT
+        created_at TEXT,
+        is_verified INTEGER DEFAULT 0,
+        verified_by TEXT,
+        verified_at TEXT
       )
     ''');
 
@@ -202,7 +223,10 @@ class LocalDatabaseService {
         count TEXT,
         acre TEXT,
         expected_yield TEXT,
-        created_at TEXT
+        created_at TEXT,
+        is_verified INTEGER DEFAULT 0,
+        verified_by TEXT,
+        verified_at TEXT
       )
     ''');
 
@@ -220,6 +244,9 @@ class LocalDatabaseService {
         follow_up_date TEXT,
         created_by TEXT,
         created_at TEXT,
+        is_verified INTEGER DEFAULT 0,
+        verified_by TEXT,
+        verified_at TEXT,
         _local_signature BLOB,
         _local_images TEXT
       )
@@ -388,7 +415,7 @@ class LocalDatabaseService {
     // Safety Blanket: Automatically exclude massive binary columns for specific tables if not explicitly requested
     if (selectedColumns == null) {
       if (tableName == 'reports') {
-        selectedColumns = ['id', 'farm_id', 'crop_id', 'problem', 'previous_inputs', 'recommendations', 'estimated_cost', 'signature_url', 'created_by', 'created_at'];
+        selectedColumns = ['id', 'farm_id', 'crop_id', 'problem', 'previous_inputs', 'recommendations', 'estimated_cost', 'signature_url', 'created_by', 'created_at', 'is_verified'];
       } else if (tableName == 'attendance') {
         selectedColumns = ['id', 'user_id', 'check_in_time', 'check_out_time', 'check_in_location', 'check_out_location', 'check_in_location_lat', 'check_in_location_lng', 'check_out_location_lat', 'check_out_location_lng', 'status', 'created_at'];
       }

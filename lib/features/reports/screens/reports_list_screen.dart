@@ -17,6 +17,7 @@ class ReportsListScreen extends StatefulWidget {
 class _ReportsListScreenState extends State<ReportsListScreen> {
   bool _isLoading = true;
   List<Map<String, dynamic>> _reports = [];
+  String? _userRole;
 
   @override
   void initState() {
@@ -95,7 +96,11 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
       );
 
       if (mounted) {
-        setState(() => _reports = allReports);
+        final profile = await SupabaseService.getProfile();
+        setState(() {
+          _reports = allReports;
+          _userRole = profile?['role'];
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -141,7 +146,7 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
               ? _buildEmptyState()
               : _buildReportsList(),
       floatingActionButton:
-          _reports.isNotEmpty
+          _reports.isNotEmpty && _userRole != 'manager'
               ? FloatingActionButton(
                 heroTag: 'reports_fab',
                 onPressed:
@@ -184,24 +189,26 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
             'Start a new analysis for your farms',
             style: TextStyle(color: AppColors.textGray),
           ),
-          const SizedBox(height: 32),
-          ElevatedButton.icon(
-            onPressed:
-                () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const CreateReportScreen(),
-                  ),
-                ).then((_) => _loadReports()),
-            icon: const Icon(Icons.add_rounded),
-            label: const Text('Generate New Report'),
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
+          if (_userRole != 'manager')
+            const SizedBox(height: 32),
+          if (_userRole != 'manager')
+            ElevatedButton.icon(
+              onPressed:
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const CreateReportScreen(),
+                    ),
+                  ).then((_) => _loadReports()),
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Generate New Report'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -259,7 +266,8 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
                             ),
                           ),
                         ),
-                        if (report['is_local'] == true)
+                        if (report['is_verified'] != true) ...[
+                          const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 6,
@@ -269,30 +277,20 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
                               color: Colors.orange.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(4),
                               border: Border.all(
-                                color: Colors.orange.withOpacity(0.5),
+                                color: Colors.orange,
                                 width: 0.5,
                               ),
                             ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.sync_rounded,
-                                  size: 10,
-                                  color: Colors.orange,
-                                ),
-                                SizedBox(width: 4),
-                                Text(
-                                  'Pending Sync',
-                                  style: TextStyle(
-                                    fontSize: 9,
-                                    color: Colors.orange,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
+                            child: const Text(
+                              'PENDING',
+                              style: TextStyle(
+                                fontSize: 9,
+                                color: Colors.orange,
+                                fontWeight: FontWeight.w900,
+                              ),
                             ),
                           ),
+                        ],
                       ],
                     ),
                   ],

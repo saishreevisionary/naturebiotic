@@ -109,32 +109,42 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
 
       if (mounted) {
         setState(() {
-          if (results[0].isNotEmpty)
+          if (results[0].isNotEmpty) {
             _soilTypes = results[0].map((e) => e['label'].toString()).toList();
-          if (results[1].isNotEmpty)
+          }
+          if (results[1].isNotEmpty) {
             _irrigationTypes =
                 results[1].map((e) => e['label'].toString()).toList();
-          if (results[2].isNotEmpty)
+          }
+          if (results[2].isNotEmpty) {
             _waterSources =
                 results[2].map((e) => e['label'].toString()).toList();
-          if (results[3].isNotEmpty)
+          }
+          if (results[3].isNotEmpty) {
             _waterQtys = results[3].map((e) => e['label'].toString()).toList();
-          if (results[4].isNotEmpty)
+          }
+          if (results[4].isNotEmpty) {
             _powerSources =
                 results[4].map((e) => e['label'].toString()).toList();
+          }
 
           // Ensure selected values are in the lists, but only if they are not null
-          if (_soilType != null && !_soilTypes.contains(_soilType))
+          if (_soilType != null && !_soilTypes.contains(_soilType)) {
             _soilType = _soilTypes.first;
+          }
           if (_irrigationType != null &&
-              !_irrigationTypes.contains(_irrigationType))
+              !_irrigationTypes.contains(_irrigationType)) {
             _irrigationType = _irrigationTypes.first;
-          if (_waterSource != null && !_waterSources.contains(_waterSource))
+          }
+          if (_waterSource != null && !_waterSources.contains(_waterSource)) {
             _waterSource = _waterSources.first;
-          if (_waterQty != null && !_waterQtys.contains(_waterQty))
+          }
+          if (_waterQty != null && !_waterQtys.contains(_waterQty)) {
             _waterQty = _waterQtys.first;
-          if (_powerSource != null && !_powerSources.contains(_powerSource))
+          }
+          if (_powerSource != null && !_powerSources.contains(_powerSource)) {
             _powerSource = _powerSources.first;
+          }
         });
       }
     } catch (_) {}

@@ -41,7 +41,7 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
         final stock = await SupabaseService.getExecutiveStock();
         final usage = await SupabaseService.getExecutiveStockUsage();
         final pending = await SupabaseService.getPendingStoreTransactions();
-        
+
         if (mounted) {
           setState(() {
             _stockInHand = stock;
@@ -54,21 +54,23 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
         final pending = await SupabaseService.getPendingStoreTransactions();
         final stock = await SupabaseService.getUnifiedStoreStock();
         final transactions = await SupabaseService.getStoreTransactions();
-        
+
         List<Map<String, dynamic>> executives = [];
         Map<String, double> execStockTotals = {};
-        
+
         if (_userRole == 'admin' || _userRole == 'store') {
           executives = await SupabaseService.getExecutives();
           // Pre-calculate stock totals for each executive to show in the list
           for (var exec in executives) {
-            final execStock = await SupabaseService.getExecutiveStock(userId: exec['id']);
+            final execStock = await SupabaseService.getExecutiveStock(
+              userId: exec['id'],
+            );
             double total = 0;
             execStock.forEach((key, value) => total += value);
             execStockTotals[exec['id']] = total;
           }
         }
-        
+
         if (mounted) {
           setState(() {
             _pendingCount = pending.length;
@@ -93,7 +95,6 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
   }
 
   List<MapEntry<String, double>> _getLowStockItems() {
-    if (_stockInHand == null) return [];
     return _stockInHand.entries.where((e) => (e.value ?? 0.0) < 10).toList();
   }
 
@@ -128,80 +129,101 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
           backgroundColor: Colors.white,
           foregroundColor: AppColors.textBlack,
           actions: [
-            IconButton(onPressed: _refreshData, icon: const Icon(Icons.refresh_rounded)),
+            IconButton(
+              onPressed: _refreshData,
+              icon: const Icon(Icons.refresh_rounded),
+            ),
           ],
         ),
-        body: _isLoading 
-            ? const Center(child: CircularProgressIndicator())
-            : RefreshIndicator(
-                onRefresh: _refreshData,
-                child: CustomScrollView(
-                  slivers: [
-                    if (_pendingCount > 0) SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-                        child: _buildPendingAlert(),
-                      ),
-                    ),
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Quick Actions',
-                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 16),
-                            Row(
-                              children: [
-                                _compactActionCard('Return', Icons.keyboard_return_rounded, Colors.purple, () => _openTransactionForm('RETURN')),
-                              ],
-                            ),
-                          ],
+        body:
+            _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : RefreshIndicator(
+                  onRefresh: _refreshData,
+                  child: CustomScrollView(
+                    slivers: [
+                      if (_pendingCount > 0)
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                            child: _buildPendingAlert(),
+                          ),
+                        ),
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Quick Actions',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Row(
+                                children: [
+                                  _compactActionCard(
+                                    'Return',
+                                    Icons.keyboard_return_rounded,
+                                    Colors.purple,
+                                    () => _openTransactionForm('RETURN'),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Stock in Your Hand',
-                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 16),
-                          ],
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Stock in Your Hand',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                    _buildInventoryList(),
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Analytics (Recent Usage)',
-                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 16),
-                            if (_usageHistory.isEmpty)
-                              const Center(child: Text('No usage recorded yet.'))
-                            else
-                              ..._usageHistory.map((u) => _buildUsageItem(u)),
-                          ],
+                      _buildInventoryList(),
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Analytics (Recent Usage)',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              if (_usageHistory.isEmpty)
+                                const Center(
+                                  child: Text('No usage recorded yet.'),
+                                )
+                              else
+                                ..._usageHistory.map((u) => _buildUsageItem(u)),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 100)),
-                  ],
+                      const SliverToBoxAdapter(child: SizedBox(height: 100)),
+                    ],
+                  ),
                 ),
-              ),
       );
     }
 
@@ -209,34 +231,36 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
       length: 3,
       child: Scaffold(
         backgroundColor: AppColors.background,
-        body: _isLoading 
-            ? const Center(child: CircularProgressIndicator())
-            : NestedScrollView(
-                headerSliverBuilder: (context, innerBoxIsScrolled) => [
-                  _buildHero(),
-                  SliverToBoxAdapter(
-                    child: TabBar(
-                      isScrollable: false,
-                      labelColor: AppColors.primary,
-                      unselectedLabelColor: AppColors.textGray,
-                      indicatorColor: AppColors.primary,
-                      indicatorWeight: 3,
-                      tabs: [
-                        const Tab(text: 'Store Stock'),
-                        const Tab(text: 'Purchase'),
-                        const Tab(text: 'Executive'),
+        body:
+            _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : NestedScrollView(
+                  headerSliverBuilder:
+                      (context, innerBoxIsScrolled) => [
+                        _buildHero(),
+                        SliverToBoxAdapter(
+                          child: TabBar(
+                            isScrollable: false,
+                            labelColor: AppColors.primary,
+                            unselectedLabelColor: AppColors.textGray,
+                            indicatorColor: AppColors.primary,
+                            indicatorWeight: 3,
+                            tabs: [
+                              const Tab(text: 'Store Stock'),
+                              const Tab(text: 'Purchase'),
+                              const Tab(text: 'Executive'),
+                            ],
+                          ),
+                        ),
                       ],
-                    ),
+                  body: TabBarView(
+                    children: [
+                      _buildStoreStockTab(lowStock),
+                      _buildPurchaseHistoryTab(),
+                      _buildExecutiveStockTab(),
+                    ],
                   ),
-                ],
-                body: TabBarView(
-                  children: [
-                    _buildStoreStockTab(lowStock),
-                    _buildPurchaseHistoryTab(),
-                    _buildExecutiveStockTab(),
-                  ],
                 ),
-              ),
       ),
     );
   }
@@ -246,15 +270,15 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
       onRefresh: _refreshData,
       child: CustomScrollView(
         slivers: [
-          if (_pendingCount > 0) SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-              child: _buildPendingAlert(),
+          if (_pendingCount > 0)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                child: _buildPendingAlert(),
+              ),
             ),
-          ),
-          if (lowStock.isNotEmpty) SliverToBoxAdapter(
-            child: _buildLowStockAlerts(lowStock),
-          ),
+          if (lowStock.isNotEmpty)
+            SliverToBoxAdapter(child: _buildLowStockAlerts(lowStock)),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.all(24),
@@ -269,11 +293,26 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _compactActionCard('Purchase', Icons.add_shopping_cart_rounded, Colors.blue, () => _openTransactionForm('PURCHASE')),
+                      _compactActionCard(
+                        'Purchase',
+                        Icons.add_shopping_cart_rounded,
+                        Colors.blue,
+                        () => _openTransactionForm('PURCHASE'),
+                      ),
                       const SizedBox(width: 16),
-                      _compactActionCard('Delivery', Icons.local_shipping_rounded, Colors.orange, () => _openTransactionForm('DELIVERY')),
+                      _compactActionCard(
+                        'Delivery',
+                        Icons.local_shipping_rounded,
+                        Colors.orange,
+                        () => _openTransactionForm('DELIVERY'),
+                      ),
                       const SizedBox(width: 16),
-                      _compactActionCard('Return', Icons.keyboard_return_rounded, Colors.purple, () => _openTransactionForm('RETURN')),
+                      _compactActionCard(
+                        'Return',
+                        Icons.keyboard_return_rounded,
+                        Colors.purple,
+                        () => _openTransactionForm('RETURN'),
+                      ),
                     ],
                   ),
                 ],
@@ -291,8 +330,11 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   Text(
-                    '${_stockInHand?.length ?? 0} Items',
-                    style: const TextStyle(color: AppColors.textGray, fontSize: 13),
+                    '${_stockInHand.length ?? 0} Items',
+                    style: const TextStyle(
+                      color: AppColors.textGray,
+                      fontSize: 13,
+                    ),
                   ),
                 ],
               ),
@@ -307,8 +349,9 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
 
   Widget _buildPurchaseHistoryTab() {
     final transactions = _allTransactions ?? [];
-    final purchases = transactions.where((t) => t['transaction_type'] == 'PURCHASE').toList();
-    
+    final purchases =
+        transactions.where((t) => t['transaction_type'] == 'PURCHASE').toList();
+
     return RefreshIndicator(
       onRefresh: _refreshData,
       child: ListView.builder(
@@ -325,58 +368,69 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
   Widget _buildExecutiveStockTab() {
     return RefreshIndicator(
       onRefresh: _refreshData,
-      child: _executives.isEmpty 
-        ? const Center(child: Text('No executives found'))
-        : ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: _executives.length,
-            itemBuilder: (context, index) {
-              final exec = _executives[index];
-              final totalStock = _executiveStockTotals[exec['id']] ?? 0.0;
-              
-              return EntranceAnimation(
-                child: Card(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  elevation: 0,
-                  color: Colors.white,
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.all(16),
-                    leading: CircleAvatar(
-                      backgroundColor: AppColors.primary.withOpacity(0.1),
-                      child: Text(
-                        exec['full_name']?[0] ?? 'E',
-                        style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
+      child:
+          _executives.isEmpty
+              ? const Center(child: Text('No executives found'))
+              : ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: _executives.length,
+                itemBuilder: (context, index) {
+                  final exec = _executives[index];
+                  final totalStock = _executiveStockTotals[exec['id']] ?? 0.0;
+
+                  return EntranceAnimation(
+                    child: Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
                       ),
-                    ),
-                    title: Text(
-                      exec['full_name'] ?? 'Unknown',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: Text('Total Units in Hand: $totalStock'),
-                    trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.primary),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ExecutiveStockDetailScreen(
-                            executiveId: exec['id'],
-                            executiveName: exec['full_name'],
+                      elevation: 0,
+                      color: Colors.white,
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.all(16),
+                        leading: CircleAvatar(
+                          backgroundColor: AppColors.primary.withOpacity(0.1),
+                          child: Text(
+                            exec['full_name']?[0] ?? 'E',
+                            style: const TextStyle(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
-                      );
-                    },
-                  ),
-                ),
-              );
-            },
-          ),
+                        title: Text(
+                          exec['full_name'] ?? 'Unknown',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Text('Total Units in Hand: $totalStock'),
+                        trailing: const Icon(
+                          Icons.chevron_right_rounded,
+                          color: AppColors.primary,
+                        ),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (context) => ExecutiveStockDetailScreen(
+                                    executiveId: exec['id'],
+                                    executiveName: exec['full_name'],
+                                  ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  );
+                },
+              ),
     );
   }
 
   Widget _buildTransactionHistoryCard(Map<String, dynamic> tx) {
-    final date = DateTime.tryParse(tx['created_at']?.toString() ?? '') ?? DateTime.now();
-    
+    final date =
+        DateTime.tryParse(tx['created_at']?.toString() ?? '') ?? DateTime.now();
+
     return EntranceAnimation(
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
@@ -385,7 +439,11 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4)),
+            BoxShadow(
+              color: Colors.black.withOpacity(0.02),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
           ],
         ),
         child: Row(
@@ -396,17 +454,27 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
                 color: Colors.blue.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(Icons.shopping_bag_rounded, color: Colors.blue, size: 20),
+              child: const Icon(
+                Icons.shopping_bag_rounded,
+                color: Colors.blue,
+                size: 20,
+              ),
             ),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(tx['item_name'] ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  Text(
+                    tx['item_name'] ?? 'Unknown',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
                   Text(
                     '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}',
-                    style: const TextStyle(color: AppColors.textGray, fontSize: 11),
+                    style: const TextStyle(
+                      color: AppColors.textGray,
+                      fontSize: 11,
+                    ),
                   ),
                 ],
               ),
@@ -414,8 +482,21 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text('+${tx['quantity']}', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 16)),
-                Text(tx['unit'] ?? 'Units', style: const TextStyle(fontSize: 10, color: AppColors.textGray)),
+                Text(
+                  '+${tx['quantity']}',
+                  style: const TextStyle(
+                    color: Colors.green,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                Text(
+                  tx['unit'] ?? 'Units',
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: AppColors.textGray,
+                  ),
+                ),
               ],
             ),
           ],
@@ -448,7 +529,11 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
               Positioned(
                 right: -20,
                 bottom: -20,
-                child: Icon(Icons.inventory_2_rounded, size: 180, color: Colors.white.withOpacity(0.1)),
+                child: Icon(
+                  Icons.inventory_2_rounded,
+                  size: 180,
+                  color: Colors.white.withOpacity(0.1),
+                ),
               ),
               Padding(
                 padding: const EdgeInsets.all(24.0),
@@ -458,19 +543,34 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
                   children: [
                     Text(
                       '${_getGreeting()},',
-                      style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 16),
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.8),
+                        fontSize: 16,
+                      ),
                     ),
                     Text(
-                      (_userName?.isEmpty ?? true) ? 'User' : _userName.split(' ')[0],
-                      style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold),
+                      (_userName.isEmpty ?? true)
+                          ? 'User'
+                          : _userName.split(' ')[0],
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     if (_userRole != 'executive') ...[
                       const SizedBox(height: 16),
                       Row(
                         children: [
-                          _heroStat('Total Stock', (_stockInHand?.length ?? 0).toString()),
+                          _heroStat(
+                            'Total Stock',
+                            (_stockInHand.length ?? 0).toString(),
+                          ),
                           const SizedBox(width: 24),
-                          _heroStat('Low Stock', _getLowStockItems().length.toString()),
+                          _heroStat(
+                            'Low Stock',
+                            _getLowStockItems().length.toString(),
+                          ),
                         ],
                       ),
                     ],
@@ -482,7 +582,10 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
         ),
       ),
       actions: [
-        IconButton(onPressed: _refreshData, icon: const Icon(Icons.refresh_rounded, color: Colors.white)),
+        IconButton(
+          onPressed: _refreshData,
+          icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+        ),
       ],
     );
   }
@@ -491,8 +594,18 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 12)),
-        Text(value, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+        Text(
+          label,
+          style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 12),
+        ),
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
       ],
     );
   }
@@ -505,7 +618,11 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
           padding: EdgeInsets.fromLTRB(24, 24, 24, 12),
           child: Text(
             'Low Stock Alerts',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.red),
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.red,
+            ),
           ),
         ),
         SizedBox(
@@ -529,9 +646,24 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(item.key, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(
+                      item.key,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     const SizedBox(height: 4),
-                    Text('${item.value} units left', style: const TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold)),
+                    Text(
+                      '${item.value} units left',
+                      style: const TextStyle(
+                        color: Colors.red,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ],
                 ),
               );
@@ -542,7 +674,12 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
     );
   }
 
-  Widget _compactActionCard(String title, IconData icon, Color color, VoidCallback onTap) {
+  Widget _compactActionCard(
+    String title,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(20),
@@ -557,14 +694,17 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
             child: Icon(icon, color: color, size: 24),
           ),
           const SizedBox(height: 8),
-          Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+          Text(
+            title,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+          ),
         ],
       ),
     );
   }
 
   Widget _buildInventoryList() {
-    if (_stockInHand == null || _stockInHand.isEmpty) {
+    if (_stockInHand.isEmpty) {
       return const SliverFillRemaining(
         child: Center(child: Text('No stock recorded yet.')),
       );
@@ -573,61 +713,92 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
     return SliverPadding(
       padding: const EdgeInsets.all(24),
       sliver: SliverList(
-        delegate: SliverChildBuilderDelegate(
-          (context, index) {
-            final key = _stockInHand.keys.elementAt(index);
-            final qty = _stockInHand[key]!;
-            final isLow = qty < 10;
+        delegate: SliverChildBuilderDelegate((context, index) {
+          final key = _stockInHand.keys.elementAt(index);
+          final qty = _stockInHand[key]!;
+          final isLow = qty < 10;
 
-            return EntranceAnimation(
-              child: Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4)),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: isLow ? Colors.red.withOpacity(0.1) : AppColors.primary.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(
-                        isLow ? Icons.warning_amber_rounded : Icons.inventory_2_outlined,
-                        color: isLow ? Colors.red : AppColors.primary,
-                        size: 20,
-                      ),
+          return EntranceAnimation(
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.02),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color:
+                          isLow
+                              ? Colors.red.withOpacity(0.1)
+                              : AppColors.primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(key, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                          Text('Available Stock', style: TextStyle(color: AppColors.textGray.withOpacity(0.7), fontSize: 12)),
-                        ],
-                      ),
+                    child: Icon(
+                      isLow
+                          ? Icons.warning_amber_rounded
+                          : Icons.inventory_2_outlined,
+                      color: isLow ? Colors.red : AppColors.primary,
+                      size: 20,
                     ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('$qty', style: TextStyle(color: isLow ? Colors.red : AppColors.primary, fontWeight: FontWeight.bold, fontSize: 18)),
-                        const Text('Units', style: TextStyle(color: AppColors.textGray, fontSize: 10)),
+                        Text(
+                          key,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
+                        Text(
+                          'Available Stock',
+                          style: TextStyle(
+                            color: AppColors.textGray.withOpacity(0.7),
+                            fontSize: 12,
+                          ),
+                        ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '$qty',
+                        style: TextStyle(
+                          color: isLow ? Colors.red : AppColors.primary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
+                      ),
+                      const Text(
+                        'Units',
+                        style: TextStyle(
+                          color: AppColors.textGray,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            );
-          },
-          childCount: _stockInHand.length,
-        ),
+            ),
+          );
+        }, childCount: _stockInHand.length),
       ),
     );
   }
@@ -645,7 +816,10 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
           ),
           child: Row(
             children: [
-              const Icon(Icons.notification_important_rounded, color: Colors.red),
+              const Icon(
+                Icons.notification_important_rounded,
+                color: Colors.red,
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -653,7 +827,10 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
                   children: [
                     Text(
                       '$_pendingCount Pending Handovers',
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.red,
+                      ),
                     ),
                     const Text(
                       'You have stock waiting for your acceptance.',
@@ -670,7 +847,13 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
     );
   }
 
-  Widget _actionCard(String title, String subtitle, IconData icon, Color color, VoidCallback onTap) {
+  Widget _actionCard(
+    String title,
+    String subtitle,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
     return EntranceAnimation(
       child: InkWell(
         onTap: onTap,
@@ -703,13 +886,19 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
               Text(
                 title,
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
               ),
               const SizedBox(height: 4),
               Text(
                 subtitle,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textGray.withOpacity(0.7), fontSize: 10),
+                style: TextStyle(
+                  color: AppColors.textGray.withOpacity(0.7),
+                  fontSize: 10,
+                ),
               ),
             ],
           ),
@@ -723,55 +912,81 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.7,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-        ),
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      builder:
+          (context) => Container(
+            height: MediaQuery.of(context).size.height * 0.7,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+            ),
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Stock in Hand', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded)),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Stock in Hand',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Showing verified available items in store.',
+                  style: TextStyle(color: AppColors.textGray),
+                ),
+                const SizedBox(height: 24),
+                Expanded(
+                  child:
+                      (_stockInHand.isEmpty)
+                          ? const Center(child: Text('No stock recorded yet.'))
+                          : ListView.builder(
+                            itemCount: _stockInHand.length,
+                            itemBuilder: (context, index) {
+                              final key = _stockInHand.keys.elementAt(index);
+                              final qty = _stockInHand[key];
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: AppColors.background,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      key,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    Text(
+                                      '$qty Units',
+                                      style: const TextStyle(
+                                        color: AppColors.primary,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                ),
               ],
             ),
-            const SizedBox(height: 8),
-            const Text('Showing verified available items in store.', style: TextStyle(color: AppColors.textGray)),
-            const SizedBox(height: 24),
-            Expanded(
-              child: (_stockInHand == null || _stockInHand.isEmpty) 
-                  ? const Center(child: Text('No stock recorded yet.'))
-                  : ListView.builder(
-                      itemCount: _stockInHand.length,
-                      itemBuilder: (context, index) {
-                        final key = _stockInHand.keys.elementAt(index);
-                        final qty = _stockInHand[key];
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: AppColors.background,
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(key, style: const TextStyle(fontWeight: FontWeight.bold)),
-                              Text('$qty Units', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
-      ),
+          ),
     );
   }
 
@@ -783,7 +998,11 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4)),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: Row(
@@ -794,23 +1013,42 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
               color: AppColors.secondary.withOpacity(0.5),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.outbox_rounded, color: AppColors.primary, size: 20),
+            child: const Icon(
+              Icons.outbox_rounded,
+              color: AppColors.primary,
+              size: 20,
+            ),
           ),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(usage['item_name'] ?? 'Unknown Item', style: const TextStyle(fontWeight: FontWeight.bold)),
-                Text('Used at: ${usage['farms']?['name'] ?? 'Unknown Farm'}', style: TextStyle(color: AppColors.textGray, fontSize: 11)),
+                Text(
+                  usage['item_name'] ?? 'Unknown Item',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  'Used at: ${usage['farms']?['name'] ?? 'Unknown Farm'}',
+                  style: TextStyle(color: AppColors.textGray, fontSize: 11),
+                ),
               ],
             ),
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text('-${usage['quantity']}', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-              Text(usage['unit'] ?? 'Units', style: const TextStyle(fontSize: 10, color: AppColors.textGray)),
+              Text(
+                '-${usage['quantity']}',
+                style: const TextStyle(
+                  color: Colors.red,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                usage['unit'] ?? 'Units',
+                style: const TextStyle(fontSize: 10, color: AppColors.textGray),
+              ),
             ],
           ),
         ],

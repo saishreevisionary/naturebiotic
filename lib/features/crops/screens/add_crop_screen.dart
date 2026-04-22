@@ -177,19 +177,25 @@ class _AddCropScreenState extends State<AddCropScreen> {
 
       if (mounted) {
         setState(() {
-          if (results[0].isNotEmpty)
+          if (results[0].isNotEmpty) {
             _ageUnits = results[0].map((e) => e['label'] as String).toList();
-          if (results[1].isNotEmpty)
+          }
+          if (results[1].isNotEmpty) {
             _lifeUnits = results[1].map((e) => e['label'] as String).toList();
-          if (results[2].isNotEmpty)
+          }
+          if (results[2].isNotEmpty) {
             _countUnits = results[2].map((e) => e['label'] as String).toList();
-          if (results[3].isNotEmpty)
+          }
+          if (results[3].isNotEmpty) {
             _acreUnits = results[3].map((e) => e['label'] as String).toList();
-          if (results[4].isNotEmpty)
+          }
+          if (results[4].isNotEmpty) {
             _yieldUnits = results[4].map((e) => e['label'] as String).toList();
-          if (results[5].isNotEmpty)
+          }
+          if (results[5].isNotEmpty) {
             _yieldPeriodUnits =
                 results[5].map((e) => e['label'] as String).toList();
+          }
 
           if (!_isEdit) {
             _selectedAgeUnit = _ageUnits.first;

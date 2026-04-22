@@ -28,6 +28,7 @@ class _FarmDetailScreenState extends State<FarmDetailScreen> with WidgetsBinding
   List<Map<String, dynamic>> _crops = [];
   Map<String, dynamic>? _farmer;
   bool _isAdmin = false;
+  bool _isManager = false;
   bool _isLoading = true;
 
   // Tracking
@@ -107,6 +108,7 @@ class _FarmDetailScreenState extends State<FarmDetailScreen> with WidgetsBinding
     if (mounted) {
       setState(() {
         _isAdmin = profile?['role'] == 'admin';
+        _isManager = profile?['role'] == 'manager';
         _isLoading = false;
       });
       _loadAssignedExecutive();
@@ -284,6 +286,57 @@ class _FarmDetailScreenState extends State<FarmDetailScreen> with WidgetsBinding
                     ],
                   ),
                 ),
+
+                if (_isManager && _farm['is_verified'] != true) ...[
+                  const SizedBox(height: 24),
+                  ElevatedButton.icon(
+                    onPressed: _isLoading
+                        ? null
+                        : () async {
+                            setState(() => _isLoading = true);
+                            try {
+                              await SupabaseService.verifyItem(
+                                'farms',
+                                _farm['id'],
+                              );
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Farm Verified Successfully'),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
+                                setState(() {
+                                  _farm['is_verified'] = true;
+                                  _isLoading = false;
+                                });
+                              }
+                            } catch (e) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Verification failed: $e'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                                setState(() => _isLoading = false);
+                              }
+                            }
+                          },
+                    icon: const Icon(Icons.verified_rounded),
+                    label: const Text('Verify Farm Entry'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(double.infinity, 64),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      elevation: 8,
+                      shadowColor: AppColors.primary.withOpacity(0.3),
+                    ),
+                  ),
+                ],
                 
                 if (_isAdmin) ...[
                   const SizedBox(height: 20),
@@ -627,30 +680,34 @@ class _FarmDetailScreenState extends State<FarmDetailScreen> with WidgetsBinding
                     ),
                   ),
                 
-                const SizedBox(height: 32),
-                ElevatedButton.icon(
-                  onPressed: () async {
-                    final result = await Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => AddCropScreen(farmId: _farm['id'])),
-                    );
-                    if (result == true) {
-                      _loadCrops();
-                    }
-                  },
-                  icon: const Icon(Icons.add_task_rounded),
-                  label: const Text('Add New Crop'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: AppColors.primary,
-                    side: BorderSide(color: AppColors.primary.withOpacity(0.5)),
-                    minimumSize: const Size(double.infinity, 64),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(24),
+                if (!_isManager) ...[
+                  const SizedBox(height: 32),
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      final result = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => AddCropScreen(farmId: _farm['id']),
+                        ),
+                      );
+                      if (result == true) {
+                        _loadCrops();
+                      }
+                    },
+                    icon: const Icon(Icons.add_task_rounded),
+                    label: const Text('Add New Crop'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: AppColors.primary,
+                      side: BorderSide(color: AppColors.primary.withOpacity(0.5)),
+                      minimumSize: const Size(double.infinity, 64),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      elevation: 0,
                     ),
-                    elevation: 0,
                   ),
-                ),
+                ],
                 const SizedBox(height: 40),
               ],
             ),
@@ -715,8 +772,29 @@ class _FarmDetailScreenState extends State<FarmDetailScreen> with WidgetsBinding
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                if (crop['is_verified'] == true)
+                  const Icon(Icons.verified_rounded, color: Colors.blue, size: 16),
               ],
             ),
+            if (crop['is_verified'] != true) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.orange.withOpacity(0.2)),
+                ),
+                child: const Text(
+                  'PENDING',
+                  style: TextStyle(
+                    color: Colors.orange,
+                    fontSize: 8,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             Text(
               'Variety: ${crop['variety'] ?? 'N/A'}', 

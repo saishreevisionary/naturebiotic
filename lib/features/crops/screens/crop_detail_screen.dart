@@ -26,12 +26,25 @@ class CropDetailScreen extends StatefulWidget {
 
 class __CropDetailScreenState extends State<CropDetailScreen> {
   List<Map<String, dynamic>> _reports = [];
+  String? _userRole;
   bool _isLoadingReports = true;
+  late Map<String, dynamic> _crop;
 
   @override
   void initState() {
     super.initState();
+    _crop = widget.crop;
+    _loadUserRole();
     _loadReports();
+  }
+
+  Future<void> _loadUserRole() async {
+    final profile = await SupabaseService.getProfile();
+    if (mounted) {
+      setState(() {
+        _userRole = profile?['role'];
+      });
+    }
   }
 
   Future<void> _loadReports() async {
@@ -92,28 +105,27 @@ class __CropDetailScreenState extends State<CropDetailScreen> {
       appBar: AppBar(
         title: Text(widget.crop['name'] ?? 'Crop Details'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.edit_rounded),
-            tooltip: 'Edit Crop Details',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder:
-                      (context) => AddCropScreen(
-                        crop: widget.crop,
-                        farmId: widget.crop['farm_id']?.toString(),
-                      ),
-                ),
-              ).then((value) {
-                if (value == true) {
-                  // Refresh data if needed, but since we pass crop in constructor,
-                  // it might need a re-fetch or pop-back-with-true
-                  Navigator.pop(context, true);
-                }
-              });
-            },
-          ),
+          if (_userRole != 'manager')
+            IconButton(
+              icon: const Icon(Icons.edit_rounded),
+              tooltip: 'Edit Crop Details',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder:
+                        (context) => AddCropScreen(
+                          crop: _crop,
+                          farmId: _crop['farm_id']?.toString(),
+                        ),
+                  ),
+                ).then((value) {
+                  if (value == true) {
+                    Navigator.pop(context, true);
+                  }
+                });
+              },
+            ),
         ],
       ),
       body: Center(
@@ -151,18 +163,26 @@ class __CropDetailScreenState extends State<CropDetailScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              widget.crop['variety'] ?? 'Unknown Variety',
+                              _crop['variety'] ?? 'Unknown Variety',
                               style: const TextStyle(
                                 color: AppColors.textGray,
                                 fontSize: 11,
                               ),
                             ),
-                            Text(
-                              widget.crop['name'] ?? 'N/A',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 18,
-                              ),
+                            Row(
+                              children: [
+                                Text(
+                                  _crop['name'] ?? 'N/A',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 18,
+                                  ),
+                                ),
+                                if (_crop['is_verified'] == true) ...[
+                                  const SizedBox(width: 8),
+                                  const Icon(Icons.verified_rounded, color: Colors.blue, size: 18),
+                                ],
+                              ],
                             ),
                           ],
                         ),
@@ -170,6 +190,40 @@ class __CropDetailScreenState extends State<CropDetailScreen> {
                     ],
                   ),
                 ),
+                
+                if (_userRole == 'manager' && _crop['is_verified'] != true) ...[
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 54,
+                    child: ElevatedButton.icon(
+                      onPressed: () async {
+                        try {
+                          await SupabaseService.verifyItem('crops', _crop['id']);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Crop Verified Successfully'), backgroundColor: Colors.green),
+                            );
+                            setState(() => _crop['is_verified'] = true);
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Verification failed: $e'), backgroundColor: Colors.red),
+                            );
+                          }
+                        }
+                      },
+                      icon: const Icon(Icons.verified_user_rounded),
+                      label: const Text('Verify Crop Entry', style: TextStyle(fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      ),
+                    ),
+                  ),
+                ],
 
                 const SizedBox(height: 24),
                 const Text(
@@ -274,43 +328,45 @@ class __CropDetailScreenState extends State<CropDetailScreen> {
                   ),
                 ),
 
-                const SizedBox(height: 32),
-                SizedBox(
-                  width: double.infinity,
-                  height: 54,
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder:
-                              (context) => CreateReportScreen(
-                                preSelectedFarmId:
-                                    widget.crop['farm_id']?.toString(),
-                                preSelectedCropId:
-                                    widget.crop['id']?.toString(),
-                              ),
+                if (_userRole != 'manager')
+                  const SizedBox(height: 32),
+                if (_userRole != 'manager')
+                  SizedBox(
+                    width: double.infinity,
+                    height: 54,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder:
+                                (context) => CreateReportScreen(
+                                  preSelectedFarmId:
+                                      _crop['farm_id']?.toString(),
+                                  preSelectedCropId:
+                                      _crop['id']?.toString(),
+                                ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.add_task_rounded),
+                      label: const Text(
+                        'Add New Visit (Analysis Report)',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
                         ),
-                      );
-                    },
-                    icon: const Icon(Icons.add_task_rounded),
-                    label: const Text(
-                      'Add New Visit (Analysis Report)',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
                       ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        elevation: 2,
                       ),
-                      elevation: 2,
                     ),
                   ),
-                ),
 
                 const SizedBox(height: 32),
                 const Text(

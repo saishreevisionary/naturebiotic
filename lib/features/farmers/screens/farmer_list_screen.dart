@@ -18,6 +18,7 @@ class FarmerListScreen extends StatefulWidget {
 
 class _FarmerListScreenState extends State<FarmerListScreen> {
   List<Map<String, dynamic>> _farmers = [];
+  String? _userRole;
   bool _isLoading = true;
   String? _selectedCategory;
   final TextEditingController _searchController = TextEditingController();
@@ -37,6 +38,9 @@ class _FarmerListScreenState extends State<FarmerListScreen> {
   Future<void> _loadFarmers() async {
     setState(() => _isLoading = true);
     try {
+      final profile = await SupabaseService.getProfile();
+      _userRole = profile?['role'];
+      
       final remoteData = await SupabaseService.getFarmers();
       List<Map<String, dynamic>> localData = [];
       
@@ -124,35 +128,32 @@ class _FarmerListScreenState extends State<FarmerListScreen> {
                     padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
                     child: Column(
                       children: [
-                        Hero(
-                          tag: 'search_bar',
-                          child: Container(
-                            decoration: BoxDecoration(
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.04),
-                                  blurRadius: 20,
-                                  offset: const Offset(0, 8),
-                                )
-                              ],
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: TextField(
-                              controller: _searchController,
-                              onChanged: (v) => setState(() {}),
-                              decoration: InputDecoration(
-                                hintText: 'Search by name, village...',
-                                prefixIcon: const Icon(Icons.search_rounded, color: AppColors.primary),
-                                suffixIcon: _searchController.text.isNotEmpty 
-                                    ? IconButton(
-                                        icon: const Icon(Icons.clear_rounded),
-                                        onPressed: () {
-                                          _searchController.clear();
-                                          setState(() {});
-                                        },
-                                      )
-                                    : null,
-                              ),
+                        Container(
+                          decoration: BoxDecoration(
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.04),
+                                blurRadius: 20,
+                                offset: const Offset(0, 8),
+                              )
+                            ],
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: TextField(
+                            controller: _searchController,
+                            onChanged: (v) => setState(() {}),
+                            decoration: InputDecoration(
+                              hintText: 'Search by name, village...',
+                              prefixIcon: const Icon(Icons.search_rounded, color: AppColors.primary),
+                              suffixIcon: _searchController.text.isNotEmpty 
+                                  ? IconButton(
+                                      icon: const Icon(Icons.clear_rounded),
+                                      onPressed: () {
+                                        _searchController.clear();
+                                        setState(() {});
+                                      },
+                                    )
+                                  : null,
                             ),
                           ),
                         ),
@@ -255,6 +256,7 @@ class _FarmerListScreenState extends State<FarmerListScreen> {
                                 village: farmer['village'] ?? 'N/A',
                                 category: farmer['category'] ?? 'Warm',
                                 categoryColor: _getCategoryColor(farmer['category']),
+                                isVerified: farmer['is_verified'] == true,
                                 onTap: () async {
                                   final result = await Navigator.push(
                                     context,
@@ -279,34 +281,36 @@ class _FarmerListScreenState extends State<FarmerListScreen> {
               ],
             ),
           ),
-      floatingActionButton: EntranceAnimation(
-        delay: 500,
-        child: ScaleButton(
-          onTap: () async {
-            await Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const AddFarmerScreen()),
-            );
-            _loadFarmers();
-          },
-          child: Container(
-            height: 64,
-            width: 64,
-            decoration: BoxDecoration(
-              color: AppColors.primary,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.primary.withOpacity(0.3),
-                  blurRadius: 15,
-                  offset: const Offset(0, 8),
-                )
-              ],
+      floatingActionButton: _userRole == 'manager' 
+        ? null 
+        : EntranceAnimation(
+            delay: 500,
+            child: ScaleButton(
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const AddFarmerScreen()),
+                );
+                _loadFarmers();
+              },
+              child: Container(
+                height: 64,
+                width: 64,
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withOpacity(0.3),
+                      blurRadius: 15,
+                      offset: const Offset(0, 8),
+                    )
+                  ],
+                ),
+                child: const Icon(Icons.add_rounded, color: Colors.white, size: 32),
+              ),
             ),
-            child: const Icon(Icons.add_rounded, color: Colors.white, size: 32),
           ),
-        ),
-      ),
     );
   }
 
@@ -382,6 +386,7 @@ class FarmerCard extends StatelessWidget {
   final String village;
   final String category;
   final Color categoryColor;
+  final bool isVerified;
   final VoidCallback? onTap;
 
   const FarmerCard({
@@ -391,6 +396,7 @@ class FarmerCard extends StatelessWidget {
     required this.village,
     required this.category,
     required this.categoryColor,
+    this.isVerified = true,
     this.onTap,
   });
 

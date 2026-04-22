@@ -1,0 +1,289 @@
+import 'package:flutter/material.dart';
+import 'package:nature_biotic/core/theme.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
+import 'package:nature_biotic/services/supabase_service.dart';
+
+class ExpenseDetailScreen extends StatefulWidget {
+  final Map<String, dynamic> expense;
+
+  const ExpenseDetailScreen({super.key, required this.expense});
+
+  @override
+  State<ExpenseDetailScreen> createState() => _ExpenseDetailScreenState();
+}
+
+class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
+  late Map<String, dynamic> _data;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _data = widget.expense;
+    _fetchFullDetails();
+  }
+
+  Future<void> _fetchFullDetails() async {
+    try {
+      final fullData = await SupabaseService.getExpenseById(widget.expense['id']);
+      if (mounted) {
+        setState(() {
+          _data = fullData;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Show a small loader at top or full screen if data is minimal
+    final items = List<Map<String, dynamic>>.from(_data['expense_items'] ?? []);
+    final allotted = double.tryParse(_data['amount_allotted'].toString()) ?? 0.0;
+    final spent = items.fold(0.0, (sum, item) => sum + (double.tryParse(item['amount'].toString()) ?? 0.0));
+    final balance = allotted - spent;
+    
+    final name = _data['profiles']?['full_name'] ?? 'Executive';
+    final date = DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.parse(_data['created_at']));
+
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        title: const Text('Expense Details'),
+        actions: [
+          if (_isLoading)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)),
+            )
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 800),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeader(name, date, _data['status']),
+                const SizedBox(height: 24),
+                _buildFinancialSummary(allotted, spent, balance, _data['return_amount'], _data['return_status']),
+                const SizedBox(height: 24),
+                _buildTripInfo(),
+                const SizedBox(height: 24),
+                Text('Expense Logs', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                if (items.isEmpty && !_isLoading)
+                  const Center(child: Padding(padding: EdgeInsets.all(32), child: Text('No individual expenses logged.')))
+                else if (items.isEmpty && _isLoading)
+                  const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()))
+                else
+                  ...items.map((item) => _buildExpenseItem(item)),
+                const SizedBox(height: 48),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader(String name, String date, String status) {
+    return Row(
+      children: [
+        CircleAvatar(
+          radius: 24,
+          backgroundColor: AppColors.primary.withOpacity(0.1),
+          child: Text(name[0], style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(name, style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold)),
+              Text(date, style: TextStyle(color: AppColors.textGray, fontSize: 13)),
+            ],
+          ),
+        ),
+        _statusChip(status, _data['return_status']),
+      ],
+    );
+  }
+
+  Widget _buildFinancialSummary(double allotted, double spent, double balance, dynamic returned, dynamic returnStatus) {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _summaryItem('Allotted', '₹$allotted', AppColors.primary),
+                _summaryItem('Spent', '₹${spent.toStringAsFixed(2)}', Colors.orange),
+                _summaryItem('Balance', '₹${balance.toStringAsFixed(2)}', Colors.blue),
+              ],
+            ),
+            if (returnStatus != 'NONE' && returnStatus != null) ...[
+              const Divider(height: 40),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                   const Text('Returned Amount:', style: TextStyle(fontWeight: FontWeight.w500)),
+                   Text('₹$returned', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green)),
+                ],
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                   const Text('Return Status:', style: TextStyle(fontSize: 12, color: AppColors.textGray)),
+                   Text(returnStatus.toString(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTripInfo() {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Trip Details', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            _infoRow('Vehicle', '${_data['vehicle_type'] ?? 'N/A'} (${_data['vehicle_ownership'] ?? 'N/A'})'),
+            const Divider(),
+            _infoRow('Start Odometer', '${_data['start_odometer_reading'] ?? 'N/A'}'),
+            if (_data['start_odometer_photo'] != null)
+              _buildImagePreview('Start Odometer photo', _data['start_odometer_photo']),
+            const Divider(),
+            _infoRow('End Odometer', '${_data['end_odometer_reading'] ?? 'N/A'}'),
+            if (_data['end_odometer_photo'] != null)
+              _buildImagePreview('End Odometer photo', _data['end_odometer_photo']),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExpenseItem(Map<String, dynamic> item) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                _categoryIcon(item['category']),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(item['category'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                      if (item['courier_name'] != null && item['courier_name'].toString().isNotEmpty)
+                        Text('Courier: ${item['courier_name']}', style: const TextStyle(fontSize: 12, color: AppColors.textGray)),
+                    ],
+                  ),
+                ),
+                Text('₹${item['amount']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              ],
+            ),
+            if (item['notes'] != null && item['notes'].toString().isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(item['notes'], style: const TextStyle(fontSize: 13, fontStyle: FontStyle.italic)),
+            ],
+            if (item['bill_photo'] != null) ...[
+              const SizedBox(height: 12),
+              _buildImagePreview('Bill photo', item['bill_photo']),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImagePreview(String label, String url) {
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      height: 150,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Image.network(url, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Center(child: Text('Image unavailable'))),
+      ),
+    );
+  }
+
+  Widget _summaryItem(String label, String value, Color color) {
+    return Column(
+      children: [
+        Text(label, style: const TextStyle(fontSize: 12, color: AppColors.textGray)),
+        const SizedBox(height: 4),
+        Text(value, style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: color)),
+      ],
+    );
+  }
+
+  Widget _infoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(color: AppColors.textGray)),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w500)),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusChip(String status, String? returnStatus) {
+    String label = status;
+    Color color = Colors.grey;
+    if (status == 'ACTIVE') { label = 'Active'; color = Colors.green; }
+    else if (status == 'CLOSED') { label = 'Closed'; color = Colors.blue; }
+    if (returnStatus == 'PENDING') { label = 'Return Pending'; color = Colors.orange; }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+      child: Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
+    );
+  }
+
+  Widget _categoryIcon(String category) {
+    IconData icon;
+    Color color;
+    switch (category) {
+      case 'FOOD': icon = Icons.restaurant_rounded; color = Colors.orange; break;
+      case 'FUEL': icon = Icons.local_gas_station_rounded; color = Colors.blue; break;
+      case 'COURIER': icon = Icons.local_shipping_rounded; color = Colors.purple; break;
+      case 'DRIVER': icon = Icons.person_rounded; color = Colors.teal; break;
+      default: icon = Icons.more_horiz_rounded; color = Colors.grey;
+    }
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
+      child: Icon(icon, color: color, size: 20),
+    );
+  }
+}

@@ -20,6 +20,7 @@ class FarmListScreen extends StatefulWidget {
 class _FarmListScreenState extends State<FarmListScreen> {
   List<Map<String, dynamic>> _farms = [];
   Map<String, List<Map<String, dynamic>>> _farmBalances = {};
+  String? _userRole;
   bool _isLoading = true;
 
   @override
@@ -31,6 +32,9 @@ class _FarmListScreenState extends State<FarmListScreen> {
   Future<void> _loadFarms() async {
     setState(() => _isLoading = true);
     try {
+      final profile = await SupabaseService.getProfile();
+      _userRole = profile?['role'];
+      
       final remoteData = await SupabaseService.getFarms();
       List<Map<String, dynamic>> localData = [];
 
@@ -408,30 +412,34 @@ class _FarmListScreenState extends State<FarmListScreen> {
                             );
                           },
                           balances: _farmBalances[farm['id'].toString()],
+                          isVerified: farm['is_verified'] == true,
+                          isManager: _userRole == 'manager',
                         ),
                       );
                     },
                   ),
                 ),
               ),
-      floatingActionButton: EntranceAnimation(
-        delay: 800,
-        child: ScaleButton(
-          onTap: () async {
-            await Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const AddFarmScreen()),
-            );
-            _loadFarms();
-          },
-          child: FloatingActionButton(
-            heroTag: 'farm_fab',
-            onPressed: null,
-            backgroundColor: AppColors.primary,
-            child: const Icon(Icons.add_rounded, color: Colors.white),
+      floatingActionButton: _userRole == 'manager' 
+        ? null 
+        : EntranceAnimation(
+            delay: 800,
+            child: ScaleButton(
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const AddFarmScreen()),
+                );
+                _loadFarms();
+              },
+              child: FloatingActionButton(
+                heroTag: 'farm_fab',
+                onPressed: null,
+                backgroundColor: AppColors.primary,
+                child: const Icon(Icons.add_rounded, color: Colors.white),
+              ),
+            ),
           ),
-        ),
-      ),
     );
   }
 }
@@ -446,6 +454,8 @@ class FarmCard extends StatelessWidget {
   final List<Map<String, dynamic>>? balances;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
+  final bool isVerified;
+  final bool isManager;
 
   const FarmCard({
     super.key,
@@ -458,6 +468,8 @@ class FarmCard extends StatelessWidget {
     this.balances,
     this.onEdit,
     this.onDelete,
+    this.isVerified = true,
+    this.isManager = false,
   });
 
   @override
@@ -493,27 +505,28 @@ class FarmCard extends StatelessWidget {
                   color: AppColors.primary,
                 ),
               ),
-              PopupMenuButton<String>(
-                onSelected: (value) {
-                  if (value == 'edit') onEdit?.call();
-                  if (value == 'delete') onDelete?.call();
-                },
-                itemBuilder:
-                    (context) => [
-                      const PopupMenuItem(value: 'edit', child: Text('Edit')),
-                      const PopupMenuItem(
-                        value: 'delete',
-                        child: Text(
-                          'Delete',
-                          style: TextStyle(color: Colors.red),
+              if (!isManager)
+                PopupMenuButton<String>(
+                  onSelected: (value) {
+                    if (value == 'edit') onEdit?.call();
+                    if (value == 'delete') onDelete?.call();
+                  },
+                  itemBuilder:
+                      (context) => [
+                        const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Text(
+                            'Delete',
+                            style: TextStyle(color: Colors.red),
+                          ),
                         ),
-                      ),
-                    ],
-                icon: const Icon(
-                  Icons.more_vert_rounded,
-                  color: AppColors.textGray,
+                      ],
+                  icon: const Icon(
+                    Icons.more_vert_rounded,
+                    color: AppColors.textGray,
+                  ),
                 ),
-              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -529,6 +542,33 @@ class FarmCard extends StatelessWidget {
             place,
             style: const TextStyle(fontSize: 14, color: AppColors.textGray),
           ),
+          if (!isVerified) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.orange.withOpacity(0.3)),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.pending_actions_rounded, size: 14, color: Colors.orange),
+                  SizedBox(width: 8),
+                  Text(
+                    'PENDING VERIFICATION',
+                    style: TextStyle(
+                      color: Colors.orange,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 8),
           Row(
             children: [

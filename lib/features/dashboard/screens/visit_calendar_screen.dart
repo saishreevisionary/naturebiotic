@@ -251,8 +251,8 @@ class _VisitCalendarScreenState extends State<VisitCalendarScreen> {
       itemCount: visits.length,
       itemBuilder: (context, index) {
         final reminder = visits[index];
-        final farm = widget.allFarms.firstWhere((f) => f['id'] == reminder['farm_id'], orElse: () => {});
-        final crop = widget.allCrops.firstWhere((c) => c['id'] == reminder['crop_id'], orElse: () => {});
+        final farm = widget.allFarms.firstWhere((f) => f['id'] == reminder['farm_id'], orElse: () => <String, dynamic>{});
+        final crop = widget.allCrops.firstWhere((c) => c['id'] == reminder['crop_id'], orElse: () => <String, dynamic>{});
         
         return Container(
           margin: const EdgeInsets.only(bottom: 20),

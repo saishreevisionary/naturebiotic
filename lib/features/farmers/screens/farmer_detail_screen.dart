@@ -21,6 +21,7 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen>
     with WidgetsBindingObserver {
   late Map<String, dynamic> _farmer;
   List<Map<String, dynamic>> _farms = [];
+  String? _userRole;
   bool _isLoading = true;
 
   // Tracking
@@ -76,9 +77,11 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen>
 
   Future<void> _loadFarms() async {
     try {
+      final profile = await SupabaseService.getProfile();
       final farms = await SupabaseService.getFarmsByFarmer(_farmer['id']);
       if (mounted) {
         setState(() {
+          _userRole = profile?['role'];
           _farms = farms;
           _isLoading = false;
         });
@@ -175,17 +178,19 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen>
           style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.edit_rounded, color: AppColors.primary),
-            onPressed: _isLoading ? null : _handleEdit,
-          ),
-          IconButton(
-            icon: const Icon(
-              Icons.delete_outline_rounded,
-              color: AppColors.hot,
+          if (_userRole != 'manager') ...[
+            IconButton(
+              icon: const Icon(Icons.edit_rounded, color: AppColors.primary),
+              onPressed: _isLoading ? null : _handleEdit,
             ),
-            onPressed: _isLoading ? null : _handleDelete,
-          ),
+            IconButton(
+              icon: const Icon(
+                Icons.delete_outline_rounded,
+                color: AppColors.hot,
+              ),
+              onPressed: _isLoading ? null : _handleDelete,
+            ),
+          ],
           const SizedBox(width: 8),
         ],
       ),
@@ -279,6 +284,23 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen>
                                   ),
                                 ),
                               ),
+                              if (_farmer['is_verified'] == true)
+                                Positioned(
+                                  top: 0,
+                                  left: 0,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: const BoxDecoration(
+                                      color: Colors.white,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.verified_rounded,
+                                      color: Colors.blue,
+                                      size: 24,
+                                    ),
+                                  ),
+                                ),
                             ],
                           ),
                         ),
@@ -373,34 +395,86 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen>
                                 _farms.map((farm) => _farmItem(farm)).toList(),
                           ),
 
-                        const SizedBox(height: 24),
-                        ElevatedButton.icon(
-                          onPressed: () async {
-                            await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder:
-                                    (context) =>
-                                        AddFarmScreen(farmerId: _farmer['id']),
+                        if (_userRole != 'manager') ...[
+                          const SizedBox(height: 24),
+                          ElevatedButton.icon(
+                            onPressed: () async {
+                              await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder:
+                                      (context) =>
+                                          AddFarmScreen(farmerId: _farmer['id']),
+                                ),
+                              );
+                              _loadFarms();
+                            },
+                            icon: const Icon(Icons.add_location_alt_rounded),
+                            label: const Text('Add New Farm'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: AppColors.primary,
+                              side: BorderSide(
+                                color: AppColors.primary.withOpacity(0.5),
                               ),
-                            );
-                            _loadFarms();
-                          },
-                          icon: const Icon(Icons.add_location_alt_rounded),
-                          label: const Text('Add New Farm'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: AppColors.primary,
-                            side: BorderSide(
-                              color: AppColors.primary.withOpacity(0.5),
+                              minimumSize: const Size(double.infinity, 60),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              elevation: 0,
                             ),
-                            minimumSize: const Size(double.infinity, 60),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            elevation: 0,
                           ),
-                        ),
+                        ] else if (_farmer['is_verified'] != true) ...[
+                          const SizedBox(height: 24),
+                          ElevatedButton.icon(
+                            onPressed: _isLoading
+                                ? null
+                                : () async {
+                                    setState(() => _isLoading = true);
+                                    try {
+                                      await SupabaseService.verifyItem(
+                                        'farmers',
+                                        _farmer['id'],
+                                      );
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('Farmer Verified Successfully'),
+                                            backgroundColor: Colors.green,
+                                          ),
+                                        );
+                                        // State is updated manually below to show success immediately
+                                        setState(() {
+                                          _farmer['is_verified'] = true;
+                                          _isLoading = false;
+                                        });
+                                      }
+                                    } catch (e) {
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Verification failed: $e'),
+                                            backgroundColor: Colors.red,
+                                          ),
+                                        );
+                                        setState(() => _isLoading = false);
+                                      }
+                                    }
+                                  },
+                            icon: const Icon(Icons.verified_rounded),
+                            label: const Text('Verify Entry'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: Colors.white,
+                              minimumSize: const Size(double.infinity, 60),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              elevation: 8,
+                              shadowColor: AppColors.primary.withOpacity(0.3),
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 40),
                       ],
                     ),
