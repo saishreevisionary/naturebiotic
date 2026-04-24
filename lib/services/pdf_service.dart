@@ -26,6 +26,12 @@ class PdfService {
       boldFont,
     );
 
+    final historyWidget = await _buildHistoryGrid(
+      report['previous_inputs'] ?? 'No data provided',
+      font,
+      boldFont,
+    );
+
     pw.Widget? signatureImage;
     if (report['signature_url'] != null) {
       try {
@@ -51,11 +57,7 @@ class PdfService {
               problemWidget,
               pw.SizedBox(height: 15),
               _buildSectionTitle('Previous Inputs History'),
-              _buildHistoryGrid(
-                report['previous_inputs'] ?? 'No data provided',
-                font,
-                boldFont,
-              ),
+              historyWidget,
               pw.SizedBox(height: 20),
               _buildSectionTitle('Recommended Products & Treatments'),
               _buildRecommendationsTable(report['recommendations'] ?? ''),
@@ -75,86 +77,50 @@ class PdfService {
     );
   }
 
-  static pw.Widget _buildHistoryGrid(
+  static Future<pw.Widget> _buildHistoryGrid(
     String history,
     pw.Font font,
     pw.Font bold,
-  ) {
+  ) async {
     if (history.isEmpty) {
       return pw.Text('No data provided', style: pw.TextStyle(fontSize: 10));
     }
 
-    // Check if it's the new aggregated format
-    if (history.contains('\n\nHistorical Records:')) {
-      final parts = history.split('\n\nHistorical Records:');
-      final currentPart = parts[0];
-      final historicalPart = parts[1];
+    final List<pw.Widget> sections = [];
+    final cropChunks = history.split('--- Crop: ');
 
-      final historyRecords =
-          historicalPart
-              .split('\n--- ')
-              .where((p) => p.trim().isNotEmpty)
-              .toList();
+    for (var chunk in cropChunks) {
+      if (chunk.trim().isEmpty) continue;
 
+      final parts = chunk.split(' ---\n');
+      if (parts.length < 2) {
+        sections.add(await _parseTextWithImages(chunk, font, bold, fontSize: 9));
+        continue;
+      }
+
+      final cropName = parts[0].trim();
+      final content = parts[1].trim();
+
+      sections.add(
+        pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text(
+              'Crop: $cropName',
+              style: pw.TextStyle(font: bold, fontSize: 10, color: PdfColors.green900),
+            ),
+            pw.SizedBox(height: 4),
+            await _parseTextWithImages(content, font, bold, fontSize: 9),
+            pw.SizedBox(height: 12),
+          ],
+        ),
+      );
+    }
+
+    if (sections.isNotEmpty) {
       return pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          pw.Text(
-            'Current Visit Pre-Visit Observations:',
-            style: pw.TextStyle(fontSize: 10, font: bold),
-          ),
-          pw.Text(currentPart, style: const pw.TextStyle(fontSize: 9)),
-          pw.SizedBox(height: 10),
-          pw.Text(
-            'Historical Entries:',
-            style: pw.TextStyle(fontSize: 10, font: bold),
-          ),
-          pw.SizedBox(height: 5),
-          pw.Wrap(
-            spacing: 15,
-            runSpacing: 10,
-            children: [
-              ...historyRecords.map((record) {
-                // Format was: "--- $hDate ---\n$hInputs"
-                // But my split removed "--- "
-                final subParts = record.split(' ---\n');
-                if (subParts.length < 2) {
-                  return pw.Text(
-                    record,
-                    style: const pw.TextStyle(fontSize: 8),
-                  );
-                }
-
-                final dateStr = subParts[0];
-                final inputs = subParts[1];
-
-                return pw.Container(
-                  width: 230,
-                  padding: const pw.EdgeInsets.all(8),
-                  decoration: const pw.BoxDecoration(
-                    color: PdfColors.grey100,
-                    borderRadius: pw.BorderRadius.all(pw.Radius.circular(6)),
-                  ),
-                  child: pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text(
-                        dateStr,
-                        style: pw.TextStyle(
-                          fontSize: 8,
-                          font: bold,
-                          color: PdfColors.green900,
-                        ),
-                      ),
-                      pw.Divider(color: PdfColors.grey300),
-                      pw.Text(inputs, style: const pw.TextStyle(fontSize: 8)),
-                    ],
-                  ),
-                );
-              }),
-            ],
-          ),
-        ],
+        children: sections,
       );
     }
 
@@ -391,57 +357,160 @@ class PdfService {
     pw.Font font,
     pw.Font bold,
   ) async {
-    final parts = problem.split(', ');
-    List<pw.Widget> items = [];
+    if (problem.isEmpty) return pw.Text('No problems identified.');
 
-    for (var part in parts) {
-      if (part.contains('{img:')) {
-        final problemName = part.split('{img:')[0].trim();
-        final imageUrl = part.split('{img:')[1].replaceAll('}', '').trim();
+    final List<pw.Widget> cropSections = [];
+    
+    // Split by crop headers: "--- Crop: $name ---"
+    final rawChunks = problem.split('--- Crop: ');
+    
+    for (var chunk in rawChunks) {
+      if (chunk.trim().isEmpty) continue;
 
-        pw.Widget imageWidget;
-        try {
-          final image = await networkImage(imageUrl);
-          imageWidget = pw.Container(
-            height: 140,
-            width: 230,
-            child: pw.Image(image, fit: pw.BoxFit.cover),
+      final parts = chunk.split(' ---\n');
+      String cropName = 'Report';
+      String problemContent = chunk;
+
+      if (parts.length >= 2) {
+        cropName = parts[0].trim();
+        problemContent = parts[1].trim();
+      }
+
+      final List<pw.Widget> problemWidgets = [];
+      final problemItems = problemContent.split(', ');
+
+      for (var item in problemItems) {
+        if (item.trim().isEmpty) continue;
+
+        if (item.contains('{img:')) {
+          final itemName = item.split('{img:')[0].trim();
+          final imageUrl = item.split('{img:')[1].replaceAll('}', '').trim();
+
+          pw.Widget imageWidget;
+          try {
+            final image = await networkImage(imageUrl);
+            imageWidget = pw.Container(
+              height: 120,
+              width: 180,
+              child: pw.Image(image, fit: pw.BoxFit.cover),
+            );
+          } catch (e) {
+            imageWidget = pw.Text('Image failed to load', style: const pw.TextStyle(fontSize: 7, color: PdfColors.red));
+          }
+
+          problemWidgets.add(
+            pw.Container(
+              width: 180,
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(itemName, style: pw.TextStyle(font: bold, fontSize: 9)),
+                  pw.SizedBox(height: 4),
+                  imageWidget,
+                ],
+              ),
+            ),
           );
-        } catch (e) {
-          imageWidget = pw.Text(
-            'Error loading image',
-            style: pw.TextStyle(fontSize: 8, color: PdfColors.red),
+        } else {
+          problemWidgets.add(
+            pw.Container(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.grey50,
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                border: pw.Border.all(color: PdfColors.grey200),
+              ),
+              child: pw.Text(item.trim(), style: const pw.TextStyle(fontSize: 9)),
+            ),
           );
         }
+      }
 
-        items.add(
-          pw.Container(
-            width: 230,
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Text(
-                  problemName,
-                  style: pw.TextStyle(font: bold, fontSize: 10),
+      cropSections.add(
+        pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            if (parts.length >= 2) // Only show header if it was actually a crop chunk
+              pw.Padding(
+                padding: const pw.EdgeInsets.only(bottom: 8, top: 4),
+                child: pw.Text(
+                  'Crop: $cropName',
+                  style: pw.TextStyle(font: bold, fontSize: 11, color: PdfColors.green800),
                 ),
-                pw.SizedBox(height: 5),
-                imageWidget,
-                pw.SizedBox(height: 10),
-              ],
+              ),
+            pw.Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: problemWidgets,
             ),
+            pw.SizedBox(height: 16),
+          ],
+        ),
+      );
+    }
+
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: cropSections,
+    );
+  }
+
+  static Future<pw.Widget> _parseTextWithImages(
+    String text,
+    pw.Font font,
+    pw.Font bold, {
+    double fontSize = 10,
+  }) async {
+    final regex = RegExp(r'\{img:\s*(.*?)\}');
+    final List<pw.Widget> widgets = [];
+
+    int lastMatchEnd = 0;
+    final matches = regex.allMatches(text);
+
+    if (matches.isEmpty) {
+      return pw.Text(text, style: pw.TextStyle(fontSize: fontSize));
+    }
+
+    for (final match in matches) {
+      final beforeText = text.substring(lastMatchEnd, match.start).trim();
+      if (beforeText.isNotEmpty) {
+        widgets.add(
+          pw.Text(beforeText, style: pw.TextStyle(fontSize: fontSize)),
+        );
+      }
+
+      final url = match.group(1) ?? '';
+      try {
+        final image = await networkImage(url);
+        widgets.add(
+          pw.Container(
+            height: 100,
+            width: 150,
+            margin: const pw.EdgeInsets.symmetric(vertical: 5),
+            child: pw.Image(image, fit: pw.BoxFit.cover),
           ),
         );
-      } else {
-        items.add(
-          pw.Padding(
-            padding: const pw.EdgeInsets.symmetric(vertical: 4),
-            child: pw.Text(part, style: const pw.TextStyle(fontSize: 10)),
+      } catch (e) {
+        widgets.add(
+          pw.Text(
+            'Error loading image',
+            style: pw.TextStyle(fontSize: fontSize - 2, color: PdfColors.red),
           ),
         );
       }
+
+      lastMatchEnd = match.end;
     }
 
-    return pw.Wrap(spacing: 15, runSpacing: 15, children: items);
+    final afterText = text.substring(lastMatchEnd).trim();
+    if (afterText.isNotEmpty) {
+      widgets.add(pw.Text(afterText, style: pw.TextStyle(fontSize: fontSize)));
+    }
+
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: widgets,
+    );
   }
 
   static Future<void> generateCallLogReport({

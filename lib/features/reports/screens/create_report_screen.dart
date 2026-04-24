@@ -134,6 +134,9 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
     exportBackgroundColor: Colors.white,
   );
 
+  // Multi-crop storage
+  final List<Map<String, dynamic>> _multiCropsData = [];
+
   @override
   void initState() {
     super.initState();
@@ -451,6 +454,81 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
     );
   }
 
+  Future<Map<String, dynamic>> _collectCurrentCropData() async {
+    final crop = _crops.firstWhere(
+      (c) => c['id'] == _selectedCropId,
+      orElse: () => {'name': 'Unknown Crop'},
+    );
+
+    return {
+      'crop_id': _selectedCropId,
+      'crop_name': crop['name'],
+      'selected_problems': Set<String>.from(_selectedProblems),
+      'problem_images': Map<String, Uint8List?>.from(_problemImages),
+      'problem_image_names': Map<String, String>.from(_problemImageNames),
+      'additional_notes': _additionalNotesController.text.trim(),
+      'previous_inputs': _previousInputsMap.map(
+        (k, v) => MapEntry(
+          k,
+          v.map((row) => PreviousInputRow()
+            ..controller.text = row.controller.text
+            ..image = row.image
+            ..imageName = row.imageName
+            ..date = row.date
+          ).toList(),
+        ),
+      ),
+      'recommendations': _recommendationsList.map((r) => RecommendationRow()
+        ..product.text = r.product.text
+        ..application.text = r.application.text
+        ..dose.text = r.dose.text
+        ..doseUnit = r.doseUnit
+        ..perUnit = r.perUnit
+        ..filler.text = r.filler.text
+        ..fillerQty.text = r.fillerQty.text
+        ..fillerUnit = r.fillerUnit
+      ).toList(),
+      'cost_estimations': _costEstimations.map((c) => CostEstimationRow(productName: c.productName)
+        ..pkgSize.text = c.pkgSize.text
+        ..qty.text = c.qty.text
+        ..mrp.text = c.mrp.text
+        ..offerPrice.text = c.offerPrice.text
+      ).toList(),
+    };
+  }
+
+  void _resetCropStepData() {
+    setState(() {
+      _selectedCropId = null;
+      _selectedProblems.clear();
+      _problemImages.clear();
+      _problemImageNames.clear();
+      _activeProblemCategory = null;
+      _problemSearchQuery = '';
+      _additionalNotesController.clear();
+      _lastReport = null;
+      _suggestedProblems = [];
+      _cropAcre = 0.0;
+      _cropCount = 0;
+
+      // Reset previous inputs
+      _previousInputsMap = {
+        'Pesticides': [PreviousInputRow()],
+        'Fungicides': [PreviousInputRow()],
+        'Fertilizers': [PreviousInputRow()],
+        'Bio Stimulant': [PreviousInputRow()],
+        'Herbicide': [PreviousInputRow()],
+      };
+
+      // Reset recommendations
+      _recommendationsList.clear();
+      _recommendationsList.add(RecommendationRow());
+
+      // Reset cost estimations
+      _costEstimations.clear();
+    });
+  }
+
   Future<void> _handleSave() async {
     if (_signatureController.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -464,9 +542,111 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
 
     setState(() => _isLoading = true);
     try {
-      String finalProblem = _selectedProblems.join(', ');
-      if (_additionalNotesController.text.isNotEmpty) {
-        finalProblem += '\nNotes: ${_additionalNotesController.text.trim()}';
+      // Collect current crop if not already added
+      final currentCropData = await _collectCurrentCropData();
+      final allCrops = [..._multiCropsData, currentCropData];
+
+      // Aggregated fields
+      String combinedProblems = '';
+      String combinedHistory = '';
+      String combinedRecommendations = '';
+      String combinedCost = '';
+      double grandTotal = 0;
+
+      Map<String, Uint8List?> allProblemImages = {};
+      Map<String, String> allProblemImageNames = {};
+
+      for (var cropData in allCrops) {
+        final cropName = cropData['crop_name'];
+        final header = '--- Crop: $cropName ---\n';
+
+        // 1. Problems
+        String problemStr = (cropData['selected_problems'] as Set<String>).join(', ');
+        if (cropData['additional_notes'].toString().isNotEmpty) {
+          problemStr += '\nNotes: ${cropData['additional_notes']}';
+        }
+        
+        // Handle images for this crop later during upload loop
+        final cropImages = cropData['problem_images'] as Map<String, Uint8List?>;
+        final cropImageNames = cropData['problem_image_names'] as Map<String, String>;
+        
+        // We need to make problem names unique across crops if they repeat, 
+        // but for now let's just upload them. 
+        // Actually, the upload loop expects problem names as keys.
+        // Let's prefix them to be safe.
+        cropImages.forEach((prob, bytes) {
+          if (bytes != null) {
+            final uniqueKey = '${cropName}_$prob';
+            allProblemImages[uniqueKey] = bytes;
+            allProblemImageNames[uniqueKey] = cropImageNames[prob] ?? 'image.jpg';
+            // Update problem string to use the unique key for image matching
+            problemStr = problemStr.replaceFirst(prob, uniqueKey);
+          }
+        });
+
+        combinedProblems += header + problemStr + '\n\n';
+
+        // 2. Previous Inputs
+        String historyStr = '';
+        final prevInputs = cropData['previous_inputs'] as Map<String, List<PreviousInputRow>>;
+        for (var entry in prevInputs.entries) {
+          final category = entry.key;
+          final rows = entry.value;
+          String categoryContent = '';
+
+          for (var row in rows) {
+            final text = row.controller.text.trim();
+            if (text.isEmpty && row.image == null && row.date == null) continue;
+
+            String itemString = text;
+            if (row.date != null) {
+              itemString += (itemString.isEmpty ? '' : ' ') + '[Date: ${_formatDate(row.date)}]';
+            }
+
+            if (row.image != null) {
+              try {
+                final fileName = 'prev_${DateTime.now().millisecondsSinceEpoch}_${row.imageName ?? 'image.jpg'}';
+                final url = await SupabaseService.uploadImage(row.image!, fileName, 'reports');
+                itemString += (itemString.isEmpty ? '' : ' ') + '{img: $url}';
+              } catch (e) {
+                debugPrint('Error uploading previous input image: $e');
+              }
+            }
+
+            if (itemString.isNotEmpty) {
+              categoryContent += (categoryContent.isEmpty ? '' : ', ') + itemString;
+            }
+          }
+          if (categoryContent.isNotEmpty) historyStr += '$category: $categoryContent\n';
+        }
+        if (historyStr.isNotEmpty) combinedHistory += header + historyStr + '\n';
+
+        // 3. Recommendations
+        String recStr = '';
+        final recs = cropData['recommendations'] as List<RecommendationRow>;
+        for (var row in recs) {
+          if (row.product.text.isNotEmpty) {
+            recStr += '${row.product.text} (${row.application.text}) - '
+                'Dose: ${row.dose.text} ${row.doseUnit ?? ""} per ${row.perUnit ?? ""}, '
+                'Filler: ${row.filler.text} ${row.fillerQty.text} ${row.fillerUnit ?? ""}\n';
+          }
+        }
+        if (recStr.isNotEmpty) combinedRecommendations += header + recStr + '\n';
+
+        // 4. Costs
+        String costStr = '';
+        final costs = cropData['cost_estimations'] as List<CostEstimationRow>;
+        for (var row in costs) {
+          final double qty = double.tryParse(row.qty.text) ?? 0;
+          final double mrp = double.tryParse(row.mrp.text) ?? 0;
+          final double offer = double.tryParse(row.offerPrice.text) ?? mrp;
+          final double total = qty * offer;
+          grandTotal += total;
+
+          costStr += '${row.productName} (Pkg: ${row.pkgSize.text}) - '
+              'Qty: ${row.qty.text}, MRP: ${row.mrp.text}, Offer: ${row.offerPrice.text}, Total: $total\n';
+        }
+        if (costStr.isNotEmpty) combinedCost += header + costStr + '\n';
       }
 
       // Handle Signature Upload
@@ -474,25 +654,16 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
       final signatureBytes = await _signatureController.toPngBytes();
       if (signatureBytes != null) {
         final sigFileName = 'sig_${DateTime.now().millisecondsSinceEpoch}.png';
-        signatureUrl = await SupabaseService.uploadImage(
-          signatureBytes,
-          sigFileName,
-          'reports',
-        );
+        signatureUrl = await SupabaseService.uploadImage(signatureBytes, sigFileName, 'reports');
       }
 
-      // Handle Image Uploads
+      // Handle Problem Image Uploads (Aggregated)
       Map<String, String> uploadedImageUrls = {};
-      for (var entry in _problemImages.entries) {
+      for (var entry in allProblemImages.entries) {
         if (entry.value != null) {
           try {
-            final fileName =
-                '${DateTime.now().millisecondsSinceEpoch}_${_problemImageNames[entry.key] ?? 'image.jpg'}';
-            final url = await SupabaseService.uploadImage(
-              entry.value!,
-              fileName,
-              'reports',
-            );
+            final fileName = '${DateTime.now().millisecondsSinceEpoch}_${allProblemImageNames[entry.key] ?? 'image.jpg'}';
+            final url = await SupabaseService.uploadImage(entry.value!, fileName, 'reports');
             uploadedImageUrls[entry.key] = url;
           } catch (e) {
             debugPrint('Error uploading image for ${entry.key}: $e');
@@ -500,113 +671,35 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
         }
       }
 
-      // Store image mapping in problem string for now or a separate field if it exists
-      // Format: "Problem {img: URL}, Problem2 {img: URL}"
-      // This allows PdfService and ReportGenerator to parse it easily
-      String problemDataWithImages = '';
-      for (var p in _selectedProblems) {
-        if (uploadedImageUrls.containsKey(p)) {
-          problemDataWithImages += '$p {img: ${uploadedImageUrls[p]}}, ';
-        } else {
-          problemDataWithImages += '$p, ';
-        }
-      }
-      if (problemDataWithImages.endsWith(', ')) {
-        problemDataWithImages = problemDataWithImages.substring(
-          0,
-          problemDataWithImages.length - 2,
-        );
-      }
-      if (_additionalNotesController.text.isNotEmpty) {
-        problemDataWithImages +=
-            '\nNotes: ${_additionalNotesController.text.trim()}';
-      }
-
-      String finalHistory = '';
-
-      for (var entry in _previousInputsMap.entries) {
-        final category = entry.key;
-        final rows = entry.value;
-        String categoryContent = '';
-
-        for (var row in rows) {
-          final text = row.controller.text.trim();
-          if (text.isEmpty && row.image == null && row.date == null) continue;
-
-          String itemString = text;
-          if (row.date != null) {
-            itemString += (itemString.isEmpty ? '' : ' ') + '[Date: ${_formatDate(row.date)}]';
+      // Final format for problem string with image markers
+      String finalProblemData = '';
+      final lines = combinedProblems.split('\n');
+      for (var line in lines) {
+        String processedLine = line;
+        uploadedImageUrls.forEach((key, url) {
+          if (processedLine.contains(key)) {
+            processedLine = processedLine.replaceFirst(key, '${key.split('_').last} {img: $url}');
           }
-
-          if (row.image != null) {
-            try {
-              final fileName =
-                  'prev_${DateTime.now().millisecondsSinceEpoch}_${row.imageName ?? 'image.jpg'}';
-              final url = await SupabaseService.uploadImage(
-                row.image!,
-                fileName,
-                'reports',
-              );
-              itemString += (itemString.isEmpty ? '' : ' ') + '{img: $url}';
-            } catch (e) {
-              debugPrint('Error uploading previous input image: $e');
-            }
-          }
-
-          if (itemString.isNotEmpty) {
-            categoryContent += (categoryContent.isEmpty ? '' : ', ') + itemString;
-          }
-        }
-
-        if (categoryContent.isNotEmpty) {
-          finalHistory += '$category: $categoryContent\n';
-        }
+        });
+        finalProblemData += processedLine + '\n';
       }
 
-      String finalRecommendations = '';
-      for (var row in _recommendationsList) {
-        if (row.product.text.isNotEmpty) {
-          finalRecommendations +=
-              '${row.product.text} (${row.application.text}) - '
-              'Dose: ${row.dose.text} ${row.doseUnit ?? ""} per ${row.perUnit ?? ""}, '
-              'Filler: ${row.filler.text} ${row.fillerQty.text} ${row.fillerUnit ?? ""}\n';
-        }
-      }
-
-      String finalCost = '';
-      double grandTotal = 0;
-      for (var row in _costEstimations) {
-        final double qty = double.tryParse(row.qty.text) ?? 0;
-        final double mrp = double.tryParse(row.mrp.text) ?? 0;
-        final double offer = double.tryParse(row.offerPrice.text) ?? mrp;
-        final double total = qty * offer;
-        grandTotal += total;
-
-        finalCost +=
-            '${row.productName} (Pkg: ${row.pkgSize.text}) - '
-            'Qty: ${row.qty.text}, MRP: ${row.mrp.text}, Offer: ${row.offerPrice.text}, Total: $total\n';
-      }
       if (_nextVisitDate != null) {
-        finalCost += 'Next Visit: ${_formatDate(_nextVisitDate)}\n';
+        combinedCost += '\nNext Visit: ${_formatDate(_nextVisitDate)}\n';
       }
-      finalCost += 'Grand Total: ₹$grandTotal';
+      combinedCost += 'Grand Total: ₹$grandTotal';
 
       final reportData = {
         'farm_id': _selectedFarmId,
-        'crop_id': _selectedCropId,
-        'problem': problemDataWithImages, // Enhanced string with image markers
-        'previous_inputs': finalHistory.trim(),
-        'recommendations': finalRecommendations.trim(),
-        'estimated_cost': finalCost,
+        'crop_id': _selectedCropId, // Use the last crop ID as the primary reference
+        'problem': finalProblemData.trim(),
+        'previous_inputs': combinedHistory.trim(),
+        'recommendations': combinedRecommendations.trim(),
+        'estimated_cost': combinedCost.trim(),
         'signature_url': signatureUrl,
         'follow_up_date': _nextVisitDate?.toIso8601String(),
         'created_at': DateTime.now().toIso8601String(),
-        // Only keep local bytes if upload failed (to save memory and prevent CursorWindow overflow)
         '_local_signature': signatureUrl == null ? signatureBytes : null,
-        '_local_images': _problemImages.map((k, v) {
-          // If we have an uploaded URL for this specific problem image, don't store bytes locally
-          return MapEntry(k, uploadedImageUrls.containsKey(k) ? null : v);
-        }),
       };
 
       if (kIsWeb) {
@@ -617,31 +710,22 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
           data: reportData,
           operation: 'INSERT',
         );
-        // Trigger sync
         SyncManager().sync();
       }
 
       if (mounted) {
-        final farm = _farms.firstWhere(
-          (f) => f['id'] == _selectedFarmId,
-          orElse: () => {},
-        );
-        final crop = _crops.firstWhere(
-          (c) => c['id'] == _selectedCropId,
-          orElse: () => {},
-        );
+        final farm = _farms.firstWhere((f) => f['id'] == _selectedFarmId, orElse: () => {});
         final farmerNameForPdf = farm['farmers']?['name'] ?? 'Valued Farmer';
 
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder:
-                (context) => ReportGeneratorScreen(
-                  report: reportData,
-                  farmName: farm['name'] ?? 'Unknown Farm',
-                  cropName: crop['name'] ?? 'Unknown Crop',
-                  farmerName: farmerNameForPdf,
-                ),
+            builder: (context) => ReportGeneratorScreen(
+              report: reportData,
+              farmName: farm['name'] ?? 'Unknown Farm',
+              cropName: allCrops.length > 1 ? 'Multiple Crops' : allCrops.first['crop_name'],
+              farmerName: farmerNameForPdf,
+            ),
           ),
         );
       }
@@ -699,35 +783,76 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
             controlsBuilder: (context, details) {
               return Padding(
                 padding: const EdgeInsets.only(top: 24),
-                child: Row(
+                child: Column(
                   children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: details.onStepContinue,
-                        child:
-                            _isLoading
-                                ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                                : Text(
-                                  _currentStep == 5
-                                      ? 'Generate Analysis'
-                                      : 'Next Step',
-                                ),
+                    if (_currentStep == 3) ...[
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          if (_selectedCropId == null) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Please select a crop first')),
+                            );
+                            return;
+                          }
+                          
+                          final data = await _collectCurrentCropData();
+                          setState(() {
+                            _multiCropsData.add(data);
+                            _currentStep = 0; // Go back to Select Farm & Crop
+                          });
+                          _resetCropStepData();
+                          
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Crop added! Now select the next crop to continue.'),
+                                backgroundColor: AppColors.primary,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.add_circle_outline_rounded),
+                        label: const Text('Add Another Crop to this Report'),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(double.infinity, 45),
+                          foregroundColor: AppColors.primary,
+                          side: const BorderSide(color: AppColors.primary),
+                        ),
                       ),
-                    ),
-                    if (_currentStep > 0) ...[
-                      const SizedBox(width: 12),
-                      TextButton(
-                        onPressed: details.onStepCancel,
-                        child: const Text('Back'),
-                      ),
+                      const SizedBox(height: 12),
                     ],
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: details.onStepContinue,
+                            child:
+                                _isLoading
+                                    ? const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                    : Text(
+                                      _currentStep == 5
+                                          ? 'Generate Analysis'
+                                          : 'Next Step',
+                                    ),
+                          ),
+                        ),
+                        if (_currentStep > 0) ...[
+                          const SizedBox(width: 12),
+                          TextButton(
+                            onPressed: details.onStepCancel,
+                            child: const Text('Back'),
+                          ),
+                        ],
+                      ],
+                    ),
                   ],
                 ),
               );
@@ -764,7 +889,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                               )
                               .toList(),
                       onChanged:
-                          widget.preSelectedFarmId != null
+                          (widget.preSelectedFarmId != null || _multiCropsData.isNotEmpty)
                               ? null
                               : (v) {
                                 setState(() => _selectedFarmId = v);
@@ -773,12 +898,14 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
-                      initialValue: _selectedCropId,
+                      key: ValueKey('crop_dropdown_${_multiCropsData.length}_$_selectedCropId'),
+                      value: _selectedCropId,
                       decoration: const InputDecoration(
                         labelText: 'Choose Crop',
                       ),
                       items:
                           _crops
+                              .where((c) => !_multiCropsData.any((m) => m['crop_id'] == c['id'].toString()))
                               .map(
                                 (c) => DropdownMenuItem(
                                   value: c['id'].toString(),
@@ -787,7 +914,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                               )
                               .toList(),
                       onChanged:
-                          widget.preSelectedCropId != null
+                          (widget.preSelectedCropId != null && _multiCropsData.isEmpty)
                               ? null
                               : (value) {
                                 setState(() {
@@ -1109,13 +1236,53 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
               ),
               Step(
                 title: const Text('Executive Signature'),
-                subtitle: const Text(
-                  'Sign below to finalize report',
-                  style: TextStyle(fontSize: 10),
-                ),
+                subtitle: _multiCropsData.isNotEmpty
+                    ? Text('${_multiCropsData.length + 1} Crops in this report')
+                    : const Text(
+                        'Sign below to finalize report',
+                        style: TextStyle(fontSize: 10),
+                      ),
                 isActive: _currentStep >= 5,
                 content: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (_multiCropsData.isNotEmpty) ...[
+                      const Text(
+                        'Added Crops Summary:',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      const SizedBox(height: 8),
+                      ..._multiCropsData.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final data = entry.value;
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppColors.primary.withOpacity(0.1)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.eco_rounded, color: AppColors.primary, size: 16),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  data['crop_name'] ?? 'Unknown Crop',
+                                  style: const TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline, color: Colors.red, size: 18),
+                                onPressed: () => setState(() => _multiCropsData.removeAt(index)),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                      const Divider(height: 32),
+                    ],
                     Container(
                       decoration: BoxDecoration(
                         border: Border.all(color: AppColors.secondary),

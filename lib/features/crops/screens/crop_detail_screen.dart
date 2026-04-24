@@ -51,14 +51,16 @@ class __CropDetailScreenState extends State<CropDetailScreen> {
     try {
       final remoteReports = await SupabaseService.getReportsForCrop(
         widget.crop['id'].toString(),
+        cropName: widget.crop['name'],
       );
       List<Map<String, dynamic>> localReports = [];
 
       if (!kIsWeb) {
+        final cropName = widget.crop['name'] ?? '';
         localReports = await LocalDatabaseService.getData(
           'reports',
-          where: 'crop_id = ?',
-          whereArgs: [widget.crop['id'].toString()],
+          where: 'crop_id = ? OR problem LIKE ?',
+          whereArgs: [widget.crop['id'].toString(), '%--- Crop: $cropName ---%'],
           columns: [
             'id',
             'farm_id',

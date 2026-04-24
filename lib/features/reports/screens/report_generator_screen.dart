@@ -417,62 +417,146 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
   }
 
   Widget _buildProblemSection(String problem) {
-    final parts = problem.split(', ');
-    List<Widget> widgets = [];
+    if (problem.isEmpty) return const Text('No problems identified.');
 
-    for (var part in parts) {
-      if (part.contains('{img:')) {
-        final problemName = part.split('{img:')[0].trim();
-        final imageUrl = part.split('{img:')[1].replaceAll('}', '').trim();
-        widgets.add(
-          Container(
-            width: 260,
-            margin: const EdgeInsets.only(bottom: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  problemName,
+    final List<Widget> cropSections = [];
+    final rawChunks = problem.split('--- Crop: ');
+
+    for (var chunk in rawChunks) {
+      if (chunk.trim().isEmpty) continue;
+
+      final parts = chunk.split(' ---\n');
+      String cropName = 'Report';
+      String problemContent = chunk;
+
+      if (parts.length >= 2) {
+        cropName = parts[0].trim();
+        problemContent = parts[1].trim();
+      }
+
+      final List<Widget> problemWidgets = [];
+      final problemItems = problemContent.split(', ');
+
+      for (var item in problemItems) {
+        if (item.trim().isEmpty) continue;
+
+        if (item.contains('{img:')) {
+          final itemName = item.split('{img:')[0].trim();
+          final imageUrl = item.split('{img:')[1].replaceAll('}', '').trim();
+
+          problemWidgets.add(
+            Container(
+              width: 260,
+              margin: const EdgeInsets.only(bottom: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    itemName,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(
+                      imageUrl,
+                      height: 160,
+                      width: 260,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        height: 150,
+                        width: 250,
+                        color: Colors.grey[100],
+                        child: const Icon(Icons.image_not_supported_rounded, color: Colors.grey),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        } else {
+          problemWidgets.add(
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text('• ${item.trim()}', style: const TextStyle(fontSize: 14)),
+            ),
+          );
+        }
+      }
+
+      cropSections.add(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (parts.length >= 2)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12, top: 4),
+                child: Text(
+                  'Crop: $cropName',
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
-                    fontSize: 13,
+                    fontSize: 15,
+                    color: Color(0xFF1B5E20),
                   ),
                 ),
-                const SizedBox(height: 8),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Image.network(
-                    imageUrl,
-                    height: 160,
-                    width: 260,
-                    fit: BoxFit.cover,
-                    errorBuilder:
-                        (context, error, stackTrace) => Container(
-                          height: 150,
-                          width: 250,
-                          color: Colors.grey[100],
-                          child: const Icon(
-                            Icons.image_not_supported_rounded,
-                            color: Colors.grey,
-                          ),
-                        ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      } else {
-        widgets.add(
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text('• $part', style: const TextStyle(fontSize: 14)),
-          ),
-        );
-      }
+              ),
+            Wrap(spacing: 20, runSpacing: 10, children: problemWidgets),
+            const SizedBox(height: 24),
+          ],
+        ),
+      );
     }
 
-    return Wrap(spacing: 20, runSpacing: 10, children: widgets);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: cropSections,
+    );
+  }
+
+  Widget _parseTextWithImages(String text, {double fontSize = 13}) {
+    if (text.isEmpty) return const SizedBox.shrink();
+
+    final regex = RegExp(r'\{img:\s*(.*?)\}');
+    final List<Widget> widgets = [];
+    int lastMatchEnd = 0;
+    final matches = regex.allMatches(text);
+
+    if (matches.isEmpty) {
+      return Text(text, style: TextStyle(fontSize: fontSize, height: 1.5));
+    }
+
+    for (final match in matches) {
+      final beforeText = text.substring(lastMatchEnd, match.start).trim();
+      if (beforeText.isNotEmpty) {
+        widgets.add(Text(beforeText, style: TextStyle(fontSize: fontSize, height: 1.5)));
+      }
+
+      final url = match.group(1) ?? '';
+      widgets.add(
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.network(
+              url,
+              height: 120,
+              width: 200,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) => const Icon(Icons.broken_image, color: Colors.grey),
+            ),
+          ),
+        ),
+      );
+      lastMatchEnd = match.end;
+    }
+
+    final afterText = text.substring(lastMatchEnd).trim();
+    if (afterText.isNotEmpty) {
+      widgets.add(Text(afterText, style: TextStyle(fontSize: fontSize, height: 1.5)));
+    }
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: widgets);
   }
 
   Widget _buildRecommendationsTable(String recommendations) {
@@ -709,8 +793,40 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
   }
 
   Widget _buildHistorySection(String currentHistory) {
+    final List<Widget> currentVisitWidgets = [];
+
+    if (currentHistory.isEmpty) {
+      currentVisitWidgets.add(const Text('No data provided.', style: TextStyle(fontSize: 13)));
+    } else {
+      final cropChunks = currentHistory.split('--- Crop: ');
+      for (var chunk in cropChunks) {
+        if (chunk.trim().isEmpty) continue;
+        final parts = chunk.split(' ---\n');
+        if (parts.length >= 2) {
+          final cropName = parts[0].trim();
+          final content = parts[1].trim();
+          currentVisitWidgets.add(
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Crop: $cropName', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.primary)),
+                  const SizedBox(height: 4),
+                  _parseTextWithImages(content, fontSize: 12),
+                ],
+              ),
+            ),
+          );
+        } else {
+          currentVisitWidgets.add(_parseTextWithImages(chunk, fontSize: 12));
+        }
+      }
+    }
+
     return Container(
       padding: const EdgeInsets.all(20),
+      width: double.infinity,
       decoration: BoxDecoration(
         color: AppColors.secondary.withOpacity(0.5),
         borderRadius: BorderRadius.circular(24),
@@ -733,14 +849,7 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          Text(
-            currentHistory.isEmpty ? 'No data provided.' : currentHistory,
-            style: TextStyle(
-              fontSize: 13,
-              color: AppColors.textBlack.withOpacity(0.8),
-              height: 1.5,
-            ),
-          ),
+          ...currentVisitWidgets,
           if (_isLoadingHistory)
             const Padding(
               padding: EdgeInsets.only(top: 12),
@@ -775,10 +884,7 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      h['previous_inputs'] ?? 'No data',
-                      style: const TextStyle(fontSize: 12),
-                    ),
+                    _parseTextWithImages(h['previous_inputs'] ?? 'No data', fontSize: 12),
                   ],
                 ),
               ),

@@ -476,12 +476,17 @@ class SupabaseService {
     }
   }
 
-  static Future<List<Map<String, dynamic>>> getReportsForCrop(String cropId) async {
-    final response = await client
-        .from('reports')
-        .select()
-        .eq('crop_id', cropId)
-        .order('created_at', ascending: false);
+  static Future<List<Map<String, dynamic>>> getReportsForCrop(String cropId, {String? cropName}) async {
+    var query = client.from('reports').select();
+    
+    if (cropName != null && cropName.isNotEmpty) {
+      // Show reports where this crop is the primary crop OR mentioned in a multi-crop analysis
+      query = query.or('crop_id.eq.$cropId,problem.ilike.%--- Crop: $cropName ---%');
+    } else {
+      query = query.eq('crop_id', cropId);
+    }
+    
+    final response = await query.order('created_at', ascending: false);
     return List<Map<String, dynamic>>.from(response);
   }
 
