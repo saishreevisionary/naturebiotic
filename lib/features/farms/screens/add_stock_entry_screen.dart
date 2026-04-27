@@ -34,6 +34,7 @@ class _AddStockEntryScreenState extends State<AddStockEntryScreen> {
 
   bool _isLoading = false;
   bool _isDataLoading = true;
+  String _userRole = 'executive';
 
   @override
   void initState() {
@@ -43,6 +44,7 @@ class _AddStockEntryScreenState extends State<AddStockEntryScreen> {
 
   Future<void> _loadOptions() async {
     try {
+      final profile = await SupabaseService.getProfile();
       final items = await SupabaseService.getHierarchicalDropdownOptions(
         'product_name',
       );
@@ -50,6 +52,7 @@ class _AddStockEntryScreenState extends State<AddStockEntryScreen> {
 
       if (mounted) {
         setState(() {
+          _userRole = profile?['role'] ?? 'executive';
           _allProducts = items;
           _itemOptions = items.map((e) => e['label'].toString()).toList();
           _globalDoseUnits = units.map((e) => e['label'].toString()).toList();
@@ -95,12 +98,20 @@ class _AddStockEntryScreenState extends State<AddStockEntryScreen> {
       final List variants = product['variants'] ?? [];
 
       if (variants.isNotEmpty) {
-        row.packetSizeOptions =
-            variants.map((v) => v['label'].toString()).toList();
+        row.packetSizeOptions = variants
+            .map((v) => v['label'].toString())
+            .where((label) => 
+                !label.toLowerCase().contains('nature') && 
+                !label.toLowerCase().contains('biotic'))
+            .toList();
       } else {
         row.packetSizeOptions = [...defaults];
         for (var u in _globalDoseUnits) {
-          if (!row.packetSizeOptions.contains(u)) row.packetSizeOptions.add(u);
+          if (!row.packetSizeOptions.contains(u) && 
+              !u.toLowerCase().contains('nature') && 
+              !u.toLowerCase().contains('biotic')) {
+            row.packetSizeOptions.add(u);
+          }
         }
       }
     }
@@ -491,14 +502,16 @@ class _AddStockEntryScreenState extends State<AddStockEntryScreen> {
     return Row(
       children: [
         _typeOption('RECEIVED', Colors.green, Icons.download_rounded),
-        const SizedBox(width: 8),
-        _typeOption('DELIVERED', Colors.orange, Icons.upload_rounded),
-        const SizedBox(width: 8),
-        _typeOption(
-          'RETURN',
-          Colors.blue,
-          Icons.settings_backup_restore_rounded,
-        ),
+        if (_userRole != 'executive') ...[
+          const SizedBox(width: 8),
+          _typeOption('DELIVERED', Colors.orange, Icons.upload_rounded),
+          const SizedBox(width: 8),
+          _typeOption(
+            'RETURN',
+            Colors.blue,
+            Icons.settings_backup_restore_rounded,
+          ),
+        ],
       ],
     );
   }

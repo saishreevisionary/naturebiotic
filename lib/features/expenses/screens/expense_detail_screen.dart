@@ -47,7 +47,12 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
     final balance = allotted - spent;
     
     final name = _data['profiles']?['full_name'] ?? 'Executive';
-    final date = DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.parse(_data['created_at']));
+    String date = 'N/A';
+    if (_data['created_at'] != null) {
+      try {
+        date = DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.parse(_data['created_at']));
+      } catch (_) {}
+    }
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -257,8 +262,8 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
     );
   }
 
-  Widget _statusChip(String status, String? returnStatus) {
-    String label = status;
+  Widget _statusChip(String? status, String? returnStatus) {
+    String label = status ?? 'UNKNOWN';
     Color color = Colors.grey;
     if (status == 'ACTIVE') { label = 'Active'; color = Colors.green; }
     else if (status == 'CLOSED') { label = 'Closed'; color = Colors.blue; }

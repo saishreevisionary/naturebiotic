@@ -5,6 +5,7 @@ import 'package:nature_biotic/services/supabase_service.dart';
 import 'package:nature_biotic/features/inventory/screens/stock_transaction_form.dart';
 import 'package:nature_biotic/features/inventory/screens/executive_stock_acceptance_screen.dart';
 import 'package:nature_biotic/features/inventory/screens/executive_stock_detail_screen.dart';
+import 'package:nature_biotic/features/inventory/screens/store_stock_return_acceptance_screen.dart';
 
 class StoreStockScreen extends StatefulWidget {
   const StoreStockScreen({super.key});
@@ -17,6 +18,7 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
   bool _isLoading = true;
   int _pendingCount = 0;
   Map<String, double> _stockInHand = {};
+  Map<String, Map<String, double>> _detailedStock = {};
   String _userRole = 'executive';
   String _userName = 'User';
   List<Map<String, dynamic>> _usageHistory = [];
@@ -39,13 +41,17 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
 
       if (_userRole == 'executive') {
         final stock = await SupabaseService.getExecutiveStock();
+        final detailed = await SupabaseService.getDetailedExecutiveStock();
         final usage = await SupabaseService.getExecutiveStockUsage();
         final pending = await SupabaseService.getPendingStoreTransactions();
+        final transactions = await SupabaseService.getExecutiveTransactions(SupabaseService.client.auth.currentUser!.id);
 
         if (mounted) {
           setState(() {
             _stockInHand = stock;
+            _detailedStock = detailed;
             _usageHistory = usage;
+            _allTransactions = transactions;
             _pendingCount = pending.length;
             _isLoading = false;
           });
@@ -53,6 +59,7 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
       } else {
         final pending = await SupabaseService.getPendingStoreTransactions();
         final stock = await SupabaseService.getUnifiedStoreStock();
+        final detailed = await SupabaseService.getDetailedStoreStock();
         final transactions = await SupabaseService.getStoreTransactions();
 
         List<Map<String, dynamic>> executives = [];
@@ -75,6 +82,7 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
           setState(() {
             _pendingCount = pending.length;
             _stockInHand = stock;
+            _detailedStock = detailed;
             _allTransactions = transactions;
             _executives = executives;
             _executiveStockTotals = execStockTotals;
@@ -82,6 +90,13 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
           });
         }
       }
+      
+      // Safety fallback to ensure loading stops
+      Future.delayed(const Duration(seconds: 5), () {
+        if (mounted && _isLoading) {
+          setState(() => _isLoading = false);
+        }
+      });
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -99,12 +114,31 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
   }
 
   void _openTransactionForm(String type) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => StockTransactionForm(transactionType: type),
-      ),
-    ).then((_) => _refreshData());
+    if (type == 'RETURN') {
+      if (_userRole == 'executive') {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => StockTransactionForm(transactionType: type),
+          ),
+        ).then((_) => _refreshData());
+      } else {
+        // Store Manager and Admin see the Acceptance/Approval list
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const StoreStockReturnAcceptanceScreen(),
+          ),
+        ).then((_) => _refreshData());
+      }
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => StockTransactionForm(transactionType: type),
+        ),
+      ).then((_) => _refreshData());
+    }
   }
 
   void _openAcceptanceScreen() {
@@ -118,154 +152,529 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final bool isWide = width > 1100;
     final lowStock = _getLowStockItems();
 
-    if (_userRole == 'executive') {
-      return Scaffold(
-        backgroundColor: AppColors.background,
-        appBar: AppBar(
-          title: const Text('My Stock'),
-          elevation: 0,
-          backgroundColor: Colors.white,
-          foregroundColor: AppColors.textBlack,
-          actions: [
-            IconButton(
-              onPressed: _refreshData,
-              icon: const Icon(Icons.refresh_rounded),
-            ),
-          ],
-        ),
-        body:
-            _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : RefreshIndicator(
-                  onRefresh: _refreshData,
-                  child: CustomScrollView(
-                    slivers: [
-                      if (_pendingCount > 0)
-                        SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-                            child: _buildPendingAlert(),
-                          ),
-                        ),
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Quick Actions',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              Row(
-                                children: [
-                                  _compactActionCard(
-                                    'Return',
-                                    Icons.keyboard_return_rounded,
-                                    Colors.purple,
-                                    () => _openTransactionForm('RETURN'),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Stock in Your Hand',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                            ],
-                          ),
-                        ),
-                      ),
-                      _buildInventoryList(),
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Analytics (Recent Usage)',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              if (_usageHistory.isEmpty)
-                                const Center(
-                                  child: Text('No usage recorded yet.'),
-                                )
-                              else
-                                ..._usageHistory.map((u) => _buildUsageItem(u)),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SliverToBoxAdapter(child: SizedBox(height: 100)),
-                    ],
-                  ),
-                ),
+    if (_isLoading) {
+      return const Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(child: CircularProgressIndicator()),
       );
     }
 
+    // Wide Layout for Admin/Store
+    if (isWide && (_userRole == 'admin' || _userRole == 'store')) {
+      return DefaultTabController(
+        length: 3,
+        child: Scaffold(
+          backgroundColor: const Color(0xFFF8F9FA), // Light gray background
+          body: Column(
+            children: [
+              // New Premium Admin Header
+              _buildModernAdminHeader(),
+              
+              // Navigation Bar
+              Container(
+                color: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 40),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TabBar(
+                        isScrollable: true,
+                        labelColor: AppColors.primary,
+                        unselectedLabelColor: Colors.grey[400],
+                        indicatorColor: AppColors.primary,
+                        indicatorWeight: 4,
+                        labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        tabs: const [
+                          Tab(text: 'Store Stock'),
+                          Tab(text: 'Purchase History'),
+                          Tab(text: 'Executive Status'),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: _refreshData,
+                      icon: const Icon(Icons.refresh_rounded),
+                      color: AppColors.primary,
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1, color: Color(0xFFEEEEEE)),
+              
+              // Tab Content
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    _buildWideStoreStockTab(lowStock),
+                    _buildPurchaseHistoryTab(),
+                    if (_userRole != 'executive') _buildExecutiveStockTab(),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Default Layout (Mobile or Executive)
     return DefaultTabController(
-      length: 3,
+      length: _userRole == 'executive' ? 2 : 3,
       child: Scaffold(
         backgroundColor: AppColors.background,
-        body:
-            _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : NestedScrollView(
-                  headerSliverBuilder:
-                      (context, innerBoxIsScrolled) => [
-                        _buildHero(),
-                        SliverToBoxAdapter(
-                          child: TabBar(
-                            isScrollable: false,
-                            labelColor: AppColors.primary,
-                            unselectedLabelColor: AppColors.textGray,
-                            indicatorColor: AppColors.primary,
-                            indicatorWeight: 3,
-                            tabs: [
-                              const Tab(text: 'Store Stock'),
-                              const Tab(text: 'Purchase'),
-                              const Tab(text: 'Executive'),
-                            ],
-                          ),
-                        ),
-                      ],
-                  body: TabBarView(
-                    children: [
-                      _buildStoreStockTab(lowStock),
-                      _buildPurchaseHistoryTab(),
-                      _buildExecutiveStockTab(),
-                    ],
-                  ),
-                ),
+        appBar: _userRole == 'executive' 
+            ? AppBar(
+                title: const Text('My Inventory'),
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.black,
+                elevation: 0,
+                actions: [IconButton(onPressed: _refreshData, icon: const Icon(Icons.refresh_rounded))],
+              )
+            : null,
+        body: NestedScrollView(
+          headerSliverBuilder: (context, innerBoxIsScrolled) => [
+            if (_userRole != 'executive') _buildHero(),
+            SliverToBoxAdapter(
+              child: TabBar(
+                isScrollable: false,
+                labelColor: AppColors.primary,
+                tabs: [
+                  const Tab(text: 'Stock'), 
+                  const Tab(text: 'History'), 
+                  if (_userRole != 'executive') const Tab(text: 'Execs')
+                ],
+              ),
+            ),
+          ],
+          body: TabBarView(
+            children: [
+              _buildStoreStockTab(lowStock),
+              _userRole == 'executive' ? _buildHifiExecutiveHistoryTab() : _buildPurchaseHistoryTab(),
+              if (_userRole != 'executive') _buildExecutiveStockTab(),
+            ],
+          ),
+        ),
       ),
     );
   }
 
+  Widget _buildModernAdminHeader() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(40, 70, 40, 40),
+      decoration: const BoxDecoration(
+        color: Color(0xFF0D330F), // Sleek Solid Deep Green for professional look
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'STORE MANAGEMENT',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.5),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 2,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 4,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: AppColors.accent,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Text(
+                    _userName,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 32,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -1,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Managing inventory for Nature Biotic Store',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.5),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ],
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white.withOpacity(0.1)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.calendar_today_rounded, color: Colors.white, size: 16),
+                const SizedBox(width: 12),
+                Text(
+                  DateTime.now().toString().split(' ')[0],
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWideStoreStockTab(List<MapEntry<String, double>> lowStock) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(40),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _buildStatTile(
+                'Total Items',
+                _stockInHand.length.toString(),
+                Icons.inventory_2_rounded,
+                AppColors.primary,
+              ),
+              const SizedBox(width: 24),
+              _buildStatTile(
+                'Low Stock',
+                lowStock.length.toString(),
+                Icons.warning_amber_rounded,
+                Colors.orange,
+              ),
+              const SizedBox(width: 24),
+              _buildStatTile(
+                'Pending Tasks',
+                _pendingCount.toString(),
+                Icons.pending_actions_rounded,
+                Colors.blue,
+              ),
+            ],
+          ),
+          const SizedBox(height: 48),
+          Text(
+            'Quick Actions',
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textBlack,
+            ),
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              _buildActionTile(
+                'Purchase Stock',
+                'Add new inventory to the store',
+                Icons.add_shopping_cart_rounded,
+                Colors.blue,
+                () => _openTransactionForm('PURCHASE'),
+              ),
+              const SizedBox(width: 24),
+              _buildActionTile(
+                'Deliver Stock',
+                'Assign stock to field executives',
+                Icons.local_shipping_rounded,
+                Colors.orange,
+                () => _openTransactionForm('DELIVERY'),
+              ),
+              const SizedBox(width: 24),
+              _buildActionTile(
+                'Return Stock',
+                'Process stock returns to store',
+                Icons.keyboard_return_rounded,
+                Colors.purple,
+                () => _openTransactionForm('RETURN'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 48),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Store Inventory',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textBlack,
+                ),
+              ),
+              Text(
+                'Showing ${_stockInHand.length} items',
+                style: const TextStyle(color: AppColors.textGray),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          if (_stockInHand.isEmpty)
+            const Center(child: Text('No stock recorded yet.'))
+          else
+            LayoutBuilder(
+              builder: (context, constraints) {
+                return GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 380,
+                    mainAxisExtent: 180,
+                    crossAxisSpacing: 24,
+                    mainAxisSpacing: 24,
+                  ),
+                  itemCount: _stockInHand.length,
+                  itemBuilder: (context, index) {
+                    final productName = _detailedStock.keys.elementAt(index);
+                    final variants = _detailedStock[productName]!;
+                    return _buildWideInventoryCard(productName, variants);
+                  },
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatTile(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.black.withOpacity(0.05)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  label.toUpperCase(),
+                  style: TextStyle(
+                    color: AppColors.textGray.withOpacity(0.6),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                Icon(icon, color: color, size: 16),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textBlack,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionTile(
+    String title,
+    String subtitle,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: color.withOpacity(0.15), width: 1.5),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: color, size: 24),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textBlack,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  color: AppColors.textGray.withOpacity(0.6),
+                  fontSize: 12,
+                  height: 1.3,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWideInventoryCard(String name, Map<String, double> variants) {
+    double totalQty = 0;
+    variants.forEach((_, q) {
+      if (q > 0) totalQty += q;
+    });
+    
+    final isLow = totalQty < 10;
+    
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.black.withOpacity(0.04)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isLow ? Colors.red.withOpacity(0.05) : AppColors.background,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  isLow ? Icons.error_outline_rounded : Icons.inventory_2_outlined,
+                  color: isLow ? Colors.red : AppColors.primary.withOpacity(0.6),
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 20),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                        color: AppColors.textBlack,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      isLow ? 'RESTOCK SOON' : 'IN STOCK',
+                      style: TextStyle(
+                        color: isLow ? Colors.red : AppColors.primary.withOpacity(0.6),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                totalQty.toStringAsFixed(0),
+                style: TextStyle(
+                  color: isLow ? Colors.red : AppColors.primary,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 24,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'PCS',
+                style: TextStyle(
+                  color: AppColors.textGray.withOpacity(0.3),
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Divider(height: 1),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 24,
+            runSpacing: 12,
+            children: variants.entries.map((v) {
+              final displayQty = v.value > 0 ? v.value : 0.0;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    v.key,
+                    style: TextStyle(
+                      color: AppColors.textGray.withOpacity(0.6),
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    displayQty.toStringAsFixed(0),
+                    style: const TextStyle(
+                      color: AppColors.textBlack,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+
   Widget _buildStoreStockTab(List<MapEntry<String, double>> lowStock) {
+    if (_userRole == 'executive') {
+      return _buildHifiExecutiveStockView(lowStock);
+    }
     return RefreshIndicator(
       onRefresh: _refreshData,
       child: CustomScrollView(
@@ -345,6 +754,548 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildHifiExecutiveStockView(List<MapEntry<String, double>> lowStock) {
+    return RefreshIndicator(
+      onRefresh: _refreshData,
+      child: CustomScrollView(
+        slivers: [
+          // Pending Handover Alert
+          if (_pendingCount > 0)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                child: _buildPendingAlert(),
+              ),
+            ),
+
+          // Quick Actions Grid
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'STOCK ACTIONS',
+                    style: TextStyle(
+                      color: AppColors.textGray.withOpacity(0.5),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      _hifiActionTile(
+                        'Accept Stock',
+                        'Verify incoming',
+                        Icons.verified_user_rounded,
+                        Colors.green,
+                        _openAcceptanceScreen,
+                        badgeCount: _pendingCount,
+                      ),
+                      const SizedBox(width: 12),
+                      _hifiActionTile(
+                        'Return Stock',
+                        'Send back',
+                        Icons.keyboard_return_rounded,
+                        Colors.purple,
+                        () => _openTransactionForm('RETURN'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Inventory List
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'CURRENT INVENTORY',
+                    style: TextStyle(
+                      color: AppColors.textGray.withOpacity(0.5),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  Text(
+                    '${_stockInHand.length} ITEMS',
+                    style: const TextStyle(
+                      color: AppColors.primary,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          
+          _buildHifiInventoryList(),
+          
+          const SliverToBoxAdapter(child: SizedBox(height: 100)),
+        ],
+      ),
+    );
+  }
+
+  Widget _hifiActionTile(String title, String sub, IconData icon, Color color, VoidCallback onTap, {int badgeCount = 0}) {
+    return Expanded(
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  color.withOpacity(0.08),
+                  color.withOpacity(0.02),
+                ],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: color.withOpacity(0.05),
+                  blurRadius: 15,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: BorderRadius.circular(24),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: color.withOpacity(0.1)),
+                  ),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: color.withOpacity(0.15),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: color.withOpacity(0.2),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Icon(icon, color: color, size: 28),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                          color: AppColors.textBlack,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        sub,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: AppColors.textGray.withOpacity(0.6),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (badgeCount > 0)
+            Positioned(
+              top: -8,
+              right: -8,
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.red,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.red.withOpacity(0.4),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Text(
+                  badgeCount.toString(),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHifiLowStockSection(List<MapEntry<String, double>> items) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          child: Text(
+            'RESTOCK REQUIRED',
+            style: TextStyle(
+              color: Colors.red.withOpacity(0.7),
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.2,
+            ),
+          ),
+        ),
+        SizedBox(
+          height: 110,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: items.length,
+            itemBuilder: (context, index) {
+              final item = items[index];
+              return Container(
+                width: 140,
+                margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.02),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.red.withOpacity(0.1)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      item.key,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${item.value.toStringAsFixed(0)} left',
+                      style: const TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHifiInventoryList() {
+    if (_stockInHand.isEmpty) {
+      return const SliverToBoxAdapter(
+        child: Center(
+          child: Padding(
+            padding: EdgeInsets.all(40),
+            child: Text('No stock items in hand'),
+          ),
+        ),
+      );
+    }
+
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      sliver: SliverGrid(
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 16,
+          mainAxisSpacing: 16,
+          mainAxisExtent: 220, // Taller cards for more details
+        ),
+        delegate: SliverChildBuilderDelegate((context, index) {
+          final productName = _detailedStock.keys.elementAt(index);
+          final variants = _detailedStock[productName]!;
+          
+          double totalQty = 0;
+          variants.forEach((_, q) {
+            // Only add positive stock to total for display
+            if (q > 0) totalQty += q;
+          });
+          
+          final isLow = totalQty < 10;
+          final color = isLow ? Colors.red : AppColors.primary;
+
+          return EntranceAnimation(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: color.withOpacity(0.05)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.02),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: Stack(
+                  children: [
+                    // Subtle background icon
+                    Positioned(
+                      right: -10,
+                      bottom: -10,
+                      child: Icon(
+                        Icons.inventory_2_outlined,
+                        size: 80,
+                        color: color.withOpacity(0.03),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      productName,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 16,
+                                        color: AppColors.textBlack,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: color.withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        isLow ? 'RESTOCK SOON' : 'STABLE STOCK',
+                                        style: TextStyle(
+                                          color: color,
+                                          fontSize: 7,
+                                          fontWeight: FontWeight.w900,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: color.withOpacity(0.1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Text(
+                                  totalQty.toStringAsFixed(0),
+                                  style: TextStyle(
+                                    color: color,
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const Spacer(),
+                          Text(
+                            'BREAKDOWN',
+                            style: TextStyle(
+                              color: AppColors.textGray.withOpacity(0.4),
+                              fontSize: 9,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 8,
+                            children: variants.entries.map((v) {
+                              final displayQty = v.value > 0 ? v.value : 0.0;
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    v.key,
+                                    style: TextStyle(
+                                      color: AppColors.textGray.withOpacity(0.5),
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  Text(
+                                    displayQty.toStringAsFixed(0),
+                                    style: const TextStyle(
+                                      color: AppColors.textBlack,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                ],
+                              );
+                            }).toList(),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }, childCount: _detailedStock.length),
+      ),
+    );
+  }
+
+  Widget _buildHifiExecutiveHistoryTab() {
+    final transactions = _allTransactions.where((tx) => 
+      tx['transaction_type'] == 'DELIVERY' || tx['transaction_type'] == 'RETURN'
+    ).toList();
+
+    return RefreshIndicator(
+      onRefresh: _refreshData,
+      child: transactions.isEmpty 
+        ? const Center(child: Text('No transaction history found'))
+        : ListView.builder(
+            padding: const EdgeInsets.all(20),
+            itemCount: transactions.length,
+            itemBuilder: (context, index) {
+              final tx = transactions[index];
+              final date = DateTime.tryParse(tx['created_at']?.toString() ?? '') ?? DateTime.now();
+              final dateStr = '${date.day} ${_getMonthName(date.month)} ${date.year}';
+              final timeStr = '${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+              
+              final isReturn = tx['transaction_type'] == 'RETURN';
+              final status = tx['status']?.toString().toUpperCase() ?? 'PENDING';
+              final isAccepted = status == 'ACCEPTED';
+              
+              return EntranceAnimation(
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withOpacity(0.01), blurRadius: 10, offset: const Offset(0, 4)),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: isReturn ? Colors.purple.withOpacity(0.05) : Colors.green.withOpacity(0.05),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          isReturn ? Icons.keyboard_return_rounded : Icons.local_shipping_rounded,
+                          color: isReturn ? Colors.purple : Colors.green,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              tx['item_name'] ?? 'Unknown',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${isReturn ? 'Returned' : 'Received'} • $dateStr',
+                              style: TextStyle(color: AppColors.textGray.withOpacity(0.6), fontSize: 11),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            '${isReturn ? '-' : '+'}${tx['quantity']} ${tx['unit']}',
+                            style: TextStyle(
+                              color: isReturn ? Colors.red : Colors.green,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: isAccepted ? Colors.green.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              status,
+                              style: TextStyle(
+                                color: isAccepted ? Colors.green : Colors.orange,
+                                fontSize: 8,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+    );
+  }
+
+  String _getMonthName(int month) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return months[month - 1];
   }
 
   Widget _buildPurchaseHistoryTab() {
@@ -573,6 +1524,21 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
                           ),
                         ],
                       ),
+                    ] else ...[
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          _heroStat(
+                            'STOCK IN HAND',
+                            _stockInHand.length.toString(),
+                          ),
+                          const SizedBox(width: 32),
+                          _heroStat(
+                            'UNITS HELD',
+                            _stockInHand.values.fold(0.0, (sum, val) => sum + val).toStringAsFixed(0),
+                          ),
+                        ],
+                      ),
                     ],
                   ],
                 ),
@@ -714,91 +1680,124 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
       padding: const EdgeInsets.all(24),
       sliver: SliverList(
         delegate: SliverChildBuilderDelegate((context, index) {
-          final key = _stockInHand.keys.elementAt(index);
-          final qty = _stockInHand[key]!;
-          final isLow = qty < 10;
+          final productName = _detailedStock.keys.elementAt(index);
+          final variants = _detailedStock[productName]!;
+          
+          double totalQty = 0;
+          variants.forEach((_, q) {
+            if (q > 0) totalQty += q;
+          });
+          
+          final isLow = totalQty < 10;
 
           return EntranceAnimation(
             child: Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(16),
+              margin: const EdgeInsets.only(bottom: 16),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.02),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
+                  BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4)),
                 ],
+                border: Border.all(color: Colors.black.withOpacity(0.03)),
               ),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color:
-                          isLow
-                              ? Colors.red.withOpacity(0.1)
-                              : AppColors.primary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      isLow
-                          ? Icons.warning_amber_rounded
-                          : Icons.inventory_2_outlined,
-                      color: isLow ? Colors.red : AppColors.primary,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
                       children: [
-                        Text(
-                          key,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: isLow ? Colors.red.withOpacity(0.1) : AppColors.primary.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(
+                            isLow ? Icons.warning_amber_rounded : Icons.inventory_2_outlined,
+                            color: isLow ? Colors.red : AppColors.primary,
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                productName,
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              ),
+                              Text(
+                                isLow ? 'LOW STOCK' : 'AVAILABLE STOCK',
+                                style: TextStyle(
+                                  color: isLow ? Colors.red : AppColors.textGray.withOpacity(0.5),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                         Text(
-                          'Available Stock',
+                          totalQty.toStringAsFixed(0),
                           style: TextStyle(
-                            color: AppColors.textGray.withOpacity(0.7),
-                            fontSize: 12,
+                            color: isLow ? Colors.red : AppColors.primary,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'PCS',
+                          style: TextStyle(
+                            color: AppColors.textGray.withOpacity(0.3),
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        '$qty',
-                        style: TextStyle(
-                          color: isLow ? Colors.red : AppColors.primary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      ),
-                      const Text(
-                        'Units',
-                        style: TextStyle(
-                          color: AppColors.textGray,
-                          fontSize: 10,
-                        ),
-                      ),
-                    ],
+                  const Divider(height: 1),
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Wrap(
+                      spacing: 20,
+                      runSpacing: 12,
+                      children: variants.entries.map((v) {
+                        final displayQty = v.value > 0 ? v.value : 0.0;
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              v.key,
+                              style: TextStyle(
+                                color: AppColors.textGray.withOpacity(0.6),
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              displayQty.toStringAsFixed(0),
+                              style: const TextStyle(
+                                color: AppColors.textBlack,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        );
+                      }).toList(),
+                    ),
                   ),
                 ],
               ),
             ),
           );
-        }, childCount: _stockInHand.length),
+        }, childCount: _detailedStock.length),
       ),
     );
   }

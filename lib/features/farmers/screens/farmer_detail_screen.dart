@@ -170,6 +170,13 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen>
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    final width = MediaQuery.sizeOf(context).width;
+    final bool isWide = width > 1100;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -194,294 +201,514 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen>
           const SizedBox(width: 8),
         ],
       ),
-      body:
-          _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 800),
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24.0,
-                      vertical: 8.0,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Center(
-                          child: Stack(
-                            alignment: Alignment.bottomRight,
-                            children: [
-                              Hero(
-                                tag: 'farmer_icon_${_farmer['id']}',
-                                child: Container(
-                                  height: 120,
-                                  width: 120,
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        _getCategoryColor(
-                                          _farmer['category'],
-                                        ).withOpacity(0.8),
-                                        _getCategoryColor(_farmer['category']),
-                                      ],
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                    ),
-                                    borderRadius: BorderRadius.circular(32),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: _getCategoryColor(
-                                          _farmer['category'],
-                                        ).withOpacity(0.3),
-                                        blurRadius: 20,
-                                        offset: const Offset(0, 10),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Center(
-                                    child: Text(
-                                      _getInitials(_farmer['name'] ?? 'F'),
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 40,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: 2,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: const BoxDecoration(
-                                  color: Colors.white,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: _getCategoryColor(
-                                      _farmer['category'],
-                                    ).withOpacity(0.15),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Text(
-                                    _farmer['category']
-                                        .toString()
-                                        .toUpperCase(),
-                                    style: TextStyle(
-                                      color: _getCategoryColor(
-                                        _farmer['category'],
-                                      ),
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w900,
-                                      letterSpacing: 1,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              if (_farmer['is_verified'] == true)
-                                Positioned(
-                                  top: 0,
-                                  left: 0,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(4),
-                                    decoration: const BoxDecoration(
-                                      color: Colors.white,
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                      Icons.verified_rounded,
-                                      color: Colors.blue,
-                                      size: 24,
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        Center(
-                          child: Text(
-                            _farmer['name'] ?? 'N/A',
-                            style: GoogleFonts.outfit(
-                              fontSize: 28,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.textBlack,
-                              letterSpacing: -0.5,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 32),
-                        Text(
-                          'Information',
-                          style: GoogleFonts.outfit(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textBlack,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Container(
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(24),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.03),
-                                blurRadius: 20,
-                                offset: const Offset(0, 10),
-                              ),
-                            ],
-                            border: Border.all(
-                              color: Colors.black.withOpacity(0.02),
-                            ),
-                          ),
-                          child: Column(
-                            children: [
-                              _phoneNumberSection(),
-                              const Divider(height: 32, thickness: 0.5),
-                              _infoSection(
-                                Icons.location_on_rounded,
-                                'Village',
-                                _farmer['village'] ?? 'N/A',
-                              ),
-                              const Divider(height: 32, thickness: 0.5),
-                              _infoSection(
-                                Icons.home_work_rounded,
-                                'Address',
-                                _farmer['address'] ?? 'N/A',
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 32),
-                        Text(
-                          'Farms & Crops',
-                          style: GoogleFonts.outfit(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textBlack,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        if (_farms.isEmpty)
-                          Container(
-                            padding: const EdgeInsets.all(20),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: AppColors.secondary),
-                            ),
-                            child: const Row(
-                              children: [
-                                Icon(
-                                  Icons.agriculture_rounded,
-                                  color: AppColors.primary,
-                                ),
-                                SizedBox(width: 16),
-                                Text('No farms added yet'),
-                              ],
-                            ),
-                          )
-                        else
-                          Column(
-                            children:
-                                _farms.map((farm) => _farmItem(farm)).toList(),
-                          ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: isWide ? 1200 : 800),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 24.0,
+              vertical: 8.0,
+            ),
+            child: isWide ? _buildWideLayout() : _buildMobileLayout(),
+          ),
+        ),
+      ),
+    );
+  }
 
-                        if (_userRole != 'manager') ...[
-                          const SizedBox(height: 24),
-                          ElevatedButton.icon(
-                            onPressed: () async {
-                              await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder:
-                                      (context) =>
-                                          AddFarmScreen(farmerId: _farmer['id']),
-                                ),
-                              );
-                              _loadFarms();
-                            },
-                            icon: const Icon(Icons.add_location_alt_rounded),
-                            label: const Text('Add New Farm'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.white,
-                              foregroundColor: AppColors.primary,
-                              side: BorderSide(
-                                color: AppColors.primary.withOpacity(0.5),
-                              ),
-                              minimumSize: const Size(double.infinity, 60),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              elevation: 0,
-                            ),
-                          ),
-                        ] else if (_farmer['is_verified'] != true) ...[
-                          const SizedBox(height: 24),
-                          ElevatedButton.icon(
-                            onPressed: _isLoading
-                                ? null
-                                : () async {
-                                    setState(() => _isLoading = true);
-                                    try {
-                                      await SupabaseService.verifyItem(
-                                        'farmers',
-                                        _farmer['id'],
-                                      );
-                                      if (mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(
-                                            content: Text('Farmer Verified Successfully'),
-                                            backgroundColor: Colors.green,
-                                          ),
-                                        );
-                                        // State is updated manually below to show success immediately
-                                        setState(() {
-                                          _farmer['is_verified'] = true;
-                                          _isLoading = false;
-                                        });
-                                      }
-                                    } catch (e) {
-                                      if (mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Text('Verification failed: $e'),
-                                            backgroundColor: Colors.red,
-                                          ),
-                                        );
-                                        setState(() => _isLoading = false);
-                                      }
-                                    }
-                                  },
-                            icon: const Icon(Icons.verified_rounded),
-                            label: const Text('Verify Entry'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              foregroundColor: Colors.white,
-                              minimumSize: const Size(double.infinity, 60),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              elevation: 8,
-                              shadowColor: AppColors.primary.withOpacity(0.3),
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 40),
-                      ],
+  Widget _buildMobileLayout() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildProfileHeader(),
+        const SizedBox(height: 32),
+        _buildInformationCard(isWide: false),
+        const SizedBox(height: 32),
+        _buildFarmsSection(),
+        const SizedBox(height: 40),
+      ],
+    );
+  }
+
+  Widget _buildWideLayout() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildWideHeader(),
+        const SizedBox(height: 32),
+        _buildInformationCard(isWide: true),
+        const SizedBox(height: 32),
+        _buildFarmsSection(),
+        const SizedBox(height: 40),
+      ],
+    );
+  }
+
+  Widget _buildWideHeader() {
+    return Container(
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(32),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+        border: Border.all(color: Colors.black.withOpacity(0.02)),
+      ),
+      child: Row(
+        children: [
+          _buildAvatar(size: 100),
+          const SizedBox(width: 32),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      _farmer['name'] ?? 'N/A',
+                      style: GoogleFonts.outfit(
+                        fontSize: 32,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textBlack,
+                        letterSpacing: -0.5,
+                      ),
                     ),
+                    const SizedBox(width: 12),
+                    if (_farmer['is_verified'] == true) _buildVerifiedBadge(),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _buildCategoryBadge(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInformationCard({required bool isWide}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Information',
+          style: GoogleFonts.outfit(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textBlack,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ],
+            border: Border.all(color: Colors.black.withOpacity(0.02)),
+          ),
+          child: isWide ? _buildWideInfoContent() : _buildMobileInfoContent(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMobileInfoContent() {
+    return Column(
+      children: [
+        _phoneNumberSection(),
+        const Divider(height: 32, thickness: 0.5),
+        _infoSection(
+          Icons.location_on_rounded,
+          'Village',
+          _farmer['village'] ?? 'N/A',
+        ),
+        const Divider(height: 32, thickness: 0.5),
+        _infoSection(
+          Icons.home_work_rounded,
+          'Address',
+          _farmer['address'] ?? 'N/A',
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWideInfoContent() {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _buildInfoTile(
+                icon: Icons.phone_rounded,
+                label: 'Mobile Number',
+                value: _farmer['mobile'] ?? 'N/A',
+                onAction:
+                    (_farmer['mobile'] != null &&
+                            _farmer['mobile'].toString().isNotEmpty)
+                        ? _initiateCall
+                        : null,
+                actionIcon: Icons.call_rounded,
+              ),
+            ),
+            const SizedBox(width: 24),
+            Expanded(
+              child: _buildInfoTile(
+                icon: Icons.location_on_rounded,
+                label: 'Village',
+                value: _farmer['village'] ?? 'N/A',
+                iconColor: Colors.orange,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+        _buildInfoTile(
+          icon: Icons.home_work_rounded,
+          label: 'Address',
+          value: _farmer['address'] ?? 'N/A',
+          iconColor: Colors.blue,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInfoTile({
+    required IconData icon,
+    required String label,
+    required String value,
+    VoidCallback? onAction,
+    IconData? actionIcon,
+    Color? iconColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.background.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.black.withOpacity(0.05)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: (iconColor ?? AppColors.primary).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(
+              icon,
+              color: iconColor ?? AppColors.primary,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: GoogleFonts.outfit(
+                    color: AppColors.textGray.withOpacity(0.6),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: GoogleFonts.outfit(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textBlack,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (onAction != null)
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onAction,
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.green.withOpacity(0.2)),
+                  ),
+                  child: Icon(
+                    actionIcon ?? Icons.call_rounded,
+                    color: Colors.green,
+                    size: 20,
                   ),
                 ),
               ),
+            ),
+        ],
+      ),
     );
+  }
+
+  Widget _buildWideProfileCard() {
+    // Kept for potential future use or backward compatibility if needed, 
+    // but the single column wide layout is now primary.
+    return _buildWideHeader();
+  }
+
+  Widget _buildAvatar({double size = 120}) {
+    return Hero(
+      tag: 'farmer_icon_${_farmer['id']}',
+      child: Container(
+        height: size,
+        width: size,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              _getCategoryColor(_farmer['category']).withOpacity(0.8),
+              _getCategoryColor(_farmer['category']),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(size * 0.25),
+          boxShadow: [
+            BoxShadow(
+              color: _getCategoryColor(_farmer['category']).withOpacity(0.3),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Center(
+          child: Text(
+            _getInitials(_farmer['name'] ?? 'F'),
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: size * 0.33,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 2,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCategoryBadge({bool isSmall = false}) {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: isSmall ? 8 : 10,
+        vertical: isSmall ? 3 : 4,
+      ),
+      decoration: BoxDecoration(
+        color: _getCategoryColor(_farmer['category']).withOpacity(0.15),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        _farmer['category'].toString().toUpperCase(),
+        style: TextStyle(
+          color: _getCategoryColor(_farmer['category']),
+          fontSize: isSmall ? 9 : 10,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 1,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVerifiedBadge() {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+      ),
+      child: const Icon(Icons.verified_rounded, color: Colors.blue, size: 24),
+    );
+  }
+
+  Widget _buildProfileHeader() {
+    return Column(
+      children: [
+        Center(
+          child: Stack(
+            alignment: Alignment.bottomRight,
+            children: [
+              _buildAvatar(size: 120),
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                ),
+                child: _buildCategoryBadge(),
+              ),
+              if (_farmer['is_verified'] == true)
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  child: _buildVerifiedBadge(),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+        Center(
+          child: Text(
+            _farmer['name'] ?? 'N/A',
+            style: GoogleFonts.outfit(
+              fontSize: 28,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textBlack,
+              letterSpacing: -0.5,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+
+
+  Widget _buildFarmsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Farms & Crops',
+          style: GoogleFonts.outfit(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textBlack,
+          ),
+        ),
+        const SizedBox(height: 16),
+        if (_farms.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppColors.secondary),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.agriculture_rounded, color: AppColors.primary),
+                SizedBox(width: 16),
+                Text('No farms added yet'),
+              ],
+            ),
+          )
+        else
+          Column(children: _farms.map((farm) => _farmItem(farm)).toList()),
+        _buildActionButtons(),
+      ],
+    );
+  }
+
+  Widget _buildActionButtons() {
+    if (_userRole != 'manager') {
+      return Column(
+        children: [
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder:
+                      (context) => AddFarmScreen(farmerId: _farmer['id']),
+                ),
+              );
+              _loadFarms();
+            },
+            icon: const Icon(Icons.add_location_alt_rounded),
+            label: const Text('Add New Farm'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: AppColors.primary,
+              side: BorderSide(color: AppColors.primary.withOpacity(0.5)),
+              minimumSize: const Size(double.infinity, 60),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              elevation: 0,
+            ),
+          ),
+        ],
+      );
+    } else if (_farmer['is_verified'] != true) {
+      return Column(
+        children: [
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed:
+                _isLoading
+                    ? null
+                    : () async {
+                      setState(() => _isLoading = true);
+                      try {
+                        await SupabaseService.verifyItem(
+                          'farmers',
+                          _farmer['id'],
+                        );
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Farmer Verified Successfully'),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                          setState(() {
+                            _farmer['is_verified'] = true;
+                            _isLoading = false;
+                          });
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Verification failed: $e'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                          setState(() => _isLoading = false);
+                        }
+                      }
+                    },
+            icon: const Icon(Icons.verified_rounded),
+            label: const Text('Verify Entry'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 60),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              elevation: 8,
+              shadowColor: AppColors.primary.withOpacity(0.3),
+            ),
+          ),
+        ],
+      );
+    }
+    return const SizedBox.shrink();
   }
 
   Widget _farmItem(Map<String, dynamic> farm) {

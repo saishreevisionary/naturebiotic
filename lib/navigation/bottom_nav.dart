@@ -53,7 +53,7 @@ class _BottomNavState extends State<BottomNav> {
       const DashboardScreen(),
       const ExecutiveDialerScreen(),
       const StoreStockScreen(),
-      _userRole == 'manager'
+      (_userRole == 'manager' || _userRole == 'admin')
           ? const ManagerExpenseControl()
           : const ExecutiveExpenseDashboard(),
       const FarmPdfFolderScreen(),
@@ -115,14 +115,19 @@ class _BottomNavState extends State<BottomNav> {
         body: Row(
           children: [
             _buildDesktopSidebar(screens),
-            Expanded(child: IndexedStack(index: safeIndex, children: screens)),
+            Expanded(
+              child: Container(
+                color: Colors.blue.withOpacity(0.1), // Debug background
+                child: screens[safeIndex],
+              ),
+            ),
           ],
         ),
       );
     }
 
     return Scaffold(
-      body: IndexedStack(index: safeIndex, children: screens),
+      body: screens[safeIndex],
       bottomNavigationBar:
           screens.length <= 1
               ? null
@@ -165,7 +170,7 @@ class _BottomNavState extends State<BottomNav> {
 
   Widget _buildDesktopSidebar(List<Widget> screens) {
     return Container(
-      width: 260,
+      width: 240,
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
@@ -230,7 +235,10 @@ class _BottomNavState extends State<BottomNav> {
               child: Column(
                 children:
                     _userRole == 'store'
-                        ? [_sidebarItem(0, Icons.inventory_2_rounded, 'Stock')]
+                        ? [
+                          _sidebarItem(0, Icons.inventory_2_rounded, 'Stock'),
+                          _sidebarItem(1, Icons.person_rounded, 'Profile'),
+                        ]
                         : [
                           _sidebarItem(0, Icons.dashboard_rounded, 'Dashboard'),
                           _sidebarItem(1, Icons.call_rounded, 'Nature Biotic'),

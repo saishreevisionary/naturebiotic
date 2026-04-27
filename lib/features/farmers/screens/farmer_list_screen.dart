@@ -207,6 +207,10 @@ class _FarmerListScreenState extends State<FarmerListScreen> {
                 ),
                 Builder(
                   builder: (context) {
+                    final width = MediaQuery.sizeOf(context).width;
+                    final bool isWide = width > 1100;
+                    final int crossAxisCount = width > 1600 ? 5 : 4;
+
                     final query = _searchController.text.toLowerCase();
                     final filtered = _farmers.where((f) {
                       final name = (f['name'] ?? '').toString().toLowerCase();
@@ -237,6 +241,49 @@ class _FarmerListScreenState extends State<FarmerListScreen> {
                                 ),
                               ),
                             ],
+                          ),
+                        ),
+                      );
+                    }
+
+                    if (isWide) {
+                      return SliverPadding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                        sliver: SliverGrid(
+                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: crossAxisCount,
+                            crossAxisSpacing: 20,
+                            mainAxisSpacing: 20,
+                            childAspectRatio: 0.9,
+                          ),
+                          delegate: SliverChildBuilderDelegate(
+                            (context, index) {
+                              final farmer = filtered[index];
+                              return EntranceAnimation(
+                                delay: 50 + (index * 30),
+                                child: FarmerCard(
+                                  id: farmer['id'].toString(),
+                                  name: farmer['name'] ?? 'N/A',
+                                  village: farmer['village'] ?? 'N/A',
+                                  category: farmer['category'] ?? 'Warm',
+                                  categoryColor: _getCategoryColor(farmer['category']),
+                                  isVerified: farmer['is_verified'] == true,
+                                  isGrid: true,
+                                  onTap: () async {
+                                    final result = await Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => FarmerDetailScreen(farmer: farmer),
+                                      ),
+                                    );
+                                    if (result == true) {
+                                      _loadFarmers();
+                                    }
+                                  },
+                                ),
+                              );
+                            },
+                            childCount: filtered.length,
                           ),
                         ),
                       );
@@ -388,6 +435,7 @@ class FarmerCard extends StatelessWidget {
   final Color categoryColor;
   final bool isVerified;
   final VoidCallback? onTap;
+  final bool isGrid;
 
   const FarmerCard({
     super.key,
@@ -398,6 +446,7 @@ class FarmerCard extends StatelessWidget {
     required this.categoryColor,
     this.isVerified = true,
     this.onTap,
+    this.isGrid = false,
   });
 
   String _getInitials(String name) {
@@ -414,7 +463,7 @@ class FarmerCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
+      margin: isGrid ? EdgeInsets.zero : const EdgeInsets.only(bottom: 20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
@@ -434,125 +483,158 @@ class FarmerCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(24),
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Hero(
-                  tag: 'farmer_icon_$id',
-                  child: Container(
-                    height: 64,
-                    width: 64,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          categoryColor.withOpacity(0.8),
-                          categoryColor,
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: categoryColor.withOpacity(0.3),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Center(
-                      child: Text(
-                        _getInitials(name),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 20),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        name,
-                        style: GoogleFonts.outfit(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textBlack,
-                          letterSpacing: -0.2,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Icon(Icons.location_on_rounded, size: 14, color: AppColors.textGray.withOpacity(0.6)),
-                          const SizedBox(width: 4),
-                          Text(
-                            village,
-                            style: GoogleFonts.outfit(
-                              fontSize: 14,
-                              color: AppColors.textGray.withOpacity(0.8),
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: categoryColor.withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 6,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                color: categoryColor,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              category.toUpperCase(),
-                              style: TextStyle(
-                                color: categoryColor,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 0.8,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppColors.background,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: const Icon(
-                    Icons.chevron_right_rounded,
-                    size: 20,
-                    color: AppColors.primary,
-                  ),
-                ),
-              ],
+            child: isGrid ? _buildGridLayout() : _buildListLayout(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildListLayout() {
+    return Row(
+      children: [
+        _buildAvatar(),
+        const SizedBox(width: 20),
+        Expanded(child: _buildDetails(isGrid: false)),
+        _buildChevron(),
+      ],
+    );
+  }
+
+  Widget _buildGridLayout() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _buildAvatar(),
+        const SizedBox(height: 16),
+        _buildDetails(isGrid: true),
+      ],
+    );
+  }
+
+  Widget _buildAvatar() {
+    return Hero(
+      tag: 'farmer_icon_$id',
+      child: Container(
+        height: 64,
+        width: 64,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              categoryColor.withOpacity(0.8),
+              categoryColor,
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: categoryColor.withOpacity(0.3),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Center(
+          child: Text(
+            _getInitials(name),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1,
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildDetails({required bool isGrid}) {
+    return Column(
+      crossAxisAlignment:
+          isGrid ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+      children: [
+        Text(
+          name,
+          style: GoogleFonts.outfit(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textBlack,
+            letterSpacing: -0.2,
+          ),
+          maxLines: 1,
+          textAlign: isGrid ? TextAlign.center : TextAlign.start,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 4),
+        Row(
+          mainAxisAlignment:
+              isGrid ? MainAxisAlignment.center : MainAxisAlignment.start,
+          children: [
+            Icon(
+              Icons.location_on_rounded,
+              size: 14,
+              color: AppColors.textGray.withOpacity(0.6),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              village,
+              style: GoogleFonts.outfit(
+                fontSize: 14,
+                color: AppColors.textGray.withOpacity(0.8),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: categoryColor.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: categoryColor,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                category.toUpperCase(),
+                style: TextStyle(
+                  color: categoryColor,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildChevron() {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: const Icon(
+        Icons.chevron_right_rounded,
+        size: 20,
+        color: AppColors.primary,
       ),
     );
   }

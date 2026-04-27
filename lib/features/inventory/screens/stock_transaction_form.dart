@@ -23,10 +23,13 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
   final _quantityController = TextEditingController();
   final _unitController = TextEditingController(text: 'Units');
   final _vendorNameController = TextEditingController();
+  final _buyerNameController = TextEditingController();
 
   String? _selectedExecutiveId;
   String? _userRole;
   List<Map<String, dynamic>> _executives = [];
+  Map<int, String> _productVendors = {};
+  Map<String, Map<String, double>> _detailedStock = {};
 
   // Product Dropdown Data
   List<Map<String, dynamic>> _masterProducts = [];
@@ -52,12 +55,27 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
       });
     }
 
-    // Fetch Products (Hierarchical: Product -> Sizes)
     try {
       final products = await SupabaseService.getHierarchicalDropdownOptions(
         'product_name',
       );
-      if (mounted) setState(() => _masterProducts = products);
+      final vendorMappings = await SupabaseService.getDropdownOptions(
+        'product_vendor_map',
+      );
+
+      final Map<int, String> vendorMap = {};
+      for (var mapping in vendorMappings) {
+        if (mapping['parent_id'] != null) {
+          vendorMap[mapping['parent_id'] as int] = mapping['label'] ?? '';
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _masterProducts = products;
+          _productVendors = vendorMap;
+        });
+      }
     } catch (e) {
       debugPrint('Error loading products: $e');
     }
@@ -74,7 +92,14 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
           });
         }
       } else {
-        if (mounted) setState(() => _isLoadingData = false);
+        // Fetch detailed stock for validation
+        final stock = await SupabaseService.getDetailedExecutiveStock();
+        if (mounted) {
+          setState(() {
+            _detailedStock = stock;
+            _isLoadingData = false;
+          });
+        }
       }
     } else {
       setState(() => _isLoadingData = false);
@@ -82,12 +107,57 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
   }
 
   Future<void> _submit() async {
+    // Custom validation check
+    if (widget.transactionType == 'DELIVERY' && _userRole == 'store') {
+      if (_selectedExecutiveId == null && _buyerNameController.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select an executive or enter buyer name'), backgroundColor: Colors.red),
+        );
+        return;
+      }
+    }
+
     if (!_formKey.currentState!.validate()) return;
+
+    // --- NEW VALIDATION FOR EXECUTIVES RETURNING STOCK ---
+    if (_userRole == 'executive' && widget.transactionType == 'RETURN') {
+      final double qty = double.tryParse(_quantityController.text) ?? 0;
+      final productName = _selectedProduct?['label'] ?? '';
+      final variantName = _selectedVariant?['label'] ?? '';
+      
+      final availableQty = _detailedStock[productName]?[variantName] ?? 0.0;
+      
+      if (qty <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please enter a valid quantity'), backgroundColor: Colors.red),
+        );
+        return;
+      }
+      
+      if (qty > availableQty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.red,
+            content: Text(
+              availableQty <= 0 
+                ? 'Product not available to return (Current stock: 0)'
+                : 'Insufficient stock. You only have $availableQty units available to return.'
+            ),
+          ),
+        );
+        return;
+      }
+    }
+    // ---------------------------------------------------
 
     setState(() => _isSaving = true);
     try {
       final user = SupabaseService.client.auth.currentUser;
       final transactionId = const Uuid().v4();
+
+      final isDirectPurchase = widget.transactionType == 'DELIVERY' && 
+                               _userRole == 'store' && 
+                               _buyerNameController.text.trim().isNotEmpty;
 
       final data = {
         'id': transactionId,
@@ -95,11 +165,12 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
         'transaction_type': widget.transactionType,
         'quantity': double.parse(_quantityController.text),
         'unit': _unitController.text,
-        'executive_id': _selectedExecutiveId,
-        'vendor_name': _vendorNameController.text,
-        'status': widget.transactionType == 'PURCHASE' ? 'ACCEPTED' : 'PENDING',
+        'executive_id': isDirectPurchase ? null : _selectedExecutiveId,
+        'vendor_name': isDirectPurchase ? _buyerNameController.text.trim() : _vendorNameController.text,
+        'status': (widget.transactionType == 'PURCHASE' || isDirectPurchase) ? 'ACCEPTED' : 'PENDING',
         'created_by': user?.id,
         'created_at': DateTime.now().toIso8601String(),
+        if (isDirectPurchase) 'accepted_at': DateTime.now().toIso8601String(),
       };
 
       if (kIsWeb) {
@@ -156,42 +227,9 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
                     ],
                     const SizedBox(height: 24),
 
-                    _buildSectionTitle('Inventory Details'),
-                    const SizedBox(height: 16),
-                    _textField(
-                      _itemNameController,
-                      'Item Name',
-                      'Select Product first',
-                      Icons.inventory_2_rounded,
-                      readOnly: true,
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _textField(
-                            _quantityController,
-                            'Quantity',
-                            '0.0',
-                            Icons.numbers_rounded,
-                            isNumeric: true,
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: _textField(
-                            _unitController,
-                            'Unit',
-                            'Select Product Size',
-                            Icons.straighten_rounded,
-                            readOnly: true,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-
                     if (widget.transactionType == 'PURCHASE') ...[
+                      _buildQuantityUnitFields(),
+                      const SizedBox(height: 24),
                       _buildSectionTitle('Vendor Details'),
                       const SizedBox(height: 16),
                       _textField(
@@ -212,6 +250,38 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
                         ),
                         const SizedBox(height: 16),
                         _dropdownField(),
+                        _buildQuantityUnitFields(),
+                        
+                        if (_userRole == 'store' && widget.transactionType == 'DELIVERY') ...[
+                          const SizedBox(height: 24),
+                          const Center(
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(vertical: 8),
+                              child: Text(
+                                '(OR)',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textGray,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          _buildSectionTitle('Direct Purchase'),
+                          const SizedBox(height: 16),
+                          _textField(
+                            _buyerNameController,
+                            'Buyer Name',
+                            'Who bought this?',
+                            Icons.person_add_alt_1_rounded,
+                            optional: true,
+                          ),
+                          _buildQuantityUnitFields(),
+                        ],
+                      ] else ...[
+                        // For Executives, just show the quantity fields for the return
+                        _buildQuantityUnitFields(),
                       ],
                     ],
 
@@ -265,6 +335,40 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
     );
   }
 
+  Widget _buildQuantityUnitFields() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 16),
+        _buildSectionTitle('Inventory Details'),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: _textField(
+                _quantityController,
+                'Quantity',
+                '0.0',
+                Icons.numbers_rounded,
+                isNumeric: true,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _textField(
+                _unitController,
+                'Unit',
+                'Select Product Size',
+                Icons.straighten_rounded,
+                readOnly: true,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   Widget _textField(
     TextEditingController controller,
     String label,
@@ -272,6 +376,7 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
     IconData icon, {
     bool isNumeric = false,
     bool readOnly = false,
+    bool optional = false,
   }) {
     return TextFormField(
       controller: controller,
@@ -285,7 +390,10 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
         filled: true,
         fillColor: readOnly ? Colors.grey[100] : Colors.white,
       ),
-      validator: (value) => value == null || value.isEmpty ? 'Required' : null,
+      validator: (value) {
+        if (optional) return null;
+        return value == null || value.isEmpty ? 'Required' : null;
+      },
     );
   }
 
@@ -313,6 +421,11 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
           _selectedVariant = null;
           _itemNameController.text = val?['label'] ?? '';
           _unitController.text = 'Units'; // Default
+          
+          // Auto-fill vendor name if mapping exists
+          if (val != null && _productVendors.containsKey(val['id'])) {
+            _vendorNameController.text = _productVendors[val['id']]!;
+          }
         });
       },
       validator: (val) => val == null ? 'Selection required' : null,
@@ -323,6 +436,12 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
     final List<Map<String, dynamic>> variants = List<Map<String, dynamic>>.from(
       _selectedProduct?['variants'] ?? [],
     );
+
+    final vendorName = _vendorNameController.text.trim().toLowerCase();
+    final List<Map<String, dynamic>> filteredVariants = variants.where((v) {
+      final label = (v['label'] ?? '').toString().toLowerCase().trim();
+      return label != vendorName && label != 'nature' && label != 'nature biotic';
+    }).toList();
 
     return DropdownButtonFormField<Map<String, dynamic>>(
       initialValue: _selectedVariant,
@@ -335,7 +454,7 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
         fillColor: Colors.white,
       ),
       items:
-          (variants).map((v) {
+          (filteredVariants).map((v) {
             return DropdownMenuItem<Map<String, dynamic>>(
               value: v,
               child: Text(v['label'] ?? 'Unknown'),
@@ -368,8 +487,19 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
               child: Text(exec['full_name'] ?? 'Unknown'),
             );
           }).toList(),
-      onChanged: (val) => setState(() => _selectedExecutiveId = val),
-      validator: (val) => val == null ? 'Please select an executive' : null,
+      onChanged: (val) {
+        setState(() => _selectedExecutiveId = val);
+        if (val != null) {
+          _buyerNameController.clear();
+        }
+      },
+      validator: (val) {
+        if (widget.transactionType == 'DELIVERY' && _userRole == 'store') {
+          // Validation handled in _submit for this special case
+          return null;
+        }
+        return val == null ? 'Please select an executive' : null;
+      },
     );
   }
 }

@@ -40,6 +40,7 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
     'dose_unit': 'Dose Units',
     'filler_unit': 'Filler Units',
     'per_unit': 'Per Units (e.g. L, Acre, Plant)',
+    'stock_vendor': 'Stock (Default Vendors)',
   };
 
   @override
@@ -81,6 +82,25 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
         _options = await SupabaseService.getHierarchicalDropdownOptions(
           'product_name',
         );
+      } else if (_selectedType == 'stock_vendor') {
+        final products = await SupabaseService.getHierarchicalDropdownOptions(
+          'product_name',
+        );
+        final mappings = await SupabaseService.getDropdownOptions(
+          'product_vendor_map',
+        );
+        _options =
+            products.map((p) {
+              final mapping = mappings.firstWhere(
+                (m) => m['parent_id'] == p['id'],
+                orElse: () => {},
+              );
+              return {
+                ...p,
+                'default_vendor': mapping['label'] ?? '',
+                'mapping_id': mapping['id'],
+              };
+            }).toList();
       } else {
         _options = await SupabaseService.getDropdownOptions(_selectedType!);
       }
@@ -663,15 +683,49 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
                                 ),
                               ),
                               hint: const Text('Choose a category to manage'),
-                              items:
-                                  _typeLabels.entries
-                                      .map(
-                                        (e) => DropdownMenuItem(
-                                          value: e.key,
-                                          child: Text(e.value),
-                                        ),
-                                      )
-                                      .toList(),
+                              items: [
+                                // Farmer Profile
+                                const DropdownMenuItem(
+                                  enabled: false,
+                                  child: Text('FARMER PROFILE', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 11)),
+                                ),
+                                ...['farmer_category'].map((key) => DropdownMenuItem(value: key, child: Padding(padding: const EdgeInsets.only(left: 12), child: Text(_typeLabels[key]!)))),
+                                
+                                // Farm Registration
+                                const DropdownMenuItem(
+                                  enabled: false,
+                                  child: Text('FARM REGISTRATION', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 11)),
+                                ),
+                                ...['soil_type', 'irrigation_type', 'water_source', 'water_quantity', 'power_source', 'acre_unit'].map((key) => DropdownMenuItem(value: key, child: Padding(padding: const EdgeInsets.only(left: 12), child: Text(_typeLabels[key]!)))),
+                                
+                                // Report & Analysis
+                                const DropdownMenuItem(
+                                  enabled: false,
+                                  child: Text('REPORT & ANALYSIS', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 11)),
+                                ),
+                                ...['problem_category', 'problem_item'].map((key) => DropdownMenuItem(value: key, child: Padding(padding: const EdgeInsets.only(left: 12), child: Text(_typeLabels[key]!)))),
+                                
+                                // Crop & Yield
+                                const DropdownMenuItem(
+                                  enabled: false,
+                                  child: Text('CROP & YIELD', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 11)),
+                                ),
+                                ...['master_crop', 'age_unit', 'life_unit', 'count_unit', 'yield_unit', 'yield_period'].map((key) => DropdownMenuItem(value: key, child: Padding(padding: const EdgeInsets.only(left: 12), child: Text(_typeLabels[key]!)))),
+                                
+                                // Product & Treatment
+                                const DropdownMenuItem(
+                                  enabled: false,
+                                  child: Text('PRODUCT & TREATMENT', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 11)),
+                                ),
+                                ...['product_name', 'filler_material', 'application_method', 'dose_unit', 'filler_unit', 'per_unit'].map((key) => DropdownMenuItem(value: key, child: Padding(padding: const EdgeInsets.only(left: 12), child: Text(_typeLabels[key]!)))),
+                                
+                                // Stock Management
+                                const DropdownMenuItem(
+                                  enabled: false,
+                                  child: Text('STOCK', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 11)),
+                                ),
+                                ...['stock_vendor'].map((key) => DropdownMenuItem(value: key, child: Padding(padding: const EdgeInsets.only(left: 12), child: Text(_typeLabels[key]!)))),
+                              ],
                               onChanged: (v) {
                                 setState(() {
                                   _selectedType = v;
@@ -766,6 +820,8 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
                                 ? _buildCropListView()
                                 : _selectedType == 'product_name'
                                 ? _buildHierarchicalProductView()
+                                : _selectedType == 'stock_vendor'
+                                ? _buildStockVendorView()
                                 : _buildFlatListView(),
                       ),
                     ],
@@ -787,6 +843,129 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
               )
               : null,
     );
+  }
+
+  Widget _buildStockVendorView() {
+    if (_options.isEmpty) {
+      return const Center(child: Text('No products found to map vendors to.'));
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(24),
+      itemCount: _options.length,
+      itemBuilder: (context, index) {
+        final item = _options[index];
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              const CircleAvatar(
+                backgroundColor: AppColors.secondary,
+                child: Icon(Icons.inventory_2_rounded, color: AppColors.primary, size: 20),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item['label'] ?? 'Unknown Product',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      item['default_vendor'].isEmpty
+                          ? 'No default vendor set'
+                          : 'Vendor: ${item['default_vendor']}',
+                      style: TextStyle(
+                        color: item['default_vendor'].isEmpty ? Colors.grey : AppColors.primary,
+                        fontSize: 13,
+                        fontStyle: item['default_vendor'].isEmpty ? FontStyle.italic : FontStyle.normal,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.edit_note_rounded, color: AppColors.primary),
+                onPressed: () => _editStockVendor(item),
+                tooltip: 'Set Default Vendor',
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _editStockVendor(Map<String, dynamic> item) async {
+    final controller = TextEditingController(text: item['default_vendor']);
+    final result = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Text('Set Vendor for ${item['label']}'),
+            content: TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                labelText: 'Default Vendor Name',
+                hintText: 'e.g. Astra Crop Care',
+              ),
+              autofocus: true,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Save'),
+              ),
+            ],
+          ),
+    );
+
+    if (result == true) {
+      setState(() => _isLoading = true);
+      try {
+        if (item['mapping_id'] != null) {
+          // Update existing
+          await SupabaseService.updateDropdownOption(
+            item['mapping_id'],
+            controller.text.trim(),
+          );
+        } else {
+          // Add new
+          await SupabaseService.addDropdownOption(
+            'product_vendor_map',
+            controller.text.trim(),
+            parentId: item['id'],
+          );
+        }
+        await _fetchOptions();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error saving vendor: $e'), backgroundColor: Colors.red),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    }
   }
 
   Widget _buildFlatListView() {

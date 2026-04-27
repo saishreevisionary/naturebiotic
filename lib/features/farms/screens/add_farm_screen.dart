@@ -24,6 +24,7 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _placeController = TextEditingController();
+  final _placeKeywordsController = TextEditingController();
   final _areaController = TextEditingController();
 
   String? _soilType;
@@ -49,6 +50,8 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
   bool _isLoading = false;
   bool _isLocationLoading = false;
   bool _isEdit = false;
+  String? _userRole;
+  bool _isResolvingAuto = false;
 
   PlatformFile? _selectedReport;
   String? _existingReportUrl;
@@ -60,7 +63,16 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
     if (widget.farm != null) {
       _isEdit = true;
       _nameController.text = widget.farm!['name'] ?? '';
-      _placeController.text = widget.farm!['place'] ?? '';
+      
+      String fullPlace = widget.farm!['place'] ?? '';
+      if (fullPlace.contains(' | Keywords: ')) {
+        final parts = fullPlace.split(' | Keywords: ');
+        _placeController.text = parts[0];
+        _placeKeywordsController.text = parts[1];
+      } else {
+        _placeController.text = fullPlace;
+      }
+      
       _areaController.text = (widget.farm!['area'] ?? '').toString();
       _soilType = widget.farm!['soil_type'];
       _irrigationType = widget.farm!['irrigation_type'];
@@ -99,6 +111,7 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
 
   Future<void> _fetchOptions() async {
     try {
+      final profile = await SupabaseService.getProfile();
       final results = await Future.wait([
         SupabaseService.getDropdownOptions('soil_type'),
         SupabaseService.getDropdownOptions('irrigation_type'),
@@ -109,6 +122,7 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
 
       if (mounted) {
         setState(() {
+          _userRole = profile?['role'];
           if (results[0].isNotEmpty) {
             _soilTypes = results[0].map((e) => e['label'].toString()).toList();
           }
@@ -148,6 +162,204 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
         });
       }
     } catch (_) {}
+  }
+
+  Future<void> _resolveGoogleMapsLink() async {
+    final TextEditingController linkController = TextEditingController();
+    final link = await showDialog<String>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            backgroundColor: Colors.white,
+            surfaceTintColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
+            title: const Text(
+              'Resolve Farm Location',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Paste the Google Maps link shared by the farmer below:',
+                  style: TextStyle(fontSize: 14),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: linkController,
+                  decoration: InputDecoration(
+                    hintText: 'https://maps.app.goo.gl/...',
+                    labelText: 'Google Maps Link',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey.shade50,
+                  ),
+                  autofocus: true,
+                  onSubmitted: (val) {
+                    Navigator.pop(context, val.trim());
+                  },
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Note: This will extract the coordinates and address from the link.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textGray.withOpacity(0.7),
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(color: AppColors.textGray),
+                ),
+              ),
+              ElevatedButton(
+                onPressed:
+                    () => Navigator.pop(context, linkController.text.trim()),
+                style: ElevatedButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text('Resolve'),
+              ),
+            ],
+          ),
+    );
+
+    if (link != null && link.isNotEmpty) {
+      _performLocationResolution(link);
+    }
+  }
+
+  Future<void> _performLocationResolution(String link) async {
+    if (link.isEmpty) return;
+
+    setState(() => _isLocationLoading = true);
+    try {
+      String finalUrl = link;
+
+      // If it's a short link, we need to follow the redirect to get coordinates from final URL
+      if (link.contains('maps.app.goo.gl') || link.contains('goo.gl/maps')) {
+        try {
+          final response = await http.get(
+            Uri.parse(link),
+            headers: {
+              'User-Agent':
+                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            },
+          );
+          if (response.request != null) {
+            finalUrl = response.request!.url.toString();
+          }
+        } catch (e) {
+          debugPrint('Error following redirect: $e');
+        }
+      }
+
+      // More robust regex to find coordinates in various Google Maps URL formats
+      final decodedUrl = Uri.decodeComponent(finalUrl);
+
+      RegExp coordRegex = RegExp(r'(@|q=|ll=)(-?\d+\.\d+),\s*(-?\d+\.\d+)');
+      var match = coordRegex.firstMatch(decodedUrl);
+
+      double? lat;
+      double? lng;
+
+      if (match != null) {
+        lat = double.tryParse(match.group(2)!);
+        lng = double.tryParse(match.group(3)!);
+      } else {
+        final internalRegex = RegExp(r'!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)');
+        final internalMatch = internalRegex.firstMatch(decodedUrl);
+        if (internalMatch != null) {
+          lat = double.tryParse(internalMatch.group(1)!);
+          lng = double.tryParse(internalMatch.group(2)!);
+        }
+      }
+
+      final nameRegex = RegExp(r'/maps/place/([^/]+)/@');
+      final nameMatch = nameRegex.firstMatch(decodedUrl);
+
+      if (nameMatch != null && _nameController.text.isEmpty) {
+        String extractedName = nameMatch.group(1)!.replaceAll('+', ' ');
+        setState(() {
+          _nameController.text = extractedName;
+        });
+      }
+
+      if (lat != null && lng != null) {
+        String address = "";
+        try {
+          if (kIsWeb) {
+            address = await _getAddressFromCoordinatesWeb(lat, lng);
+          } else {
+            List<Placemark> placemarks = await placemarkFromCoordinates(
+              lat,
+              lng,
+            );
+            if (placemarks.isNotEmpty) {
+              Placemark place = placemarks[0];
+              List<String> parts = [
+                if (place.name != null && place.name != place.subLocality)
+                  place.name!,
+                if (place.subLocality != null) place.subLocality!,
+                if (place.locality != null) place.locality!,
+                if (place.subAdministrativeArea != null)
+                  place.subAdministrativeArea!,
+                if (place.administrativeArea != null) place.administrativeArea!,
+                if (place.postalCode != null) place.postalCode!,
+              ];
+              address = parts.where((p) => p.isNotEmpty).join(', ');
+            } else {
+              address = "$lat, $lng";
+            }
+          }
+        } catch (e) {
+          debugPrint('Geocoding error: $e');
+          address = "$lat, $lng"; // Fallback to coordinates if lookup fails
+        }
+
+        if (mounted) {
+          setState(() {
+            _placeController.text = address;
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Farm details resolved successfully!'),
+              backgroundColor: AppColors.primary,
+            ),
+          );
+        }
+      } else {
+        String errorMsg = 'Could not extract coordinates.';
+        if (kIsWeb &&
+            (link.contains('maps.app.goo.gl') || link.contains('goo.gl'))) {
+          errorMsg =
+              'Short link resolution blocked by browser security. Please paste the full URL from your browser bar instead.';
+        }
+        throw errorMsg;
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLocationLoading = false);
+    }
   }
 
   Future<String> _getAddressFromCoordinatesWeb(double lat, double lng) async {
@@ -316,6 +528,7 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
       controllers['name']?.dispose();
       controllers['phone']?.dispose();
     }
+    _placeKeywordsController.dispose();
     super.dispose();
   }
 
@@ -341,7 +554,9 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
 
       final farmData = {
         'name': _nameController.text.trim(),
-        'place': _placeController.text.trim(),
+        'place': _placeKeywordsController.text.isEmpty 
+            ? _placeController.text.trim()
+            : '${_placeController.text.trim()} | Keywords: ${_placeKeywordsController.text.trim()}',
         'area': double.tryParse(_areaController.text) ?? 0.0,
         'soil_type': _soilType,
         'irrigation_type': _irrigationType,
@@ -476,8 +691,25 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
                         const SizedBox(height: 16),
                         TextFormField(
                           controller: _placeController,
+                          onChanged: (v) {
+                            if (_isResolvingAuto) return;
+                            // Strictly allow link resolution ONLY for non-executives
+                            if (_userRole != 'executive' &&
+                                v.startsWith('http') &&
+                                (v.contains('maps.app.goo.gl') ||
+                                    v.contains('google.com/maps') ||
+                                    v.contains('goo.gl'))) {
+                              setState(() {
+                                _isResolvingAuto = true;
+                                _placeController.text = 'Resolving location...';
+                              });
+                              _performLocationResolution(v.trim()).then((_) {
+                                setState(() => _isResolvingAuto = false);
+                              });
+                            }
+                          },
                           decoration: InputDecoration(
-                            labelText: 'Farm Location / Place',
+                            labelText: 'Farm Location',
                             hintText: 'Enter farm location',
                             fillColor: Colors.white,
                             suffixIcon: IconButton(
@@ -490,20 +722,42 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
                                           strokeWidth: 2,
                                         ),
                                       )
-                                      : const Icon(
-                                        Icons.my_location_rounded,
+                                      : Icon(
+                                        (_userRole == 'telecaller' ||
+                                                _userRole == 'admin' ||
+                                                _userRole == 'manager')
+                                            ? Icons.link_rounded
+                                            : Icons.my_location_rounded,
                                         color: AppColors.primary,
                                       ),
                               onPressed:
                                   _isLocationLoading
                                       ? null
-                                      : _fetchCurrentLocation,
-                              tooltip: 'Get Current Location',
+                                      : ((_userRole == 'telecaller' ||
+                                              _userRole == 'admin' ||
+                                              _userRole == 'manager')
+                                          ? _resolveGoogleMapsLink
+                                          : _fetchCurrentLocation),
+                              tooltip:
+                                  (_userRole == 'telecaller' ||
+                                          _userRole == 'admin' ||
+                                          _userRole == 'manager')
+                                      ? 'Resolve from Google Maps Link'
+                                      : 'Get Current Location',
                             ),
                           ),
                           validator:
                               (v) =>
                                   (v == null || v.isEmpty) ? 'Required' : null,
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _placeKeywordsController,
+                          decoration: const InputDecoration(
+                            labelText: 'Place / Village',
+                            hintText: 'Type your own keywords or village name',
+                            fillColor: Colors.white,
+                          ),
                         ),
                         const SizedBox(height: 16),
                         TextFormField(

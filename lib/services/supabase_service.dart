@@ -125,6 +125,38 @@ class SupabaseService {
     });
   }
 
+  // Create Telecaller Account (Admin only)
+  static Future<void> createTelecallerAccount({
+    required String username,
+    required String password,
+    required String fullName,
+  }) async {
+    final email = '$username@naturebiotic.local';
+
+    // Create auth user
+    final response = await client.auth.signUp(
+      email: email,
+      password: password,
+      data: {
+        'username': username,
+        'full_name': fullName,
+        'role': 'telecaller',
+      },
+    );
+
+    if (response.user == null) {
+      throw 'Failed to create telecaller account';
+    }
+
+    // Create profile record
+    await client.from('profiles').insert({
+      'id': response.user!.id,
+      'full_name': fullName,
+      'username': username,
+      'role': 'telecaller',
+    });
+  }
+
   // Get current user profile
   static Future<Map<String, dynamic>?> getProfile() async {
     try {
@@ -769,33 +801,68 @@ class SupabaseService {
 
   static Future<Map<String, double>> getUnifiedStoreStock() async {
     try {
-      // 1. Get remote transactions
-      final remote = await getStoreTransactions();
-      
-      // 2. Get local transactions (if not web)
-      List<Map<String, dynamic>> local = [];
-      if (!kIsWeb) {
-        local = await LocalDatabaseService.getData('store_transactions');
-      }
-
-      // 3. Merge (prefer remote if same ID)
-      final Map<String, Map<String, dynamic>> merged = {};
-      
-      // Add local first as they might be newer (pending sync)
-      for (var tx in local) {
-        merged[tx['id'].toString()] = tx;
-      }
-      
-      // Add remote (overwrites local with authoritative cloud data if IDs match)
-      for (var tx in remote) {
-        merged[tx['id'].toString()] = tx;
-      }
-
-      return _calculateStock(merged.values.toList());
+      final transactions = await getUnifiedStoreTransactions();
+      return _calculateStock(transactions);
     } catch (e) {
       debugPrint('Error in getUnifiedStoreStock: $e');
-      return await getStoreStock(); // Fallback to remote only
+      return await getStoreStock(); 
     }
+  }
+
+  static Future<Map<String, Map<String, double>>> getDetailedStoreStock() async {
+    try {
+      final transactions = await getUnifiedStoreTransactions();
+      return _calculateDetailedStock(transactions);
+    } catch (e) {
+      debugPrint('Error in getDetailedStoreStock: $e');
+      return {};
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getUnifiedStoreTransactions() async {
+    // 1. Get remote transactions
+    final remote = await getStoreTransactions();
+    
+    // 2. Get local transactions (if not web)
+    List<Map<String, dynamic>> local = [];
+    if (!kIsWeb) {
+      local = await LocalDatabaseService.getData('store_transactions');
+    }
+
+    // 3. Merge (prefer remote if same ID)
+    final Map<String, Map<String, dynamic>> merged = {};
+    
+    for (var tx in local) {
+      merged[tx['id'].toString()] = tx;
+    }
+    
+    for (var tx in remote) {
+      merged[tx['id'].toString()] = tx;
+    }
+
+    return merged.values.toList();
+  }
+
+  static Map<String, Map<String, double>> _calculateDetailedStock(List<Map<String, dynamic>>? transactions) {
+    Map<String, Map<String, double>> stock = {};
+    if (transactions == null) return stock;
+
+    for (var tx in transactions.where((t) => t['status'] == 'ACCEPTED' || t['transaction_type'] == 'PURCHASE')) {
+      final item = (tx['item_name']?.toString() ?? 'Unknown').trim();
+      final qty = double.tryParse(tx['quantity']?.toString() ?? '0') ?? 0.0;
+      final type = tx['transaction_type']?.toString();
+      final rawUnit = tx['unit']?.toString() ?? 'Units';
+      final unit = rawUnit.split(' {₹')[0].trim();
+
+      if (!stock.containsKey(item)) stock[item] = {};
+
+      if (type == 'PURCHASE' || type == 'RETURN') {
+        stock[item]![unit] = (stock[item]![unit] ?? 0.0) + qty;
+      } else if (type == 'DELIVERY') {
+        stock[item]![unit] = (stock[item]![unit] ?? 0.0) - qty;
+      }
+    }
+    return stock;
   }
 
   static Map<String, double> _calculateStock(List<Map<String, dynamic>>? transactions) {
@@ -1147,6 +1214,83 @@ class SupabaseService {
 
   // --- Individual Executive Stock Logic ---
 
+  static Future<Map<String, Map<String, double>>> getDetailedExecutiveStock({String? userId}) async {
+    try {
+      final targetUserId = userId ?? client.auth.currentUser?.id;
+      if (targetUserId == null) return {};
+
+      final storeTxsResponse = await client.from('store_transactions').select().eq('executive_id', targetUserId);
+      final usageResponse = await client.from('stock_transactions').select().eq('executive_id', targetUserId);
+
+      final txs = List<Map<String, dynamic>>.from(storeTxsResponse);
+      final usage = List<Map<String, dynamic>>.from(usageResponse);
+
+      Map<String, Map<String, double>> stock = {};
+
+      void updateStock(String item, String unit, double qty) {
+        if (!stock.containsKey(item)) stock[item] = {};
+        stock[item]![unit] = (stock[item]![unit] ?? 0.0) + qty;
+      }
+
+      // 1. Add accepted deliveries
+      for (var tx in txs.where((t) => t['transaction_type'] == 'DELIVERY' && t['status'] == 'ACCEPTED')) {
+        final item = (tx['item_name']?.toString() ?? 'Unknown').trim();
+        final rawUnit = tx['unit']?.toString() ?? 'Units';
+        final unit = rawUnit.split(' {₹')[0].trim();
+        
+        updateStock(
+          item,
+          unit,
+          double.tryParse(tx['quantity']?.toString() ?? '0') ?? 0.0
+        );
+      }
+
+      // 2. Subtract accepted returns
+      for (var tx in txs.where((t) => t['transaction_type'] == 'RETURN' && t['status'] == 'ACCEPTED')) {
+        final item = (tx['item_name']?.toString() ?? 'Unknown').trim();
+        final rawUnit = tx['unit']?.toString() ?? 'Units';
+        final unit = rawUnit.split(' {₹')[0].trim();
+
+        updateStock(
+          item,
+          unit,
+          -(double.tryParse(tx['quantity']?.toString() ?? '0') ?? 0.0)
+        );
+      }
+
+      // 3. Subtract field usage (Farm stock transactions)
+      for (var u in usage) {
+        final type = u['transaction_type']?.toString().toUpperCase();
+        final qty = double.tryParse(u['quantity']?.toString() ?? '0') ?? 0.0;
+        
+        // Clean unit of packed metadata "{₹...}" for matching with store stock
+        final rawUnit = u['unit']?.toString() ?? 'Units';
+        final unit = rawUnit.split(' {₹')[0].trim();
+
+        if (type == 'RECEIVED' || type == 'DELIVERED') {
+          // Executive gave to farm -> Reduce executive stock
+          updateStock(
+            (u['item_name']?.toString() ?? 'Unknown').trim(),
+            unit,
+            -qty
+          );
+        } else if (type == 'RETURN') {
+          // Farm returned to executive -> Increase executive stock
+          updateStock(
+            (u['item_name']?.toString() ?? 'Unknown').trim(),
+            unit,
+            qty
+          );
+        }
+      }
+
+      return stock;
+    } catch (e) {
+      debugPrint('Error in getDetailedExecutiveStock: $e');
+      return {};
+    }
+  }
+
   static Future<Map<String, double>> getExecutiveStock({String? userId}) async {
     try {
       final targetUserId = userId ?? client.auth.currentUser?.id;
@@ -1176,20 +1320,24 @@ class SupabaseService {
         stock[item] = (stock[item] ?? 0.0) + qty;
       }
 
-      // Subtract pending or accepted returns (executive handed them over)
-      for (var tx in txs.where((t) => t['transaction_type'] == 'RETURN' && (t['status'] == 'ACCEPTED' || t['status'] == 'PENDING'))) {
+      // Subtract accepted returns (stock officially handed back to store)
+      for (var tx in txs.where((t) => t['transaction_type'] == 'RETURN' && t['status'] == 'ACCEPTED')) {
         final item = tx['item_name']?.toString() ?? 'Unknown';
         final qty = double.tryParse(tx['quantity']?.toString() ?? '0') ?? 0.0;
         stock[item] = (stock[item] ?? 0.0) - qty;
       }
 
-      // Subtract field usage (ignore 'RECEIVED' types which are now used for collections)
+      // 3. Subtract field usage (Farm stock transactions)
       for (var u in usage) {
-        if (u['transaction_type'] == 'RECEIVED') continue;
-
-        final item = u['item_name']?.toString() ?? 'Unknown';
+        final type = u['transaction_type']?.toString().toUpperCase();
+        final itemName = u['item_name']?.toString() ?? 'Unknown';
         final qty = double.tryParse(u['quantity']?.toString() ?? '0') ?? 0.0;
-        stock[item] = (stock[item] ?? 0.0) - qty;
+
+        if (type == 'RECEIVED' || type == 'DELIVERED') {
+          stock[itemName] = (stock[itemName] ?? 0.0) - qty;
+        } else if (type == 'RETURN') {
+          stock[itemName] = (stock[itemName] ?? 0.0) + qty;
+        }
       }
 
       return stock;
@@ -1350,11 +1498,24 @@ class SupabaseService {
     return response;
   }
 
-  static Future<List<Map<String, dynamic>>> getExpenseHistory({String? userId}) async {
+  static Future<List<Map<String, dynamic>>> getExpenseHistory({
+    String? userId,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
     var query = client.from('expenses').select('*, profiles(full_name), expense_items(*)');
+    
     if (userId != null) {
       query = query.eq('executive_id', userId);
     }
+    
+    if (startDate != null) {
+      query = query.gte('created_at', startDate.copyWith(hour: 0, minute: 0, second: 0, millisecond: 0).toIso8601String());
+    }
+    if (endDate != null) {
+      query = query.lte('created_at', endDate.copyWith(hour: 23, minute: 59, second: 59).toIso8601String());
+    }
+    
     final response = await query.order('created_at', ascending: false);
     return List<Map<String, dynamic>>.from(response);
   }

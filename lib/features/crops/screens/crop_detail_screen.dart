@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:nature_biotic/core/theme.dart';
 import 'package:nature_biotic/services/supabase_service.dart';
 import 'package:nature_biotic/services/local_database_service.dart';
@@ -102,6 +103,10 @@ class __CropDetailScreenState extends State<CropDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+
+    final width = MediaQuery.sizeOf(context).width;
+    final bool isWide = width > 1100;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -241,14 +246,14 @@ class __CropDetailScreenState extends State<CropDetailScreen> {
                 // Grid for Growth and Scale
                 LayoutBuilder(
                   builder: (context, constraints) {
-                    final isWide = constraints.maxWidth > 600;
+                    final isGridWide = constraints.maxWidth > 600;
                     return GridView.count(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      crossAxisCount: isWide ? 4 : 2,
+                      crossAxisCount: isGridWide ? 4 : 2,
                       mainAxisSpacing: 16,
                       crossAxisSpacing: 16,
-                      childAspectRatio: isWide ? 1.5 : 2.2,
+                      childAspectRatio: isGridWide ? 1.5 : 2.2,
                       children: [
                         _infoCard(
                           Icons.history_rounded,
@@ -333,54 +338,58 @@ class __CropDetailScreenState extends State<CropDetailScreen> {
                 if (_userRole != 'manager')
                   const SizedBox(height: 32),
                 if (_userRole != 'manager')
-                  SizedBox(
-                    width: double.infinity,
-                    height: 54,
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder:
-                                (context) => CreateReportScreen(
-                                  preSelectedFarmId:
-                                      _crop['farm_id']?.toString(),
-                                  preSelectedCropId:
-                                      _crop['id']?.toString(),
-                                ),
+                  Center(
+                    child: SizedBox(
+                      width: isWide ? 400 : double.infinity,
+                      height: 54,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (context) => CreateReportScreen(
+                                    preSelectedFarmId:
+                                        _crop['farm_id']?.toString(),
+                                    preSelectedCropId:
+                                        _crop['id']?.toString(),
+                                  ),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.add_task_rounded),
+                        label: const Text(
+                          'Add New Visit (Analysis Report)',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
                           ),
-                        );
-                      },
-                      icon: const Icon(Icons.add_task_rounded),
-                      label: const Text(
-                        'Add New Visit (Analysis Report)',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
                         ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          elevation: 2,
                         ),
-                        elevation: 2,
                       ),
                     ),
                   ),
 
-                const SizedBox(height: 32),
-                const Text(
-                  'Report History',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textBlack,
+                const SizedBox(height: 48),
+                Center(
+                  child: Text(
+                    'Report History',
+                    style: GoogleFonts.outfit(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textBlack,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 16),
-                _buildReportHistoryTable(),
+                const SizedBox(height: 24),
+                _buildReportHistoryTable(isWide: isWide),
                 const SizedBox(height: 40),
               ],
             ),
@@ -390,7 +399,7 @@ class __CropDetailScreenState extends State<CropDetailScreen> {
     );
   }
 
-  Widget _buildReportHistoryTable() {
+  Widget _buildReportHistoryTable({bool isWide = false}) {
     if (_isLoadingReports) {
       return const Center(
         child: Padding(
@@ -441,92 +450,114 @@ class __CropDetailScreenState extends State<CropDetailScreen> {
         borderRadius: BorderRadius.circular(24),
         child: SingleChildScrollView(
           scrollDirection: Axis.horizontal,
-          child: DataTable(
-            horizontalMargin: 16,
-            columnSpacing: 24,
-            headingRowColor: WidgetStateProperty.all(
-              AppColors.secondary.withOpacity(0.5),
-            ),
-            columns: const [
-              DataColumn(
-                label: Text(
-                  'Date',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minWidth: isWide ? 860 : 0),
+            child: DataTable(
+              horizontalMargin: isWide ? 24 : 16,
+              columnSpacing: isWide ? 48 : 24,
+              headingRowColor: WidgetStateProperty.all(
+                AppColors.secondary.withOpacity(0.5),
+              ),
+              columns: [
+                const DataColumn(
+                  label: Text(
+                    'Date',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 ),
-              ),
-              DataColumn(
-                label: Text(
-                  'Problem Identified',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                const DataColumn(
+                  label: Text(
+                    'Problem Identified',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 ),
-              ),
-              DataColumn(
-                label: Text('', style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
-            ],
-            rows:
-                _reports.map((report) {
-                  final date = DateTime.parse(report['created_at']);
-
-                  // Clean up problem text (remove image metadata if present)
-                  String problemDisplay = report['problem'] ?? 'N/A';
-                  if (problemDisplay.contains('{img:')) {
-                    problemDisplay = problemDisplay.split('{img:')[0].trim();
-                  }
-
-                  return DataRow(
-                    cells: [
-                      DataCell(
-                        Text(
-                          DateFormat('MMM dd, yyyy').format(date),
-                          style: const TextStyle(fontSize: 13),
-                        ),
-                      ),
-                      DataCell(
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 180),
-                          child: Text(
-                            problemDisplay,
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
+                if (isWide)
+                  const DataColumn(
+                    label: Text(
+                      'Recommendations',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                const DataColumn(
+                  label: Text('', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+              rows:
+                  _reports.map((report) {
+                    final date = DateTime.parse(report['created_at']);
+    
+                    // Clean up problem text (remove image metadata if present)
+                    String problemDisplay = report['problem'] ?? 'N/A';
+                    if (problemDisplay.contains('{img:')) {
+                      problemDisplay = problemDisplay.split('{img:')[0].trim();
+                    }
+    
+                    return DataRow(
+                      cells: [
+                        DataCell(
+                          Text(
+                            DateFormat('MMM dd, yyyy').format(date),
                             style: const TextStyle(fontSize: 13),
                           ),
                         ),
-                      ),
-                      DataCell(
-                        TextButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder:
-                                    (context) => ReportGeneratorScreen(
-                                      report: report,
-                                      farmName: widget.farmName,
-                                      cropName: widget.crop['name'],
-                                      farmerName: widget.farmerName,
-                                    ),
-                              ),
-                            );
-                          },
-                          style: TextButton.styleFrom(
-                            padding: EdgeInsets.zero,
-                            minimumSize: const Size(0, 0),
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          child: const Text(
-                            'View More',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.primary,
+                        DataCell(
+                          ConstrainedBox(
+                            constraints: BoxConstraints(maxWidth: isWide ? 220 : 180),
+                            child: Text(
+                              problemDisplay,
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                              style: const TextStyle(fontSize: 13),
                             ),
                           ),
                         ),
-                      ),
-                    ],
-                  );
-                }).toList(),
+                        if (isWide)
+                          DataCell(
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 300),
+                              child: Text(
+                                report['recommendations'] ?? 'N/A',
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                            ),
+                          ),
+                        DataCell(
+                          TextButton(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder:
+                                      (context) => ReportGeneratorScreen(
+                                        report: report,
+                                        farmName: widget.farmName,
+                                        cropName: widget.crop['name'],
+                                        farmerName: widget.farmerName,
+                                      ),
+                                ),
+                              );
+                            },
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              minimumSize: const Size(0, 0),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: const Text(
+                              'View More',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  }).toList(),
+            ),
           ),
         ),
       ),

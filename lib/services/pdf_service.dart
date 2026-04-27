@@ -900,7 +900,7 @@ class PdfService {
                 ),
                 child: pw.Text(
                   'Declaration: This is a computer generated document. It confirms that the above mentioned items have been ${transactionType.toLowerCase()} by the farm representative.',
-                  style: const pw.TextStyle(
+                  style: pw.TextStyle(
                     fontSize: 8,
                     fontStyle: pw.FontStyle.italic,
                   ),
@@ -916,7 +916,7 @@ class PdfService {
                   children: [
                     pw.Text(
                       'Nature Biotic Stock Management System',
-                      style: const pw.TextStyle(
+                      style: pw.TextStyle(
                         fontSize: 7,
                         color: PdfColors.grey500,
                       ),
@@ -1126,5 +1126,159 @@ class PdfService {
     final filename =
         'NatureBiotic_StockReport_${DateFormat('ddMMMyy').format(date)}.pdf';
     await Printing.sharePdf(bytes: await pdf.save(), filename: filename);
+  }
+
+  static Future<void> generateExpenseReport({
+    required List<Map<String, dynamic>> history,
+    required DateTimeRange dateRange,
+  }) async {
+    final pdf = pw.Document();
+    final font = await PdfGoogleFonts.robotoRegular();
+    final boldFont = await PdfGoogleFonts.robotoBold();
+
+    final dateFormat = DateFormat('dd MMM yyyy');
+    final startStr = dateFormat.format(dateRange.start);
+    final endStr = dateFormat.format(dateRange.end);
+
+    double totalAllotted = 0;
+    double totalSpent = 0;
+    List<Map<String, dynamic>> allItems = [];
+
+    for (var h in history) {
+      totalAllotted += double.tryParse(h['amount_allotted'].toString()) ?? 0.0;
+      final items = List<Map<String, dynamic>>.from(h['expense_items'] ?? []);
+      for (var item in items) {
+        totalSpent += double.tryParse(item['amount'].toString()) ?? 0.0;
+        allItems.add({
+          ...item,
+          'executive': h['profiles']?['full_name'] ?? 'Unknown',
+          'status': h['status'],
+          'return_status': h['return_status'],
+        });
+      }
+    }
+
+    // Sort by date descending
+    allItems.sort((a, b) => 
+        DateTime.parse(b['created_at'].toString()).compareTo(
+        DateTime.parse(a['created_at'].toString())));
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        theme: pw.ThemeData.withFont(base: font, bold: boldFont),
+        header: (context) => pw.Column(
+          children: [
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'NATURE BIOTIC',
+                      style: pw.TextStyle(
+                        fontSize: 22,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.green,
+                      ),
+                    ),
+                    pw.Text(
+                      'Master Expense & Audit Report',
+                      style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+                    ),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text('Report Period: $startStr - $endStr', style: const pw.TextStyle(fontSize: 8)),
+                    pw.Text('Generated on: ${DateFormat('dd MMM yyyy HH:mm').format(DateTime.now())}', style: const pw.TextStyle(fontSize: 8)),
+                  ],
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 10),
+            pw.Divider(thickness: 1, color: PdfColors.grey300),
+            pw.SizedBox(height: 10),
+          ],
+        ),
+        build: (context) => [
+          // Financial Summary
+          pw.Container(
+            padding: const pw.EdgeInsets.all(12),
+            decoration: const pw.BoxDecoration(
+              color: PdfColors.grey100,
+              borderRadius: pw.BorderRadius.all(pw.Radius.circular(8)),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+              children: [
+                _statCol('TOTAL ALLOTTED', 'Rs. ${totalAllotted.toStringAsFixed(2)}', PdfColors.blue800),
+                _statCol('TOTAL SPENT', 'Rs. ${totalSpent.toStringAsFixed(2)}', PdfColors.red800),
+                _statCol('REMAINING', 'Rs. ${(totalAllotted - totalSpent).toStringAsFixed(2)}', PdfColors.green800),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 20),
+          pw.Text('Detailed Expense Items', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 10),
+          pw.TableHelper.fromTextArray(
+            headerStyle: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.green800),
+            cellStyle: const pw.TextStyle(fontSize: 8),
+            columnWidths: {
+              0: const pw.FixedColumnWidth(80),
+              1: const pw.FixedColumnWidth(80),
+              2: const pw.FixedColumnWidth(60),
+              3: const pw.FixedColumnWidth(50),
+              4: const pw.FixedColumnWidth(70),
+            },
+            data: <List<String>>[
+              ['Date', 'Executive', 'Category', 'Amount', 'Status'],
+              ...allItems.map((item) {
+                final date = DateFormat('dd MMM yy, hh:mm a').format(DateTime.parse(item['created_at']));
+                String status = item['status'] ?? 'N/A';
+                if (item['return_status'] == 'PENDING') status = 'Return Pending';
+                return [
+                  date,
+                  item['executive'],
+                  item['category'],
+                  'Rs. ${item['amount']}',
+                  status,
+                ];
+              }),
+            ],
+          ),
+        ],
+        footer: (context) => pw.Column(
+          children: [
+            pw.Divider(thickness: 1, color: PdfColors.grey300),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text('Nature Biotic Financial Control System', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey500)),
+                pw.Text('Page ${context.pageNumber} of ${context.pagesCount}', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey500)),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+
+    await Printing.sharePdf(
+      bytes: await pdf.save(),
+      filename: 'ExpenseReport_${startStr.replaceAll(' ', '_')}_to_${endStr.replaceAll(' ', '_')}.pdf',
+    );
+  }
+
+  static pw.Widget _statCol(String label, String value, PdfColor color) {
+    return pw.Column(
+      children: [
+        pw.Text(label, style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
+        pw.Text(value, style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: color)),
+      ],
+    );
   }
 }

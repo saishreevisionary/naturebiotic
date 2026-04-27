@@ -173,13 +173,19 @@ class _FarmPdfFolderScreenState extends State<FarmPdfFolderScreen> {
       return const Center(child: Text('No farm folders found.'));
     }
 
+    final double width = MediaQuery.of(context).size.width;
+    // Responsive column count: 5 for large screens, 4 for medium, 2 for mobile
+    final int crossAxisCount = width > 1400 ? 5 : (width > 900 ? 4 : 2);
+    // Adjust aspect ratio for better look in grid
+    final double childAspectRatio = width > 900 ? 0.95 : 1.1;
+
     return GridView.builder(
       padding: const EdgeInsets.all(24),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 20,
-        mainAxisSpacing: 20,
-        childAspectRatio: 1.1,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: crossAxisCount,
+        crossAxisSpacing: 24,
+        mainAxisSpacing: 24,
+        childAspectRatio: childAspectRatio,
       ),
       itemCount: _farms.length,
       itemBuilder: (context, index) {

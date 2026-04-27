@@ -4,6 +4,7 @@ import 'package:nature_biotic/services/supabase_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:nature_biotic/features/expenses/screens/expense_detail_screen.dart';
+import 'package:nature_biotic/services/pdf_service.dart';
 
 class ManagerExpenseControl extends StatefulWidget {
   const ManagerExpenseControl({super.key});
@@ -16,6 +17,8 @@ class _ManagerExpenseControlState extends State<ManagerExpenseControl> {
   List<Map<String, dynamic>> _executives = [];
   List<Map<String, dynamic>> _history = [];
   bool _isLoading = true;
+  DateTime _startDate = DateTime.now().subtract(const Duration(days: 30));
+  DateTime _endDate = DateTime.now();
 
   @override
   void initState() {
@@ -28,8 +31,11 @@ class _ManagerExpenseControlState extends State<ManagerExpenseControl> {
     try {
       final results = await Future.wait([
         SupabaseService.getExecutives(),
-        SupabaseService.getExpenseHistory(),
-      ]);
+        SupabaseService.getExpenseHistory(
+          startDate: _startDate,
+          endDate: _endDate,
+        ),
+      ]).timeout(const Duration(seconds: 15));
       if (mounted) {
         setState(() {
           _executives = results[0];
@@ -38,114 +44,383 @@ class _ManagerExpenseControlState extends State<ManagerExpenseControl> {
         });
       }
     } catch (e) {
-      debugPrint('Error loading manager expenses: $e');
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Load failed: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _showDateRangePicker() async {
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2024),
+      lastDate: DateTime.now(),
+      initialDateRange: DateTimeRange(start: _startDate, end: _endDate),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.primary,
+              onPrimary: Colors.white,
+              onSurface: AppColors.textBlack,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      setState(() {
+        _startDate = picked.start;
+        _endDate = picked.end;
+      });
+      _loadData();
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final bool isWide = width > 900;
+
     if (_isLoading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+      );
     }
 
-    final pendingReturns =
-        _history.where((e) => e['return_status'] == 'PENDING').toList();
+    final pendingReturns = _history.where((e) => e['return_status'] == 'PENDING').toList();
     final activeTrips = _history.where((e) => e['status'] == 'ACTIVE').toList();
 
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Expense Oversight'),
-          bottom: const TabBar(
-            tabs: [Tab(text: 'Management'), Tab(text: 'History')],
-            indicatorColor: AppColors.primary,
-            labelColor: AppColors.primary,
+    return Material(
+      color: const Color(0xFFF8F9FA),
+      child: isWide
+          ? _buildWideAdminLayout(pendingReturns, activeTrips)
+          : _buildMobileLayout(pendingReturns, activeTrips),
+    );
+  }
+
+  Widget _buildWideAdminLayout(List<Map<String, dynamic>> pending, List<Map<String, dynamic>> active) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8F9FA),
+      body: ListView(
+        children: [
+          _buildWideHeader(),
+          _buildFilterBar(),
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.all(40),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _sectionHeader('Expense Audit Log (Date-wise)', Icons.history_rounded),
+                const SizedBox(height: 24),
+                _buildWideHistoryTab(),
+              ],
+            ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWideHeader() {
+    double totalAllotted = 0;
+    double totalSpent = 0;
+
+    for (var h in _history) {
+      final allottedVal = h['amount_allotted'];
+      totalAllotted += (allottedVal is num) ? allottedVal.toDouble() : (double.tryParse(allottedVal?.toString() ?? '0') ?? 0.0);
+
+      final items = List<dynamic>.from(h['expense_items'] ?? []);
+      for (var item in items) {
+        final amountVal = item['amount'];
+        totalSpent += (amountVal is num) ? amountVal.toDouble() : (double.tryParse(amountVal?.toString() ?? '0') ?? 0.0);
+      }
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(40, 60, 40, 40),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF004D40), Color(0xFF00796B)],
         ),
-        body: TabBarView(
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Financial Oversight', style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 16)),
+                  const Text('Expense Management', style: TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              Row(
+                children: [
+                  IconButton(
+                    onPressed: () => PdfService.generateExpenseReport(
+                      history: _history,
+                      dateRange: DateTimeRange(start: _startDate, end: _endDate),
+                    ),
+                    icon: const Icon(Icons.picture_as_pdf_rounded, color: Colors.white),
+                    tooltip: 'Download Report',
+                  ),
+                  IconButton(onPressed: _loadData, icon: const Icon(Icons.refresh_rounded, color: Colors.white), iconSize: 32),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 40),
+          // 4 Cards in one line
+          Row(
+            children: [
+              Expanded(child: _statCard('Total Allotted', '₹${totalAllotted.toStringAsFixed(0)}', Icons.account_balance_wallet_rounded, Colors.white)),
+              const SizedBox(width: 20),
+              Expanded(child: _statCard('Total Spent', '₹${totalSpent.toStringAsFixed(0)}', Icons.shopping_bag_rounded, Colors.orangeAccent)),
+              const SizedBox(width: 20),
+              Expanded(child: _statCard('Pending Returns', '${_history.where((e) => e['return_status'] == 'PENDING').length}', Icons.assignment_return_rounded, Colors.amberAccent)),
+              const SizedBox(width: 20),
+              Expanded(child: _statCard('Active Trips', '${_history.where((e) => e['status'] == 'ACTIVE').length}', Icons.local_shipping_rounded, Colors.lightBlueAccent)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statCard(String label, String value, IconData icon, Color iconColor) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: iconColor, size: 24),
+          const SizedBox(height: 16),
+          Text(value, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+          Text(label, style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterBar() {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
+      child: Row(
+        children: [
+          const Icon(Icons.filter_list_rounded, color: AppColors.primary),
+          const SizedBox(width: 12),
+          const Text('Filter by Date/Period: ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(width: 16),
+          _dateFilterButton(),
+        ],
+      ),
+    );
+  }
+
+  Widget _dateFilterButton() {
+    return InkWell(
+      onTap: _showDateRangePicker,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            _buildManagementTab(pendingReturns, activeTrips),
-            _buildHistoryTab(),
+            const Icon(Icons.date_range_rounded, size: 18, color: AppColors.primary),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('FROM', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppColors.primary.withOpacity(0.5))),
+                Text(DateFormat('dd MMM yyyy').format(_startDate), style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 13)),
+              ],
+            ),
+            Container(
+              height: 24,
+              width: 1,
+              color: AppColors.primary.withOpacity(0.2),
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('TO', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppColors.primary.withOpacity(0.5))),
+                Text(DateFormat('dd MMM yyyy').format(_endDate), style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 13)),
+              ],
+            ),
           ],
-        ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: _showAllotmentDialog,
-          backgroundColor: AppColors.primary,
-          icon: const Icon(Icons.add_card_rounded, color: Colors.white),
-          label: const Text(
-            'Allot Funds',
-            style: TextStyle(color: Colors.white),
-          ),
         ),
       ),
     );
   }
 
-  Widget _buildManagementTab(
-    List<Map<String, dynamic>> pending,
-    List<Map<String, dynamic>> active,
-  ) {
-    return ListView(
-      padding: const EdgeInsets.all(24),
-      children: [
-        if (pending.isNotEmpty) ...[
-          _sectionHeader('Pending Approvals', Icons.pending_actions_rounded),
-          const SizedBox(height: 12),
-          ...pending.map((e) => _itemReturnCard(e)),
-          const SizedBox(height: 32),
-        ],
-        _sectionHeader('Active Trips', Icons.local_shipping_rounded),
-        const SizedBox(height: 12),
-        if (active.isEmpty)
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32.0),
-              child: Text(
-                'No active trips currently',
-                style: TextStyle(color: AppColors.textGray),
+  Widget _buildWideHistoryTab() {
+    if (_history.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(48),
+          child: Column(
+            children: [
+              Icon(Icons.payments_outlined, size: 64, color: AppColors.textGray.withOpacity(0.2)),
+              const SizedBox(height: 16),
+              const Text('No expense history found for this period.', style: TextStyle(color: AppColors.textGray)),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            // Custom Table Header
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: const [
+                  Expanded(flex: 2, child: Text('Date', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary))),
+                  Expanded(flex: 3, child: Text('Executive', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary))),
+                  Expanded(flex: 2, child: Text('Allotted', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary))),
+                  Expanded(flex: 2, child: Text('Spent', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary))),
+                  Expanded(flex: 2, child: Text('Balance', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary))),
+                  Expanded(flex: 2, child: Text('Status', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary))),
+                  Expanded(flex: 2, child: Text('Action', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary))),
+                ],
               ),
             ),
-          )
-        else
-          ...active.map((e) => _itemActiveTripCard(e)),
-      ],
+            const SizedBox(height: 8),
+            // Table Rows
+            ..._history.map((expense) {
+              String date = 'N/A';
+              if (expense['created_at'] != null) {
+                try {
+                  date = DateFormat('dd MMM yyyy').format(DateTime.parse(expense['created_at']));
+                } catch (_) {}
+              }
+              final name = expense['profiles']?['full_name'] ?? 'Unknown';
+              
+              final allottedVal = expense['amount_allotted'];
+              final double allotted = (allottedVal is num) ? allottedVal.toDouble() : (double.tryParse(allottedVal?.toString() ?? '0') ?? 0.0);
+              
+              final items = List<dynamic>.from(expense['expense_items'] ?? []);
+              double spent = 0;
+              for (var item in items) {
+                final amt = item['amount'];
+                spent += (amt is num) ? amt.toDouble() : (double.tryParse(amt?.toString() ?? '0') ?? 0.0);
+              }
+              
+              final double balance = allotted - spent;
+  
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                decoration: BoxDecoration(
+                  border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(flex: 2, child: Text(date, style: const TextStyle(fontSize: 13))),
+                    Expanded(flex: 3, child: Text(name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13))),
+                    Expanded(flex: 2, child: Text('₹${allotted.toStringAsFixed(0)}', style: const TextStyle(fontSize: 13))),
+                    Expanded(flex: 2, child: Text('₹${spent.toStringAsFixed(2)}', style: const TextStyle(color: Colors.redAccent, fontSize: 13))),
+                    Expanded(flex: 2, child: Text('₹${balance.toStringAsFixed(2)}', style: TextStyle(color: balance < 0 ? Colors.red : AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13))),
+                    Expanded(flex: 2, child: _statusChip(expense['status'], expense['return_status'])),
+                    Expanded(
+                      flex: 2,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.push(context, MaterialPageRoute(builder: (context) => ExpenseDetailScreen(expense: expense)));
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary.withOpacity(0.1),
+                            foregroundColor: AppColors.primary,
+                            minimumSize: const Size(0, 36),
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          child: const Text('View Details', style: TextStyle(fontSize: 11)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ],
+        ),
+      ),
+    );
+  }
+
+
+
+  Widget _buildMobileLayout(List<Map<String, dynamic>> pending, List<Map<String, dynamic>> active) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Expense Oversight'),
+      ),
+      body: _buildHistoryTab(),
     );
   }
 
   Widget _buildHistoryTab() {
     return ListView.builder(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(16),
       itemCount: _history.length,
       itemBuilder: (context, index) {
         final e = _history[index];
-        final name = e['profiles']?['full_name'] ?? 'Unknown';
-        final date = DateFormat(
-          'dd MMM yyyy',
-        ).format(DateTime.parse(e['created_at']));
-        final status = e['status'];
+        String date = 'N/A';
+        if (e['created_at'] != null) {
+          try {
+            date = DateFormat('dd MMM yyyy').format(DateTime.parse(e['created_at']));
+          } catch (_) {}
+        }
 
         return Card(
-          margin: const EdgeInsets.only(bottom: 12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
           child: ListTile(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ExpenseDetailScreen(expense: e),
-                ),
-              );
-            },
-            title: Text(
-              name,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            subtitle: Text('₹${e['amount_allotted']} • $date'),
-            trailing: _statusChip(status, e['return_status']),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ExpenseDetailScreen(expense: e))),
+            title: Text(e['profiles']?['full_name'] ?? 'Unknown'),
+            subtitle: Text('₹${e['amount_allotted'] ?? 0} • $date'),
+            trailing: _statusChip(e['status'], e['return_status']),
           ),
         );
       },
@@ -155,310 +430,27 @@ class _ManagerExpenseControlState extends State<ManagerExpenseControl> {
   Widget _sectionHeader(String title, IconData icon) {
     return Row(
       children: [
-        Icon(icon, size: 20, color: AppColors.primary),
-        const SizedBox(width: 8),
-        Text(
-          title,
-          style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
+        Icon(icon, color: AppColors.primary, size: 24),
+        const SizedBox(width: 12),
+        Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
       ],
     );
   }
 
-  Widget _itemReturnCard(Map<String, dynamic> e) {
-    final name = e['profiles']?['full_name'] ?? 'Executive';
-    final amount = e['return_amount'];
-
-    return Card(
-      color: Colors.orange.withOpacity(0.05),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.orange.withOpacity(0.2)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                const CircleAvatar(
-                  backgroundColor: Colors.orange,
-                  child: Icon(
-                    Icons.assignment_return_rounded,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        name,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      Text('Submitted ₹$amount for return'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: TextButton(
-                    onPressed: () {}, // Optional: View Details
-                    child: const Text('View Details'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                    ),
-                    onPressed: () async {
-                      await SupabaseService.approveReturn(e['id']);
-                      _loadData();
-                    },
-                    child: const Text(
-                      'Approve',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _itemActiveTripCard(Map<String, dynamic> e) {
-    final name = e['profiles']?['full_name'] ?? 'Executive';
-    final status =
-        e['allotment_status'] == 'PENDING'
-            ? 'Awaiting Receipt'
-            : 'Trip in Progress';
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: AppColors.secondary,
-          child: Icon(Icons.person_rounded, color: AppColors.primary),
-        ),
-        title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(status),
-        trailing: Text(
-          '₹${e['amount_allotted']}',
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-        ),
-      ),
-    );
-  }
-
-  void _showAllotmentDialog() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder:
-          (context) => _AllotmentDialogContent(
-            executives: _executives,
-            onAllot: (executiveId, amount) async {
-              await SupabaseService.allotExpenseFunds(executiveId, amount);
-              _loadData();
-            },
-          ),
-    );
-  }
-
-  Widget _statusChip(String status, String returnStatus) {
-    String label = status;
-    Color color = Colors.grey;
-
-    if (status == 'ACTIVE') {
-      label = 'Active';
-      color = Colors.green;
-    } else if (status == 'CLOSED') {
-      label = 'Closed';
-      color = Colors.blue;
-    }
-
-    if (returnStatus == 'PENDING') {
-      label = 'Return Pending';
-      color = Colors.orange;
-    }
-
+  Widget _statusChip(String? status, String? returnStatus) {
+    final String displayStatus = status ?? 'UNKNOWN';
+    Color color = displayStatus == 'ACTIVE' ? Colors.green : Colors.blue;
+    if (returnStatus == 'PENDING') color = Colors.orange;
+    
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withOpacity(0.1), 
         borderRadius: BorderRadius.circular(10),
       ),
       child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
-  }
-}
-
-class _AllotmentDialogContent extends StatefulWidget {
-  final List<Map<String, dynamic>> executives;
-  final Function(String, double) onAllot;
-
-  const _AllotmentDialogContent({
-    required this.executives,
-    required this.onAllot,
-  });
-
-  @override
-  State<_AllotmentDialogContent> createState() =>
-      _AllotmentDialogContentState();
-}
-
-class _AllotmentDialogContentState extends State<_AllotmentDialogContent> {
-  String? _selectedExecutive;
-  final _amountController = TextEditingController();
-  bool _isSubmitting = false;
-
-  @override
-  void dispose() {
-    _amountController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bool canSubmit =
-        _selectedExecutive != null &&
-        _amountController.text.isNotEmpty &&
-        !_isSubmitting;
-
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-        left: 24,
-        right: 24,
-        top: 24,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Allot Funds',
-            style: GoogleFonts.outfit(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 24),
-          DropdownButtonFormField<String>(
-            initialValue: _selectedExecutive,
-            decoration: const InputDecoration(
-              labelText: 'Select Executive',
-              border: OutlineInputBorder(),
-            ),
-            items:
-                widget.executives
-                    .map(
-                      (ex) => DropdownMenuItem(
-                        value: ex['id'].toString(),
-                        child: Text(ex['full_name'] ?? 'Unknown'),
-                      ),
-                    )
-                    .toList(),
-            onChanged: (v) => setState(() => _selectedExecutive = v),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _amountController,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(
-              labelText: 'Amount (₹)',
-              border: OutlineInputBorder(),
-            ),
-            onChanged: (v) => setState(() {}),
-          ),
-          const SizedBox(height: 32),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                disabledBackgroundColor: Colors.grey[300],
-              ),
-              onPressed:
-                  canSubmit
-                      ? () async {
-                        setState(() => _isSubmitting = true);
-                        try {
-                          final amount = double.parse(_amountController.text);
-                          await widget.onAllot(_selectedExecutive!, amount);
-                          if (mounted) {
-                            Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Funds allotted successfully'),
-                                backgroundColor: Colors.green,
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          setState(() => _isSubmitting = false);
-                          if (mounted) {
-                            showDialog(
-                              context: context,
-                              builder:
-                                  (context) => AlertDialog(
-                                    title: const Text('Error Details'),
-                                    content: SingleChildScrollView(
-                                      child: Text(e.toString()),
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(context),
-                                        child: const Text('Close'),
-                                      ),
-                                    ],
-                                  ),
-                            );
-                          }
-                        }
-                      }
-                      : null,
-              child:
-                  _isSubmitting
-                      ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
-                      )
-                      : const Text(
-                        'Allot Funds',
-                        style: TextStyle(color: Colors.white, fontSize: 16),
-                      ),
-            ),
-          ),
-          const SizedBox(height: 24),
-        ],
+        displayStatus, 
+        style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold),
       ),
     );
   }

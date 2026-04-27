@@ -611,9 +611,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               _buildStatsGrid(isWide: false),
               const SizedBox(height: 32),
               if (_isAdmin)
-                ..._buildAdminSections(isWide: false)
-              else
-                ..._buildUserSections(isWide: false),
+                ..._buildAdminSections(isWide: false),
             ],
           ),
         ),
@@ -629,12 +627,12 @@ class _DashboardScreenState extends State<DashboardScreen>
         Expanded(
           flex: 7,
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(40.0),
+            padding: const EdgeInsets.all(32.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildPremiumHeader(),
-                const SizedBox(height: 52),
+                const SizedBox(height: 32),
                 const Text(
                   'Quick Overview',
                   style: TextStyle(
@@ -643,32 +641,17 @@ class _DashboardScreenState extends State<DashboardScreen>
                     color: AppColors.textBlack,
                   ),
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 24),
                 _buildStatsGrid(isWide: true),
-                const SizedBox(height: 72),
-                const SizedBox(height: 52),
-                if (!_isAdmin) ...[
-                  const Text(
-                    'Direct Actions',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 32),
-                  Wrap(
-                    spacing: 20,
-                    runSpacing: 20,
-                    children:
-                        _buildUserSections(
-                          isWide: true,
-                        ).map((w) => SizedBox(width: 350, child: w)).toList(),
-                  ),
-                ],
+                const SizedBox(height: 32),
+                const SizedBox(height: 24),
               ],
             ),
           ),
         ),
         // Sidebar Content Area
         Container(
-          width: 400,
+          width: 360,
           decoration: BoxDecoration(
             color: Colors.white,
             border: Border(
@@ -676,7 +659,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             ),
           ),
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(32.0),
+            padding: const EdgeInsets.all(24.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -743,7 +726,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               crossAxisCount: 3,
               crossAxisSpacing: 10,
               mainAxisSpacing: 10,
-              childAspectRatio: isWide ? 1.8 : 0.85,
+              childAspectRatio: isWide ? 2.2 : 0.85,
               children: [
                 StatCard(
                   title: 'Farmers',
@@ -2354,7 +2337,11 @@ class _StatCardState extends State<StatCard> {
                   ),
                 ),
                 Padding(
-                  padding: EdgeInsets.all(widget.isSmall ? 10 : 20),
+                  padding: EdgeInsets.all(
+                    widget.isSmall
+                        ? (MediaQuery.sizeOf(context).width > 1100 ? 8 : 10)
+                        : 20,
+                  ),
                   child:
                       widget.isHorizontal
                           ? _buildHorizontalLayout()
