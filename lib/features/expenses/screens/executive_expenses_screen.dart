@@ -303,7 +303,7 @@ class _ExecutiveExpenseDashboardState extends State<ExecutiveExpenseDashboard> {
                                             ),
                                             child: Image.network(
                                               item['bill_photo'],
-                                              fit: BoxFit.cover,
+                                              fit: BoxFit.contain,
                                             ),
                                           ),
                                         ],
@@ -399,6 +399,7 @@ class _ExecutiveExpenseDashboardState extends State<ExecutiveExpenseDashboard> {
       builder:
           (context) => _EndTripDialogContent(
             expenseId: _activeExpense!['id'],
+            startOdometer: double.tryParse(_activeExpense!['start_odometer_reading']?.toString() ?? '0') ?? 0.0,
             onEnded: _loadActiveExpense,
             onCapture: () => _captureAndUpload('expense-documents'),
           ),
@@ -437,6 +438,20 @@ class _ExecutiveExpenseDashboardState extends State<ExecutiveExpenseDashboard> {
                 fontWeight: FontWeight.bold,
               ),
             ),
+            if (_activeExpense!['start_odometer_reading'] != null && _activeExpense!['end_odometer_reading'] != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  'Total Distance: ${((double.tryParse(_activeExpense!['end_odometer_reading'].toString()) ?? 0) - (double.tryParse(_activeExpense!['start_odometer_reading'].toString()) ?? 0)).toStringAsFixed(1)} KM',
+                  style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
             const SizedBox(height: 8),
             Text(
               'Enter the amount you are returning to the manager.',
@@ -736,18 +751,18 @@ class _StartTripFormState extends State<_StartTripForm> {
     return InkWell(
       onTap: onTap,
       child: Container(
-        height: 120,
         width: double.infinity,
         decoration: BoxDecoration(
           border: Border.all(color: AppColors.textGray.withOpacity(0.2)),
           borderRadius: BorderRadius.circular(12),
-          color: Colors.grey[50],
+          color: Colors.black.withOpacity(0.02),
         ),
+        constraints: const BoxConstraints(maxHeight: 200),
         child:
             photoUrl != null
                 ? ClipRRect(
                   borderRadius: BorderRadius.circular(12),
-                  child: Image.network(photoUrl, fit: BoxFit.cover),
+                  child: Image.network(photoUrl, fit: BoxFit.contain),
                 )
                 : Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -920,18 +935,18 @@ class _AddExpenseDialogContentState extends State<_AddExpenseDialogContent> {
     return InkWell(
       onTap: onTap,
       child: Container(
-        height: 120,
         width: double.infinity,
         decoration: BoxDecoration(
           border: Border.all(color: AppColors.textGray.withOpacity(0.2)),
           borderRadius: BorderRadius.circular(12),
-          color: Colors.grey[50],
+          color: Colors.black.withOpacity(0.02),
         ),
+        constraints: const BoxConstraints(maxHeight: 200),
         child:
             photoUrl != null
                 ? ClipRRect(
                   borderRadius: BorderRadius.circular(12),
-                  child: Image.network(photoUrl, fit: BoxFit.cover),
+                  child: Image.network(photoUrl, fit: BoxFit.contain),
                 )
                 : Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -957,11 +972,13 @@ class _AddExpenseDialogContentState extends State<_AddExpenseDialogContent> {
 
 class _EndTripDialogContent extends StatefulWidget {
   final String expenseId;
+  final double startOdometer;
   final VoidCallback onEnded;
   final Future<String?> Function() onCapture;
 
   const _EndTripDialogContent({
     required this.expenseId,
+    required this.startOdometer,
     required this.onEnded,
     required this.onCapture,
   });
@@ -977,8 +994,12 @@ class _EndTripDialogContentState extends State<_EndTripDialogContent> {
 
   @override
   Widget build(BuildContext context) {
+    final double endOdo = double.tryParse(_odometerController.text) ?? 0.0;
+    final double distance = endOdo - widget.startOdometer;
+    
     final bool canEnd =
         _odometerController.text.isNotEmpty &&
+        endOdo >= widget.startOdometer &&
         _odometerPhoto != null &&
         !_isSubmitting;
 
@@ -1009,6 +1030,19 @@ class _EndTripDialogContentState extends State<_EndTripDialogContent> {
             ),
             onChanged: (_) => setState(() {}),
           ),
+          if (_odometerController.text.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              distance >= 0 
+                ? 'Total Distance: ${distance.toStringAsFixed(1)} KM'
+                : 'Reading must be >= ${widget.startOdometer}',
+              style: TextStyle(
+                color: distance >= 0 ? AppColors.primary : Colors.red,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           _buildPhotoSelector(
             'Take End Odometer Photo',
@@ -1066,18 +1100,18 @@ class _EndTripDialogContentState extends State<_EndTripDialogContent> {
     return InkWell(
       onTap: onTap,
       child: Container(
-        height: 120,
         width: double.infinity,
         decoration: BoxDecoration(
           border: Border.all(color: AppColors.textGray.withOpacity(0.2)),
           borderRadius: BorderRadius.circular(12),
-          color: Colors.grey[50],
+          color: Colors.black.withOpacity(0.02),
         ),
+        constraints: const BoxConstraints(maxHeight: 200),
         child:
             photoUrl != null
                 ? ClipRRect(
                   borderRadius: BorderRadius.circular(12),
-                  child: Image.network(photoUrl, fit: BoxFit.cover),
+                  child: Image.network(photoUrl, fit: BoxFit.contain),
                 )
                 : Column(
                   mainAxisAlignment: MainAxisAlignment.center,

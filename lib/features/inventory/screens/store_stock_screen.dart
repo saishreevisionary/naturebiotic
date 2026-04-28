@@ -60,7 +60,24 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
         final pending = await SupabaseService.getPendingStoreTransactions();
         final stock = await SupabaseService.getUnifiedStoreStock();
         final detailed = await SupabaseService.getDetailedStoreStock();
-        final transactions = await SupabaseService.getStoreTransactions();
+        final storeTxs = await SupabaseService.getStoreTransactions();
+        final fieldTxs = await SupabaseService.getAllStockTransactions();
+
+        // Tag them to distinguish in UI
+        final List<Map<String, dynamic>> combinedTxs = [];
+        for (var tx in storeTxs) {
+          combinedTxs.add({...tx, '_source': 'store'});
+        }
+        for (var tx in fieldTxs) {
+          combinedTxs.add({...tx, '_source': 'field'});
+        }
+
+        // Sort by date descending
+        combinedTxs.sort((a, b) {
+          final dateA = DateTime.tryParse(a['created_at']?.toString() ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final dateB = DateTime.tryParse(b['created_at']?.toString() ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+          return dateB.compareTo(dateA);
+        });
 
         List<Map<String, dynamic>> executives = [];
         Map<String, double> execStockTotals = {};
@@ -83,7 +100,7 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
             _pendingCount = pending.length;
             _stockInHand = stock;
             _detailedStock = detailed;
-            _allTransactions = transactions;
+            _allTransactions = combinedTxs;
             _executives = executives;
             _executiveStockTotals = execStockTotals;
             _isLoading = false;
@@ -1192,9 +1209,12 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
   }
 
   Widget _buildHifiExecutiveHistoryTab() {
-    final transactions = _allTransactions.where((tx) => 
-      tx['transaction_type'] == 'DELIVERY' || tx['transaction_type'] == 'RETURN'
-    ).toList();
+    final transactions = _allTransactions.where((tx) {
+      if (tx['_source'] == 'store') {
+        return tx['transaction_type'] == 'DELIVERY' || tx['transaction_type'] == 'RETURN';
+      }
+      return true; // Include field transactions
+    }).toList();
 
     return RefreshIndicator(
       onRefresh: _refreshData,
@@ -1209,9 +1229,24 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
               final dateStr = '${date.day} ${_getMonthName(date.month)} ${date.year}';
               final timeStr = '${date.hour}:${date.minute.toString().padLeft(2, '0')}';
               
-              final isReturn = tx['transaction_type'] == 'RETURN';
+              final type = tx['transaction_type']?.toString().toUpperCase() ?? '';
+              final isField = tx['_source'] == 'field';
+              
+              // From Executive perspective:
+              // Addition (+): Store DELIVERY, Field RETURN
+              // Subtraction (-): Store RETURN, Field RECEIVED/DELIVERED
+              final bool isAddition = (type == 'DELIVERY' && !isField) || (type == 'RETURN' && isField);
+              
               final status = tx['status']?.toString().toUpperCase() ?? 'PENDING';
               final isAccepted = status == 'ACCEPTED';
+              
+              String entityName = isField ? (tx['farms']?['name'] ?? 'Unknown Farm') : 'Warehouse';
+              String actionText = '';
+              if (isField) {
+                actionText = type == 'RETURN' ? 'Received from' : 'Delivered to';
+              } else {
+                actionText = type == 'DELIVERY' ? 'Received from' : 'Returned to';
+              }
               
               return EntranceAnimation(
                 child: Container(
@@ -1229,12 +1264,12 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: isReturn ? Colors.purple.withOpacity(0.05) : Colors.green.withOpacity(0.05),
+                          color: isAddition ? Colors.green.withOpacity(0.05) : Colors.purple.withOpacity(0.05),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
-                          isReturn ? Icons.keyboard_return_rounded : Icons.local_shipping_rounded,
-                          color: isReturn ? Colors.purple : Colors.green,
+                          isAddition ? Icons.local_shipping_rounded : Icons.keyboard_return_rounded,
+                          color: isAddition ? Colors.green : Colors.purple,
                           size: 20,
                         ),
                       ),
@@ -1249,7 +1284,7 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              '${isReturn ? 'Returned' : 'Received'} • $dateStr',
+                              '$actionText $entityName • $dateStr',
                               style: TextStyle(color: AppColors.textGray.withOpacity(0.6), fontSize: 11),
                             ),
                           ],
@@ -1259,9 +1294,9 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Text(
-                            '${isReturn ? '-' : '+'}${tx['quantity']} ${tx['unit']}',
+                            '${isAddition ? '+' : '-'}${tx['quantity']} ${tx['unit']}',
                             style: TextStyle(
-                              color: isReturn ? Colors.red : Colors.green,
+                              color: isAddition ? Colors.green : Colors.red,
                               fontWeight: FontWeight.bold,
                               fontSize: 14,
                             ),
@@ -1300,8 +1335,8 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
 
   Widget _buildPurchaseHistoryTab() {
     final transactions = _allTransactions ?? [];
-    final purchases =
-        transactions.where((t) => t['transaction_type'] == 'PURCHASE').toList();
+    // Show everything for Admin/Store, but keep the name "Purchase History" or maybe just show all stock movements
+    final purchases = transactions.toList(); // Showing all for now as requested
 
     return RefreshIndicator(
       onRefresh: _refreshData,
@@ -1381,6 +1416,27 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
   Widget _buildTransactionHistoryCard(Map<String, dynamic> tx) {
     final date =
         DateTime.tryParse(tx['created_at']?.toString() ?? '') ?? DateTime.now();
+    final type = tx['transaction_type']?.toString().toUpperCase() ?? '';
+    final isField = tx['_source'] == 'field';
+    
+    // Determine the "Farm" or "Entity" name
+    String entityName = 'Internal';
+    if (isField) {
+      entityName = tx['farms']?['name'] ?? 'Unknown Farm';
+    } else {
+      if (type == 'PURCHASE') {
+        entityName = tx['vendor_name'] ?? 'Vendor';
+      } else if (type == 'DELIVERY' || type == 'RETURN') {
+        entityName = tx['profiles']?['full_name'] ?? 'Executive';
+      }
+    }
+
+    final bool isAddition = type == 'PURCHASE' || (isField && type == 'RETURN') || (!isField && type == 'RETURN');
+    // Note: This logic depends on perspective. For Admin, PURCHASE and RETURN are additions to stock.
+    // DELIVERY is subtraction.
+    
+    final Color color = type == 'PURCHASE' ? Colors.blue : (type == 'DELIVERY' ? Colors.orange : Colors.green);
+    final IconData icon = type == 'PURCHASE' ? Icons.shopping_bag_rounded : (type == 'DELIVERY' ? Icons.local_shipping_rounded : Icons.keyboard_return_rounded);
 
     return EntranceAnimation(
       child: Container(
@@ -1402,12 +1458,12 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
+                color: color.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(
-                Icons.shopping_bag_rounded,
-                color: Colors.blue,
+              child: Icon(
+                icon,
+                color: color,
                 size: 20,
               ),
             ),
@@ -1418,13 +1474,43 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
                 children: [
                   Text(
                     tx['item_name'] ?? 'Unknown',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                   ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.background,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          isField ? 'FIELD' : 'STORE',
+                          style: const TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: AppColors.textGray),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          entityName,
+                          style: const TextStyle(
+                            color: AppColors.primary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
                   Text(
                     '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}',
                     style: const TextStyle(
                       color: AppColors.textGray,
-                      fontSize: 11,
+                      fontSize: 10,
                     ),
                   ),
                 ],
@@ -1434,15 +1520,15 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  '+${tx['quantity']}',
-                  style: const TextStyle(
-                    color: Colors.green,
+                  '${(type == 'DELIVERY' || (isField && type == 'RECEIVED')) ? '-' : '+'}${tx['quantity']}',
+                  style: TextStyle(
+                    color: (type == 'DELIVERY' || (isField && type == 'RECEIVED')) ? Colors.orange : Colors.green,
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
                   ),
                 ),
                 Text(
-                  tx['unit'] ?? 'Units',
+                  tx['unit']?.toString().split(' {₹')[0] ?? 'Units',
                   style: const TextStyle(
                     fontSize: 10,
                     color: AppColors.textGray,

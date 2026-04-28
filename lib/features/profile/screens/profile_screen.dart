@@ -3,6 +3,7 @@ import 'package:nature_biotic/core/theme.dart';
 import 'package:nature_biotic/services/supabase_service.dart';
 import 'package:nature_biotic/features/auth/screens/login_screen.dart';
 import 'package:nature_biotic/features/profile/screens/dropdown_creator_screen.dart';
+import 'package:nature_biotic/features/attendance/screens/attendance_history_screen.dart';
 import 'package:image_picker/image_picker.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -286,6 +287,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: 32),
                 _profileOption(Icons.person_outline, 'Account Settings', onTap: _updateName),
                 _profileOption(Icons.lock_outline_rounded, 'Change Password', onTap: _changePassword),
+                _profileOption(Icons.calendar_month_rounded, 'Attendance History', onTap: () {
+                  Navigator.push(
+                    context, 
+                    MaterialPageRoute(builder: (context) => const AttendanceHistoryScreen())
+                  );
+                }),
                 _profileOption(Icons.help_outline_rounded, 'Help & Support', onTap: () {
                   showModalBottomSheet(
                     context: context,

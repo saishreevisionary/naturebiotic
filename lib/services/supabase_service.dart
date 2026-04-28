@@ -16,10 +16,11 @@ class SupabaseService {
   static Future<AuthResponse> signIn({
     required String identifier,
     required String password,
-    required bool isAdmin,
+    bool isAdmin = false,
   }) async {
     String email = identifier;
-    if (!isAdmin && !identifier.contains('@')) {
+    // Auto-detect: if no @ is present, it's a username
+    if (!identifier.contains('@')) {
       email = '$identifier@naturebiotic.local';
     }
     
@@ -459,9 +460,16 @@ class SupabaseService {
   static Future<List<Map<String, dynamic>>> getAllStockTransactions() async {
     final response = await client
         .from('stock_transactions')
-        .select()
+        .select('*, farms(name)')
         .order('created_at', ascending: false);
-    return List<Map<String, dynamic>>.from(response);
+    
+    final data = List<Map<String, dynamic>>.from(response);
+    for (var item in data) {
+      if (item['unit'] != null && item['unit'].toString().contains('{₹')) {
+        item['unit'] = item['unit'].toString().split('{₹')[0].trim();
+      }
+    }
+    return data;
   }
 
   static Future<List<Map<String, dynamic>>> getStoreTransactions() async {
@@ -471,7 +479,13 @@ class SupabaseService {
           .order('created_at', ascending: false);
       
       if (response == null) return [];
-      return List<Map<String, dynamic>>.from(response);
+      final data = List<Map<String, dynamic>>.from(response);
+      for (var item in data) {
+        if (item['unit'] != null && item['unit'].toString().contains('{₹')) {
+          item['unit'] = item['unit'].toString().split('{₹')[0].trim();
+        }
+      }
+      return data;
     } catch (e) {
       debugPrint('Error in getStoreTransactions: $e');
       return [];
@@ -1368,15 +1382,19 @@ class SupabaseService {
       for (var tx in txs) {
         combined.add({
           ...tx,
-          'category': 'store', // To distinguish between warehouse and field transactions
+          '_source': 'store', // To distinguish between warehouse and field transactions
         });
       }
 
       for (var u in usage) {
-        if (u['transaction_type'] == 'RECEIVED') continue; // Skip collections
+        // Clean unit field
+        if (u['unit'] != null && u['unit'].toString().contains('{₹')) {
+          u['unit'] = u['unit'].toString().split('{₹')[0].trim();
+        }
+        
         combined.add({
           ...u,
-          'category': 'field',
+          '_source': 'field',
         });
       }
 

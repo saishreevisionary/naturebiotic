@@ -17,7 +17,6 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _identifierController =
       TextEditingController(); // Modified from _emailController
   final TextEditingController _passwordController = TextEditingController();
-  bool _isAdmin = false;
   bool _isPasswordVisible = false;
   bool _isLoading = false;
 
@@ -28,9 +27,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final response = await SupabaseService.signIn(
-        identifier: _identifierController.text,
+        identifier: _identifierController.text.trim(),
         password: _passwordController.text,
-        isAdmin: _isAdmin,
       );
 
       if (mounted && response.user != null) {
@@ -243,10 +241,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     delay: 600,
                     child: TextField(
                       controller: _identifierController,
-                      decoration: InputDecoration(
-                        hintText:
-                            _isAdmin ? 'Email Address' : 'Executive Username',
-                        prefixIcon: const Icon(Icons.person_outline),
+                      decoration: const InputDecoration(
+                        hintText: 'Username or Email',
+                        prefixIcon: Icon(Icons.person_outline),
                       ),
                     ),
                   ),
@@ -274,32 +271,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  EntranceAnimation(
-                    delay: 900,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Login as Admin',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        CupertinoSwitch(
-                          value: _isAdmin,
-                          activeTrackColor: AppColors.primary,
-                          onChanged: (value) {
-                            setState(() {
-                              _isAdmin = value;
-                            });
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 16),
                   EntranceAnimation(
                     delay: 1050,
                     child: SizedBox(
@@ -324,19 +296,18 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  if (_isAdmin)
-                    Center(
-                      child: TextButton(
-                        onPressed: _isLoading ? null : _handleForgotPassword,
-                        child: const Text(
-                          'Forgot Password?',
-                          style: TextStyle(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.bold,
-                          ),
+                  Center(
+                    child: TextButton(
+                      onPressed: _isLoading ? null : _handleForgotPassword,
+                      child: const Text(
+                        'Forgot Password?',
+                        style: TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),
+                  ),
                   const SizedBox(height: 16),
                 ],
               ),

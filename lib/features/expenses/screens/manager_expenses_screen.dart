@@ -320,8 +320,9 @@ class _ManagerExpenseControlState extends State<ManagerExpenseControl> {
                   Expanded(flex: 2, child: Text('Allotted', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary))),
                   Expanded(flex: 2, child: Text('Spent', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary))),
                   Expanded(flex: 2, child: Text('Balance', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary))),
+                  Expanded(flex: 2, child: Text('Returned', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary))),
                   Expanded(flex: 2, child: Text('Status', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary))),
-                  Expanded(flex: 2, child: Text('Action', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary))),
+                  Expanded(flex: 3, child: Text('Action', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary))),
                 ],
               ),
             ),
@@ -360,25 +361,44 @@ class _ManagerExpenseControlState extends State<ManagerExpenseControl> {
                     Expanded(flex: 2, child: Text('₹${allotted.toStringAsFixed(0)}', style: const TextStyle(fontSize: 13))),
                     Expanded(flex: 2, child: Text('₹${spent.toStringAsFixed(2)}', style: const TextStyle(color: Colors.redAccent, fontSize: 13))),
                     Expanded(flex: 2, child: Text('₹${balance.toStringAsFixed(2)}', style: TextStyle(color: balance < 0 ? Colors.red : AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13))),
+                    Expanded(flex: 2, child: Text(expense['return_amount'] != null ? '₹${expense['return_amount']}' : '-', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 13))),
                     Expanded(flex: 2, child: _statusChip(expense['status'], expense['return_status'])),
                     Expanded(
-                      flex: 2,
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            Navigator.push(context, MaterialPageRoute(builder: (context) => ExpenseDetailScreen(expense: expense)));
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary.withOpacity(0.1),
-                            foregroundColor: AppColors.primary,
-                            minimumSize: const Size(0, 36),
-                            elevation: 0,
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      flex: 3,
+                      child: Row(
+                        children: [
+                          ElevatedButton(
+                            onPressed: () {
+                              Navigator.push(context, MaterialPageRoute(builder: (context) => ExpenseDetailScreen(expense: expense))).then((value) {
+                              if (value == true) _loadData();
+                            });
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary.withOpacity(0.1),
+                              foregroundColor: AppColors.primary,
+                              minimumSize: const Size(0, 36),
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            child: const Text('Details', style: TextStyle(fontSize: 11)),
                           ),
-                          child: const Text('View Details', style: TextStyle(fontSize: 11)),
-                        ),
+                          if (expense['return_status'] == 'PENDING') ...[
+                            const SizedBox(width: 8),
+                            ElevatedButton(
+                              onPressed: () => _approveReturn(expense['id']),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green,
+                                foregroundColor: Colors.white,
+                                minimumSize: const Size(0, 36),
+                                elevation: 0,
+                                padding: const EdgeInsets.symmetric(horizontal: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                              child: const Text('Accept', style: TextStyle(fontSize: 11)),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                   ],
@@ -417,7 +437,9 @@ class _ManagerExpenseControlState extends State<ManagerExpenseControl> {
 
         return Card(
           child: ListTile(
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ExpenseDetailScreen(expense: e))),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ExpenseDetailScreen(expense: e))).then((value) {
+              if (value == true) _loadData();
+            }),
             title: Text(e['profiles']?['full_name'] ?? 'Unknown'),
             subtitle: Text('₹${e['amount_allotted'] ?? 0} • $date'),
             trailing: _statusChip(e['status'], e['return_status']),
@@ -438,9 +460,16 @@ class _ManagerExpenseControlState extends State<ManagerExpenseControl> {
   }
 
   Widget _statusChip(String? status, String? returnStatus) {
-    final String displayStatus = status ?? 'UNKNOWN';
+    String displayStatus = status ?? 'UNKNOWN';
     Color color = displayStatus == 'ACTIVE' ? Colors.green : Colors.blue;
-    if (returnStatus == 'PENDING') color = Colors.orange;
+    
+    if (returnStatus == 'PENDING') {
+      displayStatus = 'RETURN PENDING';
+      color = Colors.orange;
+    } else if (returnStatus == 'APPROVED') {
+      displayStatus = 'CLOSED';
+      color = Colors.blue;
+    }
     
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -450,8 +479,42 @@ class _ManagerExpenseControlState extends State<ManagerExpenseControl> {
       ),
       child: Text(
         displayStatus, 
-        style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold),
+        style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold),
       ),
     );
+  }
+
+  Future<void> _approveReturn(String id) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Return'),
+        content: const Text('Are you sure you want to accept this returned amount and close the trip?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Confirm')),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      setState(() => _isLoading = true);
+      try {
+        await SupabaseService.approveReturn(id);
+        _loadData();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Return approved successfully')),
+          );
+        }
+      } catch (e) {
+        setState(() => _isLoading = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
   }
 }

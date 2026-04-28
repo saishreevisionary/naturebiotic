@@ -94,7 +94,68 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
           ),
         ),
       ),
+      bottomNavigationBar: _data['return_status'] == 'PENDING' ? _buildApprovalActions() : null,
     );
+  }
+
+  Widget _buildApprovalActions() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -4))],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: ElevatedButton(
+              onPressed: _isLoading ? null : _approveReturn,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Accept Return & Close Trip', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _approveReturn() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Return'),
+        content: const Text('Are you sure you want to accept this returned amount and close the trip?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Confirm')),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      setState(() => _isLoading = true);
+      try {
+        await SupabaseService.approveReturn(_data['id']);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Return approved successfully')),
+          );
+          Navigator.pop(context, true); // Go back with success flag
+        }
+      } catch (e) {
+        setState(() => _isLoading = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
   }
 
   Widget _buildHeader(String name, String date, String status) {
@@ -159,6 +220,10 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
   }
 
   Widget _buildTripInfo() {
+    final startOdo = double.tryParse(_data['start_odometer_reading']?.toString() ?? '0') ?? 0.0;
+    final endOdo = double.tryParse(_data['end_odometer_reading']?.toString() ?? '0') ?? 0.0;
+    final distance = (endOdo > 0 && endOdo >= startOdo) ? (endOdo - startOdo) : 0.0;
+
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
@@ -166,7 +231,24 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Trip Details', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Trip Details', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                if (distance > 0)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      'Total: ${distance.toStringAsFixed(1)} KM',
+                      style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
+                  ),
+              ],
+            ),
             const SizedBox(height: 16),
             _infoRow('Vehicle', '${_data['vehicle_type'] ?? 'N/A'} (${_data['vehicle_ownership'] ?? 'N/A'})'),
             const Divider(),
@@ -177,6 +259,10 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
             _infoRow('End Odometer', '${_data['end_odometer_reading'] ?? 'N/A'}'),
             if (_data['end_odometer_photo'] != null)
               _buildImagePreview('End Odometer photo', _data['end_odometer_photo']),
+            if (distance > 0) ...[
+              const Divider(),
+              _infoRow('Total Distance', '${distance.toStringAsFixed(1)} KM'),
+            ],
           ],
         ),
       ),
@@ -226,15 +312,24 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
   Widget _buildImagePreview(String label, String url) {
     return Container(
       margin: const EdgeInsets.only(top: 8),
-      height: 150,
+      constraints: const BoxConstraints(maxHeight: 400),
       width: double.infinity,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey[200]!),
+        color: Colors.black.withOpacity(0.02),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
-        child: Image.network(url, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Center(child: Text('Image unavailable'))),
+        child: Image.network(
+          url, 
+          fit: BoxFit.contain, 
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return const Center(child: CircularProgressIndicator());
+          },
+          errorBuilder: (_, __, ___) => const Center(child: Text('Image unavailable')),
+        ),
       ),
     );
   }

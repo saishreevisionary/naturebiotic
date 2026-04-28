@@ -35,6 +35,7 @@ class _AddStockEntryScreenState extends State<AddStockEntryScreen> {
   bool _isLoading = false;
   bool _isDataLoading = true;
   String _userRole = 'executive';
+  Map<String, Map<String, double>> _myStock = {};
 
   @override
   void initState() {
@@ -56,12 +57,18 @@ class _AddStockEntryScreenState extends State<AddStockEntryScreen> {
           _allProducts = items;
           _itemOptions = items.map((e) => e['label'].toString()).toList();
           _globalDoseUnits = units.map((e) => e['label'].toString()).toList();
-
-          for (var row in _itemRows) {
-            _updateRowPacketOptions(row);
-          }
-          _isDataLoading = false;
         });
+        
+        final myStock = await SupabaseService.getDetailedExecutiveStock();
+        if (mounted) {
+          setState(() {
+            _myStock = myStock;
+            for (var row in _itemRows) {
+              _updateRowPacketOptions(row);
+            }
+            _isDataLoading = false;
+          });
+        }
       }
     } catch (_) {
       if (mounted) setState(() => _isDataLoading = false);
@@ -165,11 +172,22 @@ class _AddStockEntryScreenState extends State<AddStockEntryScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     // Check if any row has no product selected
-    if (_itemRows.any((r) => r.selectedItem == null)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a product for all rows')),
-      );
-      return;
+    // Check stock for executives
+    if (_userRole == 'executive' && _transactionType == 'RECEIVED') {
+      for (var row in _itemRows) {
+        final requestedQty = double.tryParse(row.qtyController.text) ?? 0.0;
+        final available = _myStock[row.selectedItem]?[row.selectedUnit] ?? 0.0;
+        if (requestedQty > available) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Insufficient stock for ${row.selectedItem} (${row.selectedUnit}). Available: $available'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          setState(() => _isLoading = false);
+          return;
+        }
+      }
     }
 
     setState(() => _isLoading = true);
@@ -488,6 +506,28 @@ class _AddStockEntryScreenState extends State<AddStockEntryScreen> {
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       color: AppColors.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          if (row.selectedItem != null && row.selectedUnit != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.inventory_2_outlined, 
+                    size: 14, 
+                    color: (_myStock[row.selectedItem]?[row.selectedUnit] ?? 0) > 0 ? Colors.green : Colors.red
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Available: ${(_myStock[row.selectedItem]?[row.selectedUnit] ?? 0.0).toStringAsFixed(1)}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: (_myStock[row.selectedItem]?[row.selectedUnit] ?? 0) > 0 ? Colors.green : Colors.red,
                     ),
                   ),
                 ],
