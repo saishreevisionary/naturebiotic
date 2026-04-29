@@ -38,12 +38,12 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
 
   // Product Dropdown Data
   List<Map<String, dynamic>> _masterProducts = [];
-  Map<String, dynamic>? _selectedProduct;
-  Map<String, dynamic>? _selectedVariant;
+  List<_StockItem> _items = [];
 
   @override
   void initState() {
     super.initState();
+    _items = [ _StockItem() ];
     _loadData();
   }
 
@@ -83,26 +83,31 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
           // If editing, populate the form
           if (widget.initialData != null) {
             final data = widget.initialData!;
-            _itemNameController.text = data['item_name'] ?? '';
-            _quantityController.text = data['quantity']?.toString() ?? '';
-            _unitController.text = data['unit']?.toString() ?? 'Units';
             _vendorNameController.text = data['vendor_name'] ?? '';
             _selectedExecutiveId = data['executive_id'];
 
+            _items = [];
             // Find and set selected product and variant
             for (var p in products) {
               if (p['label'] == data['item_name']) {
-                _selectedProduct = p;
+                final item = _StockItem(
+                  product: p,
+                  qty: data['quantity']?.toString(),
+                  unit: data['unit']?.toString(),
+                );
+                
                 final variants = List<Map<String, dynamic>>.from(p['variants'] ?? []);
                 for (var v in variants) {
-                  if (v['label'] == _unitController.text) {
-                    _selectedVariant = v;
+                  if (v['label'] == item.unitController.text) {
+                    item.variant = v;
                     break;
                   }
                 }
+                _items.add(item);
                 break;
               }
             }
+            if (_items.isEmpty) _items = [ _StockItem() ];
           }
         });
       }
@@ -149,36 +154,39 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
 
     if (!_formKey.currentState!.validate()) return;
 
-    // --- NEW VALIDATION FOR EXECUTIVES RETURNING STOCK ---
-    if (_userRole == 'executive' && widget.transactionType == 'RETURN') {
-      final double qty = double.tryParse(_quantityController.text) ?? 0;
-      final productName = _selectedProduct?['label'] ?? '';
-      final variantName = _selectedVariant?['label'] ?? '';
+    // --- VALIDATION ---
+    for (var item in _items) {
+      if (item.product == null || item.variant == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select product and size for all items'), backgroundColor: Colors.red),
+        );
+        return;
+      }
       
-      final availableQty = _detailedStock[productName]?[variantName] ?? 0.0;
-      
+      final double qty = double.tryParse(item.quantityController.text) ?? 0;
       if (qty <= 0) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please enter a valid quantity'), backgroundColor: Colors.red),
+          const SnackBar(content: Text('Please enter a valid quantity for all items'), backgroundColor: Colors.red),
         );
         return;
       }
-      
-      if (qty > availableQty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: Colors.red,
-            content: Text(
-              availableQty <= 0 
-                ? 'Product not available to return (Current stock: 0)'
-                : 'Insufficient stock. You only have $availableQty units available to return.'
+
+      if (_userRole == 'executive' && widget.transactionType == 'RETURN') {
+        final productName = item.product?['label'] ?? '';
+        final variantName = item.variant?['label'] ?? '';
+        final availableQty = _detailedStock[productName]?[variantName] ?? 0.0;
+        
+        if (qty > availableQty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: Colors.red,
+              content: Text('Insufficient stock for $productName ($variantName). Available: $availableQty'),
             ),
-          ),
-        );
-        return;
+          );
+          return;
+        }
       }
     }
-    // ---------------------------------------------------
 
     setState(() => _isSaving = true);
     try {
@@ -189,33 +197,42 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
                                _userRole == 'store' && 
                                _buyerNameController.text.trim().isNotEmpty;
 
-      final data = {
-        'id': widget.initialData?['id'] ?? transactionId,
-        'item_name': _itemNameController.text,
-        'transaction_type': widget.transactionType,
-        'quantity': double.parse(_quantityController.text),
-        'unit': _unitController.text,
-        'executive_id': isDirectPurchase ? null : _selectedExecutiveId,
-        'vendor_name': isDirectPurchase ? _buyerNameController.text.trim() : _vendorNameController.text,
-        'status': (widget.transactionType == 'PURCHASE' || isDirectPurchase) ? 'ACCEPTED' : 'PENDING',
-        'created_by': user?.id,
-        'created_at': widget.initialData?['created_at'] ?? DateTime.now().toIso8601String(),
-        'updated_at': DateTime.now().toIso8601String(),
-        if (isDirectPurchase) 'accepted_at': DateTime.now().toIso8601String(),
-      };
+      final List<Map<String, dynamic>> transactionList = [];
+      
+      for (var item in _items) {
+        final transactionId = const Uuid().v4();
+        transactionList.add({
+          'id': widget.initialData?['id'] ?? transactionId,
+          'item_name': item.product?['label'] ?? '',
+          'transaction_type': widget.transactionType,
+          'quantity': double.parse(item.quantityController.text),
+          'unit': item.unitController.text,
+          'executive_id': isDirectPurchase ? null : _selectedExecutiveId,
+          'vendor_name': isDirectPurchase ? _buyerNameController.text.trim() : _vendorNameController.text,
+          'status': (widget.transactionType == 'PURCHASE' || isDirectPurchase) ? 'ACCEPTED' : 'PENDING',
+          'created_by': user?.id,
+          'created_at': widget.initialData?['created_at'] ?? DateTime.now().toIso8601String(),
+          'updated_at': DateTime.now().toIso8601String(),
+          if (isDirectPurchase) 'accepted_at': DateTime.now().toIso8601String(),
+        });
+      }
 
       if (kIsWeb) {
         if (widget.initialData != null) {
-          await SupabaseService.updateStoreTransaction(data['id'], data);
+          await SupabaseService.updateStoreTransaction(transactionList.first['id'], transactionList.first);
         } else {
-          await SupabaseService.addStoreTransaction(data);
+          for (var data in transactionList) {
+            await SupabaseService.addStoreTransaction(data);
+          }
         }
       } else {
-        await LocalDatabaseService.saveAndQueue(
-          tableName: 'store_transactions',
-          data: data,
-          operation: widget.initialData != null ? 'UPDATE' : 'INSERT',
-        );
+        for (var data in transactionList) {
+          await LocalDatabaseService.saveAndQueue(
+            tableName: 'store_transactions',
+            data: data,
+            operation: widget.initialData != null ? 'UPDATE' : 'INSERT',
+          );
+        }
       }
 
       if (mounted) {
@@ -252,18 +269,7 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
                 child: ListView(
                   padding: const EdgeInsets.all(24),
                   children: [
-                    _buildSectionTitle('Select Product'),
-                    const SizedBox(height: 16),
-                    _buildProductDropdown(),
-                    if (_selectedProduct != null) ...[
-                      const SizedBox(height: 16),
-                      _buildVariantDropdown(),
-                    ],
-                    const SizedBox(height: 24),
-
                     if (widget.transactionType == 'PURCHASE') ...[
-                      _buildQuantityUnitFields(),
-                      const SizedBox(height: 24),
                       _buildSectionTitle('Vendor Details'),
                       const SizedBox(height: 16),
                       _textField(
@@ -272,6 +278,7 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
                         'Supplier Name',
                         Icons.store_rounded,
                       ),
+                      const SizedBox(height: 24),
                     ],
 
                     if (widget.transactionType == 'DELIVERY' ||
@@ -284,24 +291,9 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
                         ),
                         const SizedBox(height: 16),
                         _dropdownField(),
-                        _buildQuantityUnitFields(),
+                        const SizedBox(height: 24),
                         
                         if (_userRole == 'store' && widget.transactionType == 'DELIVERY') ...[
-                          const SizedBox(height: 24),
-                          const Center(
-                            child: Padding(
-                              padding: EdgeInsets.symmetric(vertical: 8),
-                              child: Text(
-                                '(OR)',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.textGray,
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 24),
                           _buildSectionTitle('Direct Purchase'),
                           const SizedBox(height: 16),
                           _textField(
@@ -311,13 +303,25 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
                             Icons.person_add_alt_1_rounded,
                             optional: true,
                           ),
-                          _buildQuantityUnitFields(),
+                          const SizedBox(height: 24),
                         ],
-                      ] else ...[
-                        // For Executives, just show the quantity fields for the return
-                        _buildQuantityUnitFields(),
                       ],
                     ],
+
+                    _buildSectionTitle('Product Items'),
+                    const SizedBox(height: 16),
+                    ..._items.asMap().entries.map((entry) => _buildItemCard(entry.key, entry.value)),
+                    
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: () => setState(() => _items.add(_StockItem())),
+                      icon: const Icon(Icons.add_circle_outline_rounded),
+                      label: const Text('Add Another Product'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.primary,
+                        padding: const EdgeInsets.all(12),
+                      ),
+                    ),
 
                     const SizedBox(height: 48),
                     ElevatedButton(
@@ -431,79 +435,6 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
     );
   }
 
-  Widget _buildProductDropdown() {
-    return DropdownButtonFormField<Map<String, dynamic>>(
-      value: _selectedProduct,
-      hint: const Text('Select Brand / Product'),
-      decoration: InputDecoration(
-        labelText: 'Product',
-        prefixIcon: const Icon(Icons.shopping_bag_rounded, size: 20),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        filled: true,
-        fillColor: Colors.white,
-      ),
-      items:
-          (_masterProducts).map((p) {
-            return DropdownMenuItem<Map<String, dynamic>>(
-              value: p,
-              child: Text(p['label'] ?? 'Unknown'),
-            );
-          }).toList(),
-      onChanged: (val) {
-        setState(() {
-          _selectedProduct = val;
-          _selectedVariant = null;
-          _itemNameController.text = val?['label'] ?? '';
-          _unitController.text = 'Units'; // Default
-          
-          // Auto-fill vendor name if mapping exists
-          if (val != null && _productVendors.containsKey(val['id'])) {
-            _vendorNameController.text = _productVendors[val['id']]!;
-          }
-        });
-      },
-      validator: (val) => val == null ? 'Selection required' : null,
-    );
-  }
-
-  Widget _buildVariantDropdown() {
-    final List<Map<String, dynamic>> variants = List<Map<String, dynamic>>.from(
-      _selectedProduct?['variants'] ?? [],
-    );
-
-    final vendorName = _vendorNameController.text.trim().toLowerCase();
-    final List<Map<String, dynamic>> filteredVariants = variants.where((v) {
-      final label = (v['label'] ?? '').toString().toLowerCase().trim();
-      return label != vendorName && label != 'nature' && label != 'nature biotic';
-    }).toList();
-
-    return DropdownButtonFormField<Map<String, dynamic>>(
-      value: _selectedVariant,
-      hint: const Text('Select Pocket/Pouch Size'),
-      decoration: InputDecoration(
-        labelText: 'Size',
-        prefixIcon: const Icon(Icons.straighten_rounded, size: 20),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        filled: true,
-        fillColor: Colors.white,
-      ),
-      items:
-          (filteredVariants).map((v) {
-            return DropdownMenuItem<Map<String, dynamic>>(
-              value: v,
-              child: Text(v['label'] ?? 'Unknown'),
-            );
-          }).toList(),
-      onChanged: (val) {
-        setState(() {
-          _selectedVariant = val;
-          _unitController.text = val?['label'] ?? 'Units';
-        });
-      },
-      validator: (val) => val == null ? 'Selection required' : null,
-    );
-  }
-
   Widget _dropdownField() {
     return DropdownButtonFormField<String>(
       value: _selectedExecutiveId,
@@ -514,13 +445,12 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
         filled: true,
         fillColor: Colors.white,
       ),
-      items:
-          (_executives).map((exec) {
-            return DropdownMenuItem<String>(
-              value: exec['id'],
-              child: Text(exec['full_name'] ?? 'Unknown'),
-            );
-          }).toList(),
+      items: (_executives).map((exec) {
+        return DropdownMenuItem<String>(
+          value: exec['id'],
+          child: Text(exec['full_name'] ?? 'Unknown'),
+        );
+      }).toList(),
       onChanged: (val) {
         setState(() => _selectedExecutiveId = val);
         if (val != null) {
@@ -529,11 +459,144 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
       },
       validator: (val) {
         if (widget.transactionType == 'DELIVERY' && _userRole == 'store') {
-          // Validation handled in _submit for this special case
           return null;
         }
         return val == null ? 'Please select an executive' : null;
       },
     );
+  }
+
+  Widget _buildItemCard(int index, _StockItem item) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.secondary.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Item #${index + 1}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
+              if (_items.length > 1)
+                IconButton(
+                  onPressed: () => setState(() => _items.removeAt(index)),
+                  icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _buildProductDropdownFor(item),
+          if (item.product != null) ...[
+            const SizedBox(height: 12),
+            _buildVariantDropdownFor(item),
+          ],
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _textField(
+                  item.quantityController,
+                  'Quantity',
+                  '0.0',
+                  Icons.numbers_rounded,
+                  isNumeric: true,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _textField(
+                  item.unitController,
+                  'Unit',
+                  'Size',
+                  Icons.straighten_rounded,
+                  readOnly: true,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProductDropdownFor(_StockItem item) {
+    return DropdownButtonFormField<Map<String, dynamic>>(
+      value: item.product,
+      hint: const Text('Select Product'),
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: 'Product',
+        prefixIcon: const Icon(Icons.shopping_bag_rounded, size: 20),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      items: _masterProducts.map((p) {
+        return DropdownMenuItem<Map<String, dynamic>>(
+          value: p,
+          child: Text(p['label'] ?? 'Unknown', style: const TextStyle(fontSize: 14)),
+        );
+      }).toList(),
+      onChanged: (val) {
+        setState(() {
+          item.product = val;
+          item.variant = null;
+          item.unitController.text = 'Units';
+          if (val != null && _productVendors.containsKey(val['id'])) {
+             if (_vendorNameController.text.isEmpty) {
+               _vendorNameController.text = _productVendors[val['id']]!;
+             }
+          }
+        });
+      },
+    );
+  }
+
+  Widget _buildVariantDropdownFor(_StockItem item) {
+    final List<Map<String, dynamic>> variants = List<Map<String, dynamic>>.from(
+      item.product?['variants'] ?? [],
+    );
+    
+    return DropdownButtonFormField<Map<String, dynamic>>(
+      value: item.variant,
+      hint: const Text('Select Size'),
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: 'Size',
+        prefixIcon: const Icon(Icons.straighten_rounded, size: 20),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      items: variants.map((v) {
+        return DropdownMenuItem<Map<String, dynamic>>(
+          value: v,
+          child: Text(v['label'] ?? 'Unknown', style: const TextStyle(fontSize: 14)),
+        );
+      }).toList(),
+      onChanged: (val) {
+        setState(() {
+          item.variant = val;
+          item.unitController.text = val?['label'] ?? 'Units';
+        });
+      },
+    );
+  }
+}
+
+class _StockItem {
+  Map<String, dynamic>? product;
+  Map<String, dynamic>? variant;
+  final quantityController = TextEditingController();
+  final unitController = TextEditingController(text: 'Units');
+  
+  _StockItem({this.product, this.variant, String? qty, String? unit}) {
+    if (qty != null) quantityController.text = qty;
+    if (unit != null) unitController.text = unit;
+  }
+
+  void dispose() {
+    quantityController.dispose();
+    unitController.dispose();
   }
 }
