@@ -1081,7 +1081,7 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
     Function(String?) onChanged,
   ) {
     return DropdownButtonFormField<String>(
-      initialValue: value,
+      value: value,
       decoration: InputDecoration(labelText: label, fillColor: Colors.white),
       items:
           items.map((String item) {

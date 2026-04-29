@@ -1,0 +1,220 @@
+
+import 'package:flutter/material.dart';
+
+class DropdownOptionDialog extends StatefulWidget {
+  final String title;
+  final String? initialLabel;
+  final String? initialImageUrl;
+  final double? initialMrp;
+  final double? initialOfferPrice;
+  final bool isProductName;
+  final Future<String?> Function() onPickImage;
+
+  const DropdownOptionDialog({
+    super.key,
+    required this.title,
+    this.initialLabel,
+    this.initialImageUrl,
+    this.initialMrp,
+    this.initialOfferPrice,
+    required this.isProductName,
+    required this.onPickImage,
+  });
+
+  @override
+  State<DropdownOptionDialog> createState() => _DropdownOptionDialogState();
+}
+
+class _DropdownOptionDialogState extends State<DropdownOptionDialog> {
+  late TextEditingController labelController;
+  late TextEditingController mrpController;
+  late TextEditingController offerController;
+  String? imageUrl;
+  bool isUploading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    labelController = TextEditingController(text: widget.initialLabel);
+    mrpController = TextEditingController(text: widget.initialMrp?.toString());
+    offerController = TextEditingController(text: widget.initialOfferPrice?.toString());
+    imageUrl = widget.initialImageUrl;
+  }
+
+  @override
+  void dispose() {
+    labelController.dispose();
+    mrpController.dispose();
+    offerController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 400),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              widget.title,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: labelController,
+                      decoration: InputDecoration(
+                        labelText: 'Label Name',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        filled: true,
+                        fillColor: Colors.grey[50],
+                      ),
+                      autofocus: true,
+                    ),
+                    const SizedBox(height: 16),
+                    if (imageUrl != null)
+                      Column(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child: Container(
+                              height: 180,
+                              width: double.infinity,
+                              color: Colors.grey[200],
+                              child: Image.network(
+                                imageUrl!,
+                                fit: BoxFit.cover,
+                                loadingBuilder: (context, child, loadingProgress) {
+                                  if (loadingProgress == null) return child;
+                                  return const Center(child: CircularProgressIndicator());
+                                },
+                                errorBuilder: (context, error, stackTrace) => Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: const [
+                                    Icon(Icons.broken_image_rounded, size: 48, color: Colors.grey),
+                                    SizedBox(height: 8),
+                                    Text('Failed to load image', style: TextStyle(color: Colors.grey)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => setState(() => imageUrl = null),
+                            child: const Text('Remove Image', style: TextStyle(color: Colors.red)),
+                          ),
+                        ],
+                      ),
+                    if (imageUrl == null && !isUploading)
+                      InkWell(
+                        onTap: () async {
+                          setState(() => isUploading = true);
+                          try {
+                            final url = await widget.onPickImage();
+                            if (url != null) setState(() => imageUrl = url);
+                          } catch (e) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Upload failed: $e'), backgroundColor: Colors.red),
+                              );
+                            }
+                          } finally {
+                            if (mounted) setState(() => isUploading = false);
+                          }
+                        },
+                        child: Container(
+                          height: 120,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[100],
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.grey[300]!, style: BorderStyle.solid),
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.add_photo_alternate_rounded, size: 40, color: Colors.grey[400]),
+                              const SizedBox(height: 8),
+                              Text('Add Cover Image', style: TextStyle(color: Colors.grey[600])),
+                            ],
+                          ),
+                        ),
+                      ),
+                    if (isUploading)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 24),
+                        child: CircularProgressIndicator(),
+                      ),
+                    if (widget.isProductName) ...[
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: mrpController,
+                              decoration: const InputDecoration(labelText: 'MRP', border: OutlineInputBorder()),
+                              keyboardType: TextInputType.number,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextField(
+                              controller: offerController,
+                              decoration: const InputDecoration(labelText: 'Offer Price', border: OutlineInputBorder()),
+                              keyboardType: TextInputType.number,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton(
+                  onPressed: () {
+                    if (labelController.text.isNotEmpty) {
+                      Navigator.pop(context, {
+                        'label': labelController.text.trim(),
+                        'imageUrl': imageUrl,
+                        'mrp': double.tryParse(mrpController.text),
+                        'offerPrice': double.tryParse(offerController.text),
+                      });
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Save'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

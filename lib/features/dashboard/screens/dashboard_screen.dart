@@ -447,7 +447,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   DropdownButtonFormField<int>(
-                    initialValue: selectedYear,
+                    value: selectedYear,
                     decoration: const InputDecoration(
                       labelText: 'Year',
                       filled: false,
@@ -469,7 +469,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<int>(
-                    initialValue: selectedMonth,
+                    value: selectedMonth,
                     decoration: const InputDecoration(
                       labelText: 'Month',
                       filled: false,

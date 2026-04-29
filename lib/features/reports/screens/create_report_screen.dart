@@ -41,65 +41,18 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
   // Selection
   String? _selectedFarmId;
   String? _selectedCropId;
-  String? _activeProblemCategory;
+  Map<String, dynamic>? _activeCategory;
+  Map<String, dynamic>? _activeSubcategory;
+  List<Map<String, dynamic>> _problemCategoriesList = [];
+  List<Map<String, dynamic>> _problemSubcategoriesList = [];
+  List<Map<String, dynamic>> _problemItemsList = [];
   String _problemSearchQuery = '';
   final Set<String> _selectedProblems = {};
   final Map<String, Uint8List?> _problemImages = {};
   final Map<String, String> _problemImageNames = {};
   final ImagePicker _picker = ImagePicker();
 
-  // Agricultural Problem Categories
-  Map<String, List<String>> _problemCategories = {
-    'Pests': [
-      'Mites',
-      'Aphids',
-      'Thrips',
-      'Leaf Miner',
-      'S Borer',
-      'F Borer',
-      'Worm',
-      'Caterpillar',
-      'W.Fly',
-      'F Fly',
-      'M.Bug',
-      'Beetle',
-    ],
-    'Diseases': [
-      'Root Rot',
-      'Wilt',
-      'Leaf Blight',
-      'Powdery Mildew',
-      'Leaf Curl',
-      'Little Leaf',
-      'Early Blight',
-      'Downy Mildew',
-      'Rust Spot',
-      'Fusarium',
-      'Flower Blight',
-      'Nematode',
-    ],
-    'Deficiency': [
-      'Nitrogen (N)',
-      'Phosphorous (P)',
-      'Potassium (K)',
-      'Calcium (Ca)',
-      'Sulfur (S)',
-      'Magnesium (Mg)',
-      'Zinc (Zn)',
-      'Iron (Fe)',
-      'Manganese (Mn)',
-      'Copper (Cu)',
-      'Boron (B)',
-      'Chlorine (Cl)',
-    ],
-    'Others': [
-      'Drought',
-      'Water Logging',
-      'Weed',
-      'Uvar Soil',
-      'Poor Maintenance',
-    ],
-  };
+  // Hierarchical Problems are now fetched dynamically
 
   // Inputs
   final _additionalNotesController = TextEditingController();
@@ -326,25 +279,16 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
 
   Future<void> _fetchProblemData() async {
     try {
-      final categories = await SupabaseService.getDropdownOptions(
-        'problem_category',
-      );
-      final products = await SupabaseService.getHierarchicalDropdownOptions(
-        'product_name',
-      );
-      final applications = await SupabaseService.getDropdownOptions(
-        'application_method',
-      );
+      final categories = await SupabaseService.getDropdownOptions('problem_category');
+      final products = await SupabaseService.getHierarchicalDropdownOptions('product_name');
+      final applications = await SupabaseService.getDropdownOptions('application_method');
       final doseUnits = await SupabaseService.getDropdownOptions('dose_unit');
-      final fillerUnits = await SupabaseService.getDropdownOptions(
-        'filler_unit',
-      );
-      final fillerMaterials = await SupabaseService.getDropdownOptions(
-        'filler_material',
-      );
+      final fillerUnits = await SupabaseService.getDropdownOptions('filler_unit');
+      final fillerMaterials = await SupabaseService.getDropdownOptions('filler_material');
       final perUnits = await SupabaseService.getDropdownOptions('per_unit');
 
       setState(() {
+        _problemCategoriesList = categories;
         _productOptions = products;
         _applicationOptions = applications;
         _doseUnitOptions = doseUnits;
@@ -352,26 +296,29 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
         _fillerMaterialOptions = fillerMaterials;
         _perUnitOptions = perUnits;
       });
-
-      if (categories.isEmpty) return;
-
-      Map<String, List<String>> dynamicProblems = {};
-
-      for (var cat in categories) {
-        final items = await SupabaseService.getDropdownOptions(
-          'problem_item',
-          parentId: cat['id'],
-        );
-        dynamicProblems[cat['label']] =
-            items.map((e) => e['label'].toString()).toList();
-      }
-
-      if (dynamicProblems.isNotEmpty) {
-        setState(() {
-          _problemCategories = dynamicProblems;
-        });
-      }
     } catch (_) {}
+  }
+
+  Future<void> _fetchSubcategories(int categoryId) async {
+    setState(() => _isLoading = true);
+    try {
+      final subs = await SupabaseService.getDropdownOptions('problem_subcategory', parentId: categoryId);
+      setState(() => _problemSubcategoriesList = subs);
+    } catch (_) {
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _fetchItems(int subcategoryId) async {
+    setState(() => _isLoading = true);
+    try {
+      final items = await SupabaseService.getDropdownOptions('problem_item', parentId: subcategoryId);
+      setState(() => _problemItemsList = items);
+    } catch (_) {
+    } finally {
+      setState(() => _isLoading = false);
+    }
   }
 
   Map<String, dynamic>? _lastReport;
@@ -503,7 +450,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
       _selectedProblems.clear();
       _problemImages.clear();
       _problemImageNames.clear();
-      _activeProblemCategory = null;
+      _activeCategory = null;
       _problemSearchQuery = '';
       _additionalNotesController.clear();
       _lastReport = null;
@@ -875,7 +822,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                 content: Column(
                   children: [
                     DropdownButtonFormField<String>(
-                      initialValue: _selectedFarmId,
+                      value: _selectedFarmId,
                       decoration: const InputDecoration(
                         labelText: 'Choose Farm',
                       ),
@@ -957,66 +904,114 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                 content: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Choose category and select problems found',
-                      style: TextStyle(color: AppColors.textGray, fontSize: 13),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Category Cards
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      children:
-                          ['Pests', 'Diseases', 'Deficiency', 'Others']
-                              .map(
-                                (cat) => _buildCategoryCard(
-                                  cat,
-                                  cat == 'Pests'
-                                      ? Icons.pest_control_rounded
-                                      : cat == 'Diseases'
-                                      ? Icons.coronavirus_rounded
-                                      : cat == 'Deficiency'
-                                      ? Icons.science_rounded
-                                      : Icons.more_horiz_rounded,
-                                ),
-                              )
-                              .toList(),
-                    ),
-
-                    if (_activeProblemCategory != null) ...[
-                      const SizedBox(height: 24),
-
-                      // Search Bar for Problems
-                      TextField(
-                        onChanged:
-                            (v) => setState(() => _problemSearchQuery = v),
-                        decoration: InputDecoration(
-                          hintText: 'Search in $_activeProblemCategory...',
-                          prefixIcon: const Icon(Icons.search_rounded),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
+                    if (_activeCategory == null) ...[
+                      const Text(
+                        'Select Problem Category',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      const SizedBox(height: 16),
+                      Column(
+                        children: _problemCategoriesList.map((cat) {
+                          final label = cat['label'].toString();
+                          IconData icon = Icons.category_rounded;
+                          Color color = AppColors.primary;
+                          
+                          if (label.contains('Pest')) {
+                            icon = Icons.pest_control_rounded;
+                            color = Colors.orange;
+                          } else if (label.contains('Disease')) {
+                            icon = Icons.coronavirus_rounded;
+                            color = Colors.red;
+                          } else if (label.contains('Deficiency')) {
+                            icon = Icons.science_rounded;
+                            color = Colors.blue;
+                          } else if (label.contains('Other')) {
+                            icon = Icons.more_horiz_rounded;
+                            color = Colors.grey;
+                          }
+                          
+                          final imageUrl = cat['image_url']?.toString();
+                          
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: _buildHierarchyCard(label, icon, color, imageUrl: imageUrl),
+                          );
+                        }).toList(),
+                      ),
+                    ] else if (_activeSubcategory == null) ...[
+                      Row(
+                        children: [
+                          IconButton(
+                            onPressed: () => setState(() => _activeCategory = null),
+                            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
                           ),
+                          Text(
+                            'Select Type of ${_activeCategory!['label']}',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      if (_isLoading)
+                        const Center(child: CircularProgressIndicator())
+                      else if (_problemSubcategoriesList.isEmpty)
+                        const Center(child: Text('No sub-categories found'))
+                      else
+                        GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            mainAxisSpacing: 12,
+                            crossAxisSpacing: 12,
+                            childAspectRatio: 1.1,
+                          ),
+                          itemCount: _problemSubcategoriesList.length,
+                          itemBuilder: (context, index) {
+                            final sub = _problemSubcategoriesList[index];
+                            return _buildSubcategoryCard(sub);
+                          },
+                        ),
+                    ] else ...[
+                      Row(
+                        children: [
+                          IconButton(
+                            onPressed: () => setState(() => _activeSubcategory = null),
+                            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+                          ),
+                          Expanded(
+                            child: Text(
+                              '${_activeSubcategory!['label']} Problems',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        onChanged: (v) => setState(() => _problemSearchQuery = v),
+                        decoration: InputDecoration(
+                          hintText: 'Search items...',
+                          prefixIcon: const Icon(Icons.search_rounded),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                           filled: true,
                           fillColor: Colors.white,
                         ),
                       ),
-
                       const SizedBox(height: 16),
-
-                      // Problem Selection List (Cards)
-                      Container(
-                        constraints: const BoxConstraints(maxHeight: 300),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: AppColors.secondary.withOpacity(0.3),
+                      if (_isLoading)
+                        const Center(child: CircularProgressIndicator())
+                      else
+                        Container(
+                          constraints: const BoxConstraints(maxHeight: 350),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: AppColors.secondary.withOpacity(0.3)),
                           ),
+                          child: _buildNewProblemItemList(),
                         ),
-                        child: _buildProblemItemList(),
-                      ),
                     ],
 
                     if (_selectedProblems.isNotEmpty) ...[
@@ -1332,85 +1327,117 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
     );
   }
 
-  Widget _buildCategoryCard(String title, IconData icon) {
-    bool isSelected = _activeProblemCategory == title;
-    int selectedCount =
-        _selectedProblems.where((p) {
-          return _problemCategories[title]?.contains(p) ?? false;
-        }).length;
-
+  Widget _buildHierarchyCard(String title, IconData icon, Color color, {String? imageUrl}) {
     return GestureDetector(
-      onTap:
-          () => setState(() {
-            _activeProblemCategory = title;
-            _problemSearchQuery = '';
-          }),
+      onTap: () {
+        final cat = _problemCategoriesList.firstWhere(
+          (c) => c['label'].toString().toLowerCase() == title.toLowerCase(),
+          orElse: () => {'label': title, 'id': -1},
+        );
+        if (cat['id'] != -1) {
+          setState(() => _activeCategory = cat);
+          _fetchSubcategories(cat['id']);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Category "$title" not found in database. Please add it in Dropdown Creator.')),
+          );
+        }
+      },
       child: Container(
-        width: 100,
-        margin: const EdgeInsets.only(right: 12),
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+        height: 100, // Increased height slightly to better show images
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary : Colors.white,
+          color: Colors.white,
           borderRadius: BorderRadius.circular(20),
+          image: imageUrl != null
+              ? DecorationImage(
+                  image: NetworkImage(imageUrl),
+                  fit: BoxFit.cover,
+                  colorFilter: ColorFilter.mode(
+                    Colors.black.withOpacity(0.5),
+                    BlendMode.darken,
+                  ),
+                )
+              : null,
           border: Border.all(
-            color:
-                isSelected
-                    ? AppColors.primary
-                    : AppColors.secondary.withOpacity(0.3),
+            color: imageUrl != null ? Colors.transparent : color.withOpacity(0.3),
+            width: 2,
           ),
           boxShadow: [
-            if (isSelected)
-              BoxShadow(
-                color: AppColors.primary.withOpacity(0.3),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
+            BoxShadow(
+              color: (imageUrl != null ? Colors.black : color).withOpacity(0.1),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            const SizedBox(width: 24),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: imageUrl != null ? Colors.white.withOpacity(0.2) : color.withOpacity(0.1),
+                shape: BoxShape.circle,
               ),
+              child: Icon(icon, color: imageUrl != null ? Colors.white : color, size: 28),
+            ),
+            const SizedBox(width: 20),
+            Text(
+              title,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: imageUrl != null ? Colors.white : color,
+                fontSize: 18,
+              ),
+            ),
+            const Spacer(),
+            Icon(
+              Icons.arrow_forward_ios_rounded,
+              color: (imageUrl != null ? Colors.white : color).withOpacity(0.5),
+              size: 18,
+            ),
+            const SizedBox(width: 24),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSubcategoryCard(Map<String, dynamic> sub) {
+    return GestureDetector(
+      onTap: () {
+        setState(() => _activeSubcategory = sub);
+        _fetchItems(sub['id']);
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
           ],
         ),
         child: Column(
           children: [
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Icon(
-                  icon,
-                  color: isSelected ? Colors.white : AppColors.primary,
-                  size: 28,
-                ),
-                if (selectedCount > 0)
-                  Positioned(
-                    right: -8,
-                    top: -8,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(
-                        color: Colors.orange,
-                        shape: BoxShape.circle,
+            Expanded(
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                child: sub['image_url'] != null
+                    ? Image.network(sub['image_url'], width: double.infinity, fit: BoxFit.cover)
+                    : Container(
+                        color: AppColors.secondary.withOpacity(0.3),
+                        child: const Icon(Icons.image_not_supported_outlined, color: AppColors.primary),
                       ),
-                      constraints: const BoxConstraints(
-                        minWidth: 16,
-                        minHeight: 16,
-                      ),
-                      child: Text(
-                        '$selectedCount',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ),
-              ],
+              ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              title,
-              style: TextStyle(
-                color: isSelected ? Colors.white : AppColors.textBlack,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                fontSize: 12,
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Text(
+                sub['label'],
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
@@ -1419,80 +1446,99 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
     );
   }
 
-  Widget _buildProblemItemList() {
-    final items = _problemCategories[_activeProblemCategory] ?? [];
-    final filtered =
-        items
-            .where(
-              (item) => item.toLowerCase().contains(
-                _problemSearchQuery.toLowerCase(),
-              ),
-            )
-            .toList();
+  Widget _buildNewProblemItemList() {
+    final filtered = _problemItemsList
+        .where((item) => item['label'].toString().toLowerCase().contains(_problemSearchQuery.toLowerCase()))
+        .toList();
 
     if (filtered.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Text(
-            'No problems found in $_activeProblemCategory',
-            style: const TextStyle(color: AppColors.textGray),
-          ),
-        ),
-      );
+      return const Center(child: Padding(padding: EdgeInsets.all(24.0), child: Text('No items found')));
     }
 
-    return ListView.builder(
+    return GridView.builder(
       shrinkWrap: true,
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(12),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        childAspectRatio: 0.85,
+      ),
       itemCount: filtered.length,
       itemBuilder: (context, index) {
         final item = filtered[index];
-        bool isChecked = _selectedProblems.contains(item);
-        bool isSuggested = _suggestedProblems.contains(item);
+        final label = item['label'].toString();
+        bool isChecked = _selectedProblems.contains(label);
 
-        return CheckboxListTile(
-          value: isChecked,
-          activeColor: AppColors.primary,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 0,
-          ),
-          title: Row(
-            children: [
-              Text(item, style: const TextStyle(fontSize: 14)),
-              if (isSuggested) ...[
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: const Text(
-                    'Suggested',
-                    style: TextStyle(
-                      color: Colors.orange,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-          onChanged: (val) {
+        return GestureDetector(
+          onTap: () {
             setState(() {
-              if (val == true) {
-                _selectedProblems.add(item);
+              if (!isChecked) {
+                _selectedProblems.add(label);
+                _pickImage(label, ImageSource.camera);
               } else {
-                _selectedProblems.remove(item);
+                _selectedProblems.remove(label);
+                _problemImages.remove(label);
+                _problemImageNames.remove(label);
               }
             });
           },
+          child: Container(
+            decoration: BoxDecoration(
+              color: isChecked ? AppColors.primary.withOpacity(0.05) : Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isChecked ? AppColors.primary : Colors.grey[200]!,
+                width: 2,
+              ),
+            ),
+            child: Stack(
+              children: [
+                Column(
+                  children: [
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+                        child: item['image_url'] != null
+                            ? Image.network(item['image_url'], width: double.infinity, fit: BoxFit.cover)
+                            : Container(
+                                color: AppColors.secondary.withOpacity(0.3),
+                                child: const Center(
+                                  child: Icon(Icons.bug_report_outlined, size: 24, color: AppColors.primary),
+                                ),
+                              ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                      child: Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: isChecked ? FontWeight.bold : FontWeight.normal,
+                          color: isChecked ? AppColors.primary : Colors.black87,
+                        ),
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                if (isChecked)
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+                      child: const Icon(Icons.check, size: 12, color: Colors.white),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         );
       },
     );
@@ -1595,7 +1641,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
               Expanded(
                 flex: 3,
                 child: DropdownButtonFormField<String>(
-                  initialValue:
+                  value:
                       variants.any((v) => v['label'] == row.pkgSize.text)
                           ? row.pkgSize.text
                           : null,
@@ -1730,7 +1776,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                 child: Padding(
                   padding: const EdgeInsets.only(bottom: 8.0),
                   child: DropdownButtonFormField<String>(
-                    initialValue:
+                    value:
                         _productOptions.any(
                               (p) => p['label'] == row.product.text,
                             )
@@ -1779,7 +1825,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  initialValue:
+                  value:
                       _applicationOptions.any(
                             (a) => a['label'] == row.application.text,
                           )
@@ -1837,7 +1883,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                     Expanded(
                       flex: 2,
                       child: DropdownButtonFormField<String>(
-                        initialValue:
+                        value:
                             _doseUnitOptions.any(
                                   (u) => u['label'] == row.doseUnit,
                                 )
@@ -1869,7 +1915,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                     Expanded(
                       flex: 2,
                       child: DropdownButtonFormField<String>(
-                        initialValue:
+                        value:
                             _perUnitOptions.any(
                                   (u) => u['label'] == row.perUnit,
                                 )
@@ -1913,7 +1959,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                     Expanded(
                       flex: 3,
                       child: DropdownButtonFormField<String>(
-                        initialValue:
+                        value:
                             _fillerMaterialOptions.any(
                                   (m) => m['label'] == row.filler.text,
                                 )
@@ -1952,7 +1998,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                     Expanded(
                       flex: 2,
                       child: DropdownButtonFormField<String>(
-                        initialValue:
+                        value:
                             _fillerUnitOptions.any(
                                   (u) => u['label'] == row.fillerUnit,
                                 )

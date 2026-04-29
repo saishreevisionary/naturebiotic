@@ -409,7 +409,7 @@ class _AddStockEntryScreenState extends State<AddStockEntryScreen> {
           const Divider(),
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
-            initialValue: row.selectedItem,
+            value: row.selectedItem,
             isExpanded: true,
             decoration: const InputDecoration(
               labelText: 'Select Stock Item',
@@ -460,7 +460,7 @@ class _AddStockEntryScreenState extends State<AddStockEntryScreen> {
               Expanded(
                 flex: 3,
                 child: DropdownButtonFormField<String>(
-                  initialValue: row.selectedUnit,
+                  value: row.selectedUnit,
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Packet Size'),
                   items:

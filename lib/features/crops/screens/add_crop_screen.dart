@@ -385,7 +385,7 @@ class _AddCropScreenState extends State<AddCropScreen> {
                                 borderRadius: BorderRadius.circular(24),
                               ),
                               child: DropdownButtonFormField<String>(
-                                initialValue: _selectedFarmId,
+                                value: _selectedFarmId,
                                 decoration: const InputDecoration(
                                   labelText: 'Select Farm',
                                   fillColor: Colors.white,
@@ -427,7 +427,7 @@ class _AddCropScreenState extends State<AddCropScreen> {
                             child: Column(
                               children: [
                                 DropdownButtonFormField<int>(
-                                  initialValue: _selectedCropId,
+                                  value: _selectedCropId,
                                   decoration: const InputDecoration(
                                     labelText: 'Crop Name',
                                     fillColor: Colors.white,
@@ -454,7 +454,7 @@ class _AddCropScreenState extends State<AddCropScreen> {
                                 ),
                                 const SizedBox(height: 16),
                                 DropdownButtonFormField<int>(
-                                  initialValue: _selectedVarietyId,
+                                  value: _selectedVarietyId,
                                   decoration: const InputDecoration(
                                     labelText: 'Variety',
                                     fillColor: Colors.white,

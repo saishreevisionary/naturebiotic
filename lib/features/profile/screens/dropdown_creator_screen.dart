@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:nature_biotic/core/theme.dart';
 import 'package:nature_biotic/services/supabase_service.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:uuid/uuid.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:typed_data';
+import 'dropdown_option_dialog.dart';
 
 class DropdownCreatorScreen extends StatefulWidget {
   const DropdownCreatorScreen({super.key});
@@ -14,9 +19,12 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
   String? _selectedType;
   List<Map<String, dynamic>> _options = [];
   List<Map<String, dynamic>> _problemCategories = [];
+  List<Map<String, dynamic>> _problemSubCategories = [];
   List<Map<String, dynamic>> _masterCrops = [];
   int? _selectedParentId;
+  int? _selectedSubParentId; // Added for 3-level hierarchy
   bool _tableMissing = false;
+  bool _isUploadingImage = false;
 
   final Map<String, String> _typeLabels = {
     'farmer_category': 'Farmer Categories',
@@ -26,6 +34,7 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
     'water_quantity': 'Water Quantities',
     'power_source': 'Power Sources',
     'problem_category': 'Problem Categories',
+    'problem_subcategory': 'Problem Sub-Categories',
     'problem_item': 'Problem Items (Specific)',
     'master_crop': 'Crops & Varieties',
     'age_unit': 'Age Units',
@@ -53,28 +62,45 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
 
     setState(() => _isLoading = true);
     try {
-      if (_selectedType == 'problem_item') {
+      if (_selectedType == 'problem_subcategory') {
         if (_problemCategories.isEmpty) {
-          _problemCategories = await SupabaseService.getDropdownOptions(
-            'problem_category',
-          );
+          _problemCategories = await SupabaseService.getDropdownOptions('problem_category');
+        }
+        if (_selectedParentId == null && _problemCategories.isNotEmpty) {
+          _selectedParentId = _problemCategories[0]['id'];
+        }
+        if (_selectedParentId != null) {
+          _options = await SupabaseService.getDropdownOptions(_selectedType!, parentId: _selectedParentId);
+        } else {
+          _options = [];
+        }
+      } else if (_selectedType == 'problem_item') {
+        if (_problemCategories.isEmpty) {
+          _problemCategories = await SupabaseService.getDropdownOptions('problem_category');
+        }
+        if (_selectedParentId == null && _problemCategories.isNotEmpty) {
+          _selectedParentId = _problemCategories[0]['id'];
+        }
+        
+        // Fetch subcategories for the selected category
+        if (_selectedParentId != null) {
+          _problemSubCategories = await SupabaseService.getDropdownOptions('problem_subcategory', parentId: _selectedParentId);
+          if (_selectedSubParentId == null && _problemSubCategories.isNotEmpty) {
+            _selectedSubParentId = _problemSubCategories[0]['id'];
+          }
+        } else {
+          _problemSubCategories = [];
+          _selectedSubParentId = null;
+        }
+
+        if (_selectedSubParentId != null) {
+          _options = await SupabaseService.getDropdownOptions(_selectedType!, parentId: _selectedSubParentId);
+        } else {
+          _options = [];
         }
 
         if (_masterCrops.isEmpty) {
           _masterCrops = await SupabaseService.getMasterCrops();
-        }
-
-        if (_selectedParentId == null && _problemCategories.isNotEmpty) {
-          _selectedParentId = _problemCategories[0]['id'];
-        }
-
-        if (_selectedParentId != null) {
-          _options = await SupabaseService.getDropdownOptions(
-            _selectedType!,
-            parentId: _selectedParentId,
-          );
-        } else {
-          _options = [];
         }
       } else if (_selectedType == 'master_crop') {
         _options = await SupabaseService.getMasterCrops();
@@ -127,79 +153,42 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
     }
   }
 
+  Future<String?> _pickAndUploadImage() async {
+    final picker = ImagePicker();
+    final image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 50);
+    if (image == null) return null;
+
+    final bytes = await image.readAsBytes();
+    final fileName = '${const Uuid().v4()}.jpg';
+    return await SupabaseService.uploadImage(bytes, fileName, 'dropdown_covers');
+  }
+
   Future<void> _addOption() async {
     if (_selectedType == 'master_crop') {
       _addMasterCrop();
       return;
     }
 
-    final controller = TextEditingController();
-    final mrpController = TextEditingController();
-    final offerController = TextEditingController();
-
-    final result = await showDialog<bool>(
+    final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: Text('Add ${_typeLabels[_selectedType]}'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: controller,
-                  decoration: const InputDecoration(
-                    labelText: 'Product/Label Name',
-                  ),
-                  autofocus: true,
-                ),
-                if (_selectedType == 'product_name') ...[
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: mrpController,
-                          decoration: const InputDecoration(labelText: 'MRP'),
-                          keyboardType: TextInputType.number,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextField(
-                          controller: offerController,
-                          decoration: const InputDecoration(
-                            labelText: 'Offer Price',
-                          ),
-                          keyboardType: TextInputType.number,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Add'),
-              ),
-            ],
-          ),
+      builder: (context) => DropdownOptionDialog(
+        title: 'Add ${_typeLabels[_selectedType]}',
+        isProductName: _selectedType == 'product_name',
+        onPickImage: _pickAndUploadImage,
+      ),
     );
-
-    if (result == true && controller.text.isNotEmpty) {
+    
+    if (result != null && result['label'].isNotEmpty) {
       setState(() => _isLoading = true);
       try {
+        final parentToUse = (_selectedType == 'problem_item') ? _selectedSubParentId : _selectedParentId;
         final newOption = await SupabaseService.addDropdownOption(
           _selectedType!,
-          controller.text.trim(),
-          parentId: _selectedParentId,
-          mrp: double.tryParse(mrpController.text),
-          offerPrice: double.tryParse(offerController.text),
+          result['label'],
+          parentId: parentToUse,
+          mrp: result['mrp'],
+          offerPrice: result['offerPrice'],
+          imageUrl: result['imageUrl'],
         );
 
         if (_selectedType == 'problem_item') {
@@ -436,85 +425,34 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
   // --- End Hierarchical Crop Methods ---
 
   Future<void> _editOption(Map<String, dynamic> option) async {
-    final controller = TextEditingController(text: option['label']);
-    final mrpController = TextEditingController(
-      text: option['mrp']?.toString(),
-    );
-    final offerController = TextEditingController(
-      text: option['offer_price']?.toString(),
-    );
-
-    final result = await showDialog<bool>(
+    final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: Text('Edit ${_typeLabels[_selectedType]}'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: controller,
-                  decoration: const InputDecoration(
-                    labelText: 'Product/Label Name',
-                  ),
-                  autofocus: true,
-                ),
-                if (_selectedType == 'product_name') ...[
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: mrpController,
-                          decoration: const InputDecoration(labelText: 'MRP'),
-                          keyboardType: TextInputType.number,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextField(
-                          controller: offerController,
-                          decoration: const InputDecoration(
-                            labelText: 'Offer Price',
-                          ),
-                          keyboardType: TextInputType.number,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Save'),
-              ),
-            ],
-          ),
+      builder: (context) => DropdownOptionDialog(
+        title: 'Edit ${_typeLabels[_selectedType]}',
+        initialLabel: option['label'],
+        initialImageUrl: option['image_url'],
+        initialMrp: option['mrp'],
+        initialOfferPrice: option['offer_price'],
+        isProductName: _selectedType == 'product_name',
+        onPickImage: _pickAndUploadImage,
+      ),
     );
 
-    if (result == true && controller.text.isNotEmpty) {
+    if (result != null && result['label'].isNotEmpty) {
       setState(() => _isLoading = true);
       try {
         await SupabaseService.updateDropdownOption(
           option['id'],
-          controller.text.trim(),
-          mrp: double.tryParse(mrpController.text),
-          offerPrice: double.tryParse(offerController.text),
+          result['label'],
+          mrp: result['mrp'],
+          offerPrice: result['offerPrice'],
+          imageUrl: result['imageUrl'],
         );
         await _fetchOptions();
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error updating option: $e'),
-              backgroundColor: Colors.red,
-            ),
+            SnackBar(content: Text('Error updating option: $e'), backgroundColor: Colors.red),
           );
         }
       } finally {
@@ -675,7 +613,7 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
                             ),
                             const SizedBox(height: 16),
                             DropdownButtonFormField<String>(
-                              initialValue: _selectedType,
+                              value: _selectedType,
                               decoration: const InputDecoration(
                                 contentPadding: EdgeInsets.symmetric(
                                   horizontal: 16,
@@ -703,7 +641,7 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
                                   enabled: false,
                                   child: Text('REPORT & ANALYSIS', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 11)),
                                 ),
-                                ...['problem_category', 'problem_item'].map((key) => DropdownMenuItem(value: key, child: Padding(padding: const EdgeInsets.only(left: 12), child: Text(_typeLabels[key]!)))),
+                                ...['problem_category', 'problem_subcategory', 'problem_item'].map((key) => DropdownMenuItem(value: key, child: Padding(padding: const EdgeInsets.only(left: 12), child: Text(_typeLabels[key]!)))),
                                 
                                 // Crop & Yield
                                 const DropdownMenuItem(
@@ -735,35 +673,39 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
                                 _fetchOptions();
                               },
                             ),
-                            if (_selectedType == 'problem_item') ...[
+                            if (_selectedType == 'problem_subcategory' || _selectedType == 'problem_item') ...[
                               const SizedBox(height: 16),
                               const Text(
                                 'Select Parent Category',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                ),
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                               ),
                               const SizedBox(height: 8),
                               DropdownButtonFormField<int>(
-                                initialValue: _selectedParentId,
-                                decoration: const InputDecoration(
-                                  contentPadding: EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 12,
-                                  ),
-                                ),
-                                items:
-                                    _problemCategories
-                                        .map(
-                                          (c) => DropdownMenuItem<int>(
-                                            value: c['id'],
-                                            child: Text(c['label']),
-                                          ),
-                                        )
-                                        .toList(),
+                                value: _selectedParentId,
+                                decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12)),
+                                items: _problemCategories.map((c) => DropdownMenuItem<int>(value: c['id'], child: Text(c['label']))).toList(),
                                 onChanged: (v) {
-                                  setState(() => _selectedParentId = v);
+                                  setState(() {
+                                    _selectedParentId = v;
+                                    _selectedSubParentId = null;
+                                  });
+                                  _fetchOptions();
+                                },
+                              ),
+                            ],
+                            if (_selectedType == 'problem_item') ...[
+                              const SizedBox(height: 16),
+                              const Text(
+                                'Select Parent Sub-Category',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              const SizedBox(height: 8),
+                              DropdownButtonFormField<int>(
+                                value: _selectedSubParentId,
+                                decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12)),
+                                items: _problemSubCategories.map((c) => DropdownMenuItem<int>(value: c['id'], child: Text(c['label']))).toList(),
+                                onChanged: (v) {
+                                  setState(() => _selectedSubParentId = v);
                                   _fetchOptions();
                                 },
                               ),
@@ -990,67 +932,52 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
           ),
           child: Row(
             children: [
+              if (option['image_url'] != null)
+                Container(
+                  width: 50,
+                  height: 50,
+                  margin: const EdgeInsets.only(right: 16),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    image: DecorationImage(
+                      image: Image.network(option['image_url']).image,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                )
+              else
+                Container(
+                  width: 50,
+                  height: 50,
+                  margin: const EdgeInsets.only(right: 16),
+                  decoration: BoxDecoration(
+                    color: AppColors.secondary.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.image_not_supported_outlined, color: AppColors.primary, size: 20),
+                ),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       option['label'],
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    if (_selectedType == 'product_name') ...[
-                      const SizedBox(height: 4),
+                    if (option['mrp'] != null)
                       Text(
-                        'MRP: ₹${option['mrp'] ?? 0} | Offer: ₹${option['offer_price'] ?? 0}',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                    if (_selectedType == 'problem_item')
-                      FutureBuilder<List<Map<String, dynamic>>>(
-                        future: SupabaseService.getCropProblemMappings(
-                          option['id'],
-                        ),
-                        builder: (context, snapshot) {
-                          if (!snapshot.hasData || snapshot.data!.isEmpty)
-                            return const SizedBox.shrink();
-                          final crops = snapshot.data!
-                              .map((m) => m['master_crops']?['name'] ?? 'N/A')
-                              .join(', ');
-                          return Text(
-                            'Common in: $crops',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          );
-                        },
+                        'MRP: ₹${option['mrp']} | Offer: ₹${option['offer_price']}',
+                        style: const TextStyle(fontSize: 12, color: AppColors.textGray),
                       ),
                   ],
                 ),
               ),
-              const Spacer(),
               IconButton(
-                icon: const Icon(
-                  Icons.edit_outlined,
-                  color: AppColors.primary,
-                  size: 20,
-                ),
+                icon: const Icon(Icons.edit_outlined, color: AppColors.primary, size: 20),
                 onPressed: () => _editOption(option),
               ),
               IconButton(
-                icon: const Icon(
-                  Icons.delete_outline_rounded,
-                  color: Colors.red,
-                  size: 20,
-                ),
+                icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
                 onPressed: () => _deleteOption(option),
               ),
             ],
@@ -1500,6 +1427,7 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
               '  type text not null,\n'
               '  label text not null,\n'
               '  parent_id bigint references public.dropdown_options(id) on delete cascade,\n'
+              '  image_url text,\n'
               '  created_at timestamptz default now()\n'
               ');\n\n'
               '-- 2. Create hierarchical crop tables\n'
