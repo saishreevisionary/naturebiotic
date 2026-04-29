@@ -220,14 +220,14 @@ class _FarmPdfFolderScreenState extends State<FarmPdfFolderScreen> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    farm['name'] ?? 'Unnamed Farm',
+                    farm['farmers']?['name'] ?? 'Unnamed Farmer',
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                     textAlign: TextAlign.center,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
-                    '$reportCount PDF Files',
+                    '${farm['name'] ?? 'Farm'} • $reportCount Files',
                     style: TextStyle(color: AppColors.textGray.withOpacity(0.7), fontSize: 11),
                   ),
                 ],

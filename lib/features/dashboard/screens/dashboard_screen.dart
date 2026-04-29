@@ -980,8 +980,12 @@ class _DashboardScreenState extends State<DashboardScreen>
                   (c) => c['id'] == reminder['crop_id'],
                   orElse: () => <String, dynamic>{},
                 );
-                title = farm['name'] ?? 'Unknown Farm';
-                subtitle = crop['name'] ?? 'General Checkup';
+                final farmer = _allFarmers.firstWhere(
+                  (f) => f['id'] == farm['farmer_id'],
+                  orElse: () => <String, dynamic>{},
+                );
+                title = farmer['name'] ?? farm['name'] ?? 'Unknown Farmer';
+                subtitle = '${farm['name'] ?? 'Farm'} • ${crop['name'] ?? 'General Checkup'}';
               }
 
               return Container(

@@ -99,6 +99,9 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
   }
 
   Widget _buildApprovalActions() {
+    final double returnAmount = (_data['return_amount'] is num) ? (_data['return_amount'] as num).toDouble() : (double.tryParse(_data['return_amount']?.toString() ?? '0') ?? 0.0);
+    final isClaim = returnAmount < 0;
+
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -109,14 +112,14 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
         children: [
           Expanded(
             child: ElevatedButton(
-              onPressed: _isLoading ? null : _approveReturn,
+              onPressed: _isLoading ? null : () => _approveReturn(isClaim),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
+                backgroundColor: isClaim ? Colors.orange : Colors.green,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              child: const Text('Accept Return & Close Trip', style: TextStyle(fontWeight: FontWeight.bold)),
+              child: Text(isClaim ? 'Approve Claim' : 'Accept Return & Close Trip', style: const TextStyle(fontWeight: FontWeight.bold)),
             ),
           ),
         ],
@@ -124,15 +127,21 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
     );
   }
 
-  Future<void> _approveReturn() async {
+  Future<void> _approveReturn(bool isClaim) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Confirm Return'),
-        content: const Text('Are you sure you want to accept this returned amount and close the trip?'),
+        title: Text(isClaim ? 'Approve Claim' : 'Confirm Return'),
+        content: Text(isClaim 
+          ? 'Are you sure you want to approve this claim? This will settle the amount spent by the executive from their pocket.'
+          : 'Are you sure you want to accept this returned amount and close the trip?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Confirm')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true), 
+            style: ElevatedButton.styleFrom(backgroundColor: isClaim ? Colors.orange : Colors.green),
+            child: const Text('Confirm'),
+          ),
         ],
       ),
     );
@@ -182,6 +191,9 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
   }
 
   Widget _buildFinancialSummary(double allotted, double spent, double balance, dynamic returned, dynamic returnStatus) {
+    final double returnAmount = (returned is num) ? returned.toDouble() : (double.tryParse(returned?.toString() ?? '0') ?? 0.0);
+    final isClaim = returnAmount < 0;
+
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
@@ -193,7 +205,7 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
               children: [
                 _summaryItem('Allotted', '₹$allotted', AppColors.primary),
                 _summaryItem('Spent', '₹${spent.toStringAsFixed(2)}', Colors.orange),
-                _summaryItem('Balance', '₹${balance.toStringAsFixed(2)}', Colors.blue),
+                _summaryItem('Balance', '₹${balance.toStringAsFixed(2)}', balance < 0 ? Colors.orange.shade800 : Colors.blue),
               ],
             ),
             if (returnStatus != 'NONE' && returnStatus != null) ...[
@@ -201,15 +213,15 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                   const Text('Returned Amount:', style: TextStyle(fontWeight: FontWeight.w500)),
-                   Text('₹$returned', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green)),
+                   Text(isClaim ? 'Claim Amount:' : 'Returned Amount:', style: const TextStyle(fontWeight: FontWeight.w500)),
+                   Text('₹${returnAmount.abs()}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isClaim ? Colors.orange.shade700 : Colors.green)),
                 ],
               ),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                   const Text('Return Status:', style: TextStyle(fontSize: 12, color: AppColors.textGray)),
-                   Text(returnStatus.toString(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                   Text(isClaim ? 'Claim Status:' : 'Return Status:', style: const TextStyle(fontSize: 12, color: AppColors.textGray)),
+                   Text(isClaim && returnStatus == 'PENDING' ? 'AWAITING APPROVAL' : returnStatus.toString(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
                 ],
               ),
             ],
@@ -360,9 +372,20 @@ class _ExpenseDetailScreenState extends State<ExpenseDetailScreen> {
   Widget _statusChip(String? status, String? returnStatus) {
     String label = status ?? 'UNKNOWN';
     Color color = Colors.grey;
+    final double returnAmount = (_data['return_amount'] is num) ? (_data['return_amount'] as num).toDouble() : (double.tryParse(_data['return_amount']?.toString() ?? '0') ?? 0.0);
+
     if (status == 'ACTIVE') { label = 'Active'; color = Colors.green; }
     else if (status == 'CLOSED') { label = 'Closed'; color = Colors.blue; }
-    if (returnStatus == 'PENDING') { label = 'Return Pending'; color = Colors.orange; }
+    
+    if (returnStatus == 'PENDING') { 
+      if (returnAmount < 0) {
+        label = 'Claim Pending';
+        color = Colors.deepOrange;
+      } else {
+        label = 'Return Pending'; 
+        color = Colors.orange; 
+      }
+    }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),

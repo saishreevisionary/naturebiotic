@@ -446,22 +446,23 @@ class _ExecutiveExpenseDashboardState extends State<ExecutiveExpenseDashboard> {
       (sum, item) => sum + (double.tryParse(item['amount'].toString()) ?? 0.0),
     );
     final balance = allotted - spent;
-    final returnController = TextEditingController(text: balance.toString());
+    final isClaim = balance < 0;
+    final returnController = TextEditingController(text: isClaim ? balance.abs().toString() : balance.toString());
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Return Balance')),
+      appBar: AppBar(title: Text(isClaim ? 'Submit Claim' : 'Return Balance')),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           children: [
-            const Icon(
-              Icons.assignment_return_rounded,
+            Icon(
+              isClaim ? Icons.add_moderator_rounded : Icons.assignment_return_rounded,
               size: 64,
-              color: AppColors.primary,
+              color: isClaim ? Colors.orange : AppColors.primary,
             ),
             const SizedBox(height: 24),
             Text(
-              'Trip Finished',
+              isClaim ? 'Expense Claim' : 'Trip Finished',
               style: GoogleFonts.outfit(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -483,15 +484,18 @@ class _ExecutiveExpenseDashboardState extends State<ExecutiveExpenseDashboard> {
             ],
             const SizedBox(height: 8),
             Text(
-              'Enter the amount you are returning to the manager.',
+              isClaim 
+                ? 'You have spent more than allotted. Submit a claim for the difference.'
+                : 'Enter the amount you are returning to the manager.',
               style: TextStyle(color: AppColors.textGray),
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 32),
             TextField(
               controller: returnController,
               keyboardType: TextInputType.number,
               decoration: InputDecoration(
-                labelText: 'Return Amount',
+                labelText: isClaim ? 'Claim Amount' : 'Return Amount',
                 prefixText: '₹ ',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -503,19 +507,21 @@ class _ExecutiveExpenseDashboardState extends State<ExecutiveExpenseDashboard> {
               width: double.infinity,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
+                  backgroundColor: isClaim ? Colors.orange : AppColors.primary,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
                 onPressed: () async {
+                  final amount = double.tryParse(returnController.text) ?? 0.0;
+                  // If it's a claim, we store it as a negative return_amount to distinguish
                   await SupabaseService.submitReturn(
                     _activeExpense!['id'],
-                    double.parse(returnController.text),
+                    isClaim ? -amount : amount,
                   );
                   _loadActiveExpense();
                 },
-                child: const Text(
-                  'Submit Return',
-                  style: TextStyle(color: Colors.white),
+                child: Text(
+                  isClaim ? 'Submit Claim' : 'Submit Return',
+                  style: const TextStyle(color: Colors.white),
                 ),
               ),
             ),

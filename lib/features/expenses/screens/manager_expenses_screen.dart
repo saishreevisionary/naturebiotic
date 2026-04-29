@@ -348,6 +348,8 @@ class _ManagerExpenseControlState extends State<ManagerExpenseControl> {
               }
               
               final double balance = allotted - spent;
+              final double returnAmount = (expense['return_amount'] is num) ? (expense['return_amount'] as num).toDouble() : (double.tryParse(expense['return_amount']?.toString() ?? '0') ?? 0.0);
+              final isClaim = returnAmount < 0;
   
               return Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -360,9 +362,9 @@ class _ManagerExpenseControlState extends State<ManagerExpenseControl> {
                     Expanded(flex: 3, child: Text(name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13))),
                     Expanded(flex: 2, child: Text('₹${allotted.toStringAsFixed(0)}', style: const TextStyle(fontSize: 13))),
                     Expanded(flex: 2, child: Text('₹${spent.toStringAsFixed(2)}', style: const TextStyle(color: Colors.redAccent, fontSize: 13))),
-                    Expanded(flex: 2, child: Text('₹${balance.toStringAsFixed(2)}', style: TextStyle(color: balance < 0 ? Colors.red : AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13))),
-                    Expanded(flex: 2, child: Text(expense['return_amount'] != null ? '₹${expense['return_amount']}' : '-', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 13))),
-                    Expanded(flex: 2, child: _statusChip(expense['status'], expense['return_status'])),
+                    Expanded(flex: 2, child: Text(isClaim ? 'CLAIM: ₹${returnAmount.abs().toStringAsFixed(2)}' : '₹${balance.toStringAsFixed(2)}', style: TextStyle(color: balance < 0 ? Colors.orange.shade800 : AppColors.primary, fontWeight: FontWeight.bold, fontSize: 11))),
+                    Expanded(flex: 2, child: Text(expense['return_amount'] != null ? (isClaim ? 'C: ₹${returnAmount.abs()}' : 'R: ₹$returnAmount') : '-', style: TextStyle(color: isClaim ? Colors.orange.shade700 : Colors.green, fontWeight: FontWeight.bold, fontSize: 13))),
+                    Expanded(flex: 2, child: _statusChip(expense['status'], expense['return_status'], returnAmount)),
                     Expanded(
                       flex: 3,
                       child: Row(
@@ -386,16 +388,16 @@ class _ManagerExpenseControlState extends State<ManagerExpenseControl> {
                           if (expense['return_status'] == 'PENDING') ...[
                             const SizedBox(width: 8),
                             ElevatedButton(
-                              onPressed: () => _approveReturn(expense['id']),
+                              onPressed: () => _approveReturn(expense['id'], isClaim),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green,
+                                backgroundColor: isClaim ? Colors.orange : Colors.green,
                                 foregroundColor: Colors.white,
                                 minimumSize: const Size(0, 36),
                                 elevation: 0,
                                 padding: const EdgeInsets.symmetric(horizontal: 12),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                               ),
-                              child: const Text('Accept', style: TextStyle(fontSize: 11)),
+                              child: Text(isClaim ? 'Approve' : 'Accept', style: const TextStyle(fontSize: 11)),
                             ),
                           ],
                         ],
@@ -435,6 +437,8 @@ class _ManagerExpenseControlState extends State<ManagerExpenseControl> {
           } catch (_) {}
         }
 
+        final returnAmount = double.tryParse(e['return_amount']?.toString() ?? '0') ?? 0.0;
+
         return Card(
           child: ListTile(
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ExpenseDetailScreen(expense: e))).then((value) {
@@ -442,7 +446,7 @@ class _ManagerExpenseControlState extends State<ManagerExpenseControl> {
             }),
             title: Text(e['profiles']?['full_name'] ?? 'Unknown'),
             subtitle: Text('₹${e['amount_allotted'] ?? 0} • $date'),
-            trailing: _statusChip(e['status'], e['return_status']),
+            trailing: _statusChip(e['status'], e['return_status'], returnAmount),
           ),
         );
       },
@@ -459,13 +463,18 @@ class _ManagerExpenseControlState extends State<ManagerExpenseControl> {
     );
   }
 
-  Widget _statusChip(String? status, String? returnStatus) {
+  Widget _statusChip(String? status, String? returnStatus, [double returnAmount = 0]) {
     String displayStatus = status ?? 'UNKNOWN';
     Color color = displayStatus == 'ACTIVE' ? Colors.green : Colors.blue;
     
     if (returnStatus == 'PENDING') {
-      displayStatus = 'RETURN PENDING';
-      color = Colors.orange;
+      if (returnAmount < 0) {
+        displayStatus = 'CLAIM PENDING';
+        color = Colors.deepOrange;
+      } else {
+        displayStatus = 'RETURN PENDING';
+        color = Colors.orange;
+      }
     } else if (returnStatus == 'APPROVED') {
       displayStatus = 'CLOSED';
       color = Colors.blue;
@@ -484,15 +493,21 @@ class _ManagerExpenseControlState extends State<ManagerExpenseControl> {
     );
   }
 
-  Future<void> _approveReturn(String id) async {
+  Future<void> _approveReturn(String id, [bool isClaim = false]) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Confirm Return'),
-        content: const Text('Are you sure you want to accept this returned amount and close the trip?'),
+        title: Text(isClaim ? 'Approve Claim' : 'Confirm Return'),
+        content: Text(isClaim 
+          ? 'Are you sure you want to approve this claim? This will settle the amount spent by the executive from their pocket.'
+          : 'Are you sure you want to accept this returned amount and close the trip?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Confirm')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true), 
+            style: ElevatedButton.styleFrom(backgroundColor: isClaim ? Colors.orange : Colors.green),
+            child: const Text('Confirm'),
+          ),
         ],
       ),
     );

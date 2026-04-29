@@ -245,28 +245,21 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
                   ),
                 ),
                 title: Text(
-                  farmName,
+                  farmerName,
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '$cropName • $date',
-                      style: const TextStyle(fontSize: 12),
+                      '$farmName • $cropName',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary),
                     ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Farmer: $farmerName',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: AppColors.textGray,
-                            ),
-                          ),
-                        ),
-                        if (report['is_verified'] != true) ...[
+                    Text(
+                      date,
+                      style: const TextStyle(fontSize: 11, color: AppColors.textGray),
+                    ),
+                    if (report['is_verified'] != true) ...[
                           const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -290,9 +283,7 @@ class _ReportsListScreenState extends State<ReportsListScreen> {
                               ),
                             ),
                           ),
-                        ],
-                      ],
-                    ),
+                    ],
                   ],
                 ),
                 trailing: const Icon(
