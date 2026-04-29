@@ -821,7 +821,7 @@ class SupabaseService {
       final profile = await getProfile();
       final role = profile?['role'];
 
-      var query = client.from('store_transactions').select('*, profiles!store_transactions_executive_id_fkey(full_name)').eq('status', 'PENDING');
+      var query = client.from('store_transactions').select('*, profiles:executive_id(full_name)').eq('status', 'PENDING');
 
       if (role == 'executive') {
         // Executive only sees pending deliveries sent TO them
@@ -830,7 +830,7 @@ class SupabaseService {
         // Store only sees pending returns sent TO the store
         query = query.eq('transaction_type', 'RETURN');
       } else {
-        // Admin sees all
+        // Admin sees all pending deliveries and returns
       }
 
       final response = await query.order('created_at', ascending: false);
@@ -853,7 +853,7 @@ class SupabaseService {
       if (role != 'admin' && role != 'store') return [];
 
       final response = await client.from('store_transactions')
-          .select('*, profiles!store_transactions_executive_id_fkey(full_name)')
+          .select('*, profiles:executive_id(full_name)')
           .eq('status', 'REJECTED')
           .eq('transaction_type', 'DELIVERY')
           .order('created_at', ascending: false);
