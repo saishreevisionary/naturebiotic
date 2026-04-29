@@ -335,12 +335,7 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen>
           'Village',
           _farmer['village'] ?? 'N/A',
         ),
-        const Divider(height: 32, thickness: 0.5),
-        _infoSection(
-          Icons.home_work_rounded,
-          'Address',
-          _farmer['address'] ?? 'N/A',
-        ),
+        ..._buildDetailedAddressSections(),
       ],
     );
   }
@@ -375,12 +370,7 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen>
           ],
         ),
         const SizedBox(height: 24),
-        _buildInfoTile(
-          icon: Icons.home_work_rounded,
-          label: 'Address',
-          value: _farmer['address'] ?? 'N/A',
-          iconColor: Colors.blue,
-        ),
+        ..._buildDetailedAddressSections(isWide: true),
       ],
     );
   }
@@ -857,6 +847,74 @@ class _FarmerDetailScreenState extends State<FarmerDetailScreen>
           ),
       ],
     );
+  }
+
+  List<Widget> _buildDetailedAddressSections({bool isWide = false}) {
+    final String addr = _farmer['address'] ?? '';
+    final List<String> parts = addr.split('\n');
+    
+    if (parts.length >= 3) {
+      if (isWide) {
+        return [
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Expanded(
+                child: _buildInfoTile(
+                  icon: Icons.map_rounded,
+                  label: 'Taluk',
+                  value: parts[0].isEmpty ? 'N/A' : parts[0],
+                  iconColor: Colors.teal,
+                ),
+              ),
+              const SizedBox(width: 24),
+              Expanded(
+                child: _buildInfoTile(
+                  icon: Icons.domain_rounded,
+                  label: 'District',
+                  value: parts[1].isEmpty ? 'N/A' : parts[1],
+                  iconColor: Colors.indigo,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          _buildInfoTile(
+            icon: Icons.add_location_alt_rounded,
+            label: 'Landmark',
+            value: parts[2].isEmpty ? 'N/A' : parts[2],
+            iconColor: Colors.pink,
+          ),
+        ];
+      } else {
+        return [
+          const Divider(height: 32, thickness: 0.5),
+          _infoSection(Icons.map_rounded, 'Taluk', parts[0].isEmpty ? 'N/A' : parts[0]),
+          const Divider(height: 32, thickness: 0.5),
+          _infoSection(Icons.domain_rounded, 'District', parts[1].isEmpty ? 'N/A' : parts[1]),
+          const Divider(height: 32, thickness: 0.5),
+          _infoSection(Icons.add_location_alt_rounded, 'Landmark', parts[2].isEmpty ? 'N/A' : parts[2]),
+        ];
+      }
+    } else {
+      // Fallback for old records
+      if (isWide) {
+        return [
+          const SizedBox(height: 24),
+          _buildInfoTile(
+            icon: Icons.home_work_rounded,
+            label: 'Address',
+            value: addr.isEmpty ? 'N/A' : addr,
+            iconColor: Colors.blue,
+          ),
+        ];
+      } else {
+        return [
+          const Divider(height: 32, thickness: 0.5),
+          _infoSection(Icons.home_work_rounded, 'Address', addr.isEmpty ? 'N/A' : addr),
+        ];
+      }
+    }
   }
 
   Widget _infoSection(IconData icon, String label, String value) {

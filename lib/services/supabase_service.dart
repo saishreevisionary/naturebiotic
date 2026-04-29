@@ -6,9 +6,47 @@ import 'package:flutter/foundation.dart';
 import 'package:nature_biotic/services/local_database_service.dart';
 import 'package:nature_biotic/services/sync_manager.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 class SupabaseService {
+  static const String _supabaseUrl = 'https://utujkxrobmzlvudpvapc.supabase.co';
+  static const String _supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV0dWpreHJvYm16bHZ1ZHB2YXBjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5MzA2NjQsImV4cCI6MjA5MDUwNjY2NH0.REckx5fsLJMEJFnQVJdjyfNHC0seokVfPYkhOr5fxCw';
+  
   static final client = Supabase.instance.client;
+
+  // Helper to sign up via direct HTTP to avoid SDK session management issues/switching
+  static Future<String> _signUpDirect(String email, String password, Map<String, dynamic> metadata) async {
+    final response = await http.post(
+      Uri.parse('$_supabaseUrl/auth/v1/signup'),
+      headers: {
+        'apikey': _supabaseAnonKey,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'email': email,
+        'password': password,
+        'data': metadata,
+      }),
+    );
+
+    final data = jsonDecode(response.body);
+    if (response.statusCode != 200) {
+      throw data['msg'] ?? data['error_description'] ?? 'Failed to create account: ${response.body}';
+    }
+
+    String? id = data['id'];
+    if (id == null && data['user'] != null) {
+      id = data['user']['id'];
+    }
+
+    if (id == null) {
+      debugPrint('SIGNUP ERROR: ID not found. Response: ${response.body}');
+      throw 'User ID not found in signup response';
+    }
+
+    return id;
+  }
 
   // Sign in logic
   // For Admin: uses email (naturebiotic96@gmail.com)
@@ -38,24 +76,20 @@ class SupabaseService {
   }) async {
     final email = '$username@naturebiotic.local';
     
-    // Create auth user
-    final response = await client.auth.signUp(
-      email: email,
-      password: password,
-      data: {
-        'username': username,
-        'full_name': fullName,
-        'role': 'executive',
-      },
-    );
+    // Create auth user via HTTP to avoid session switching
+    final userId = await _signUpDirect(email, password, {
+      'username': username,
+      'full_name': fullName,
+      'role': 'executive',
+    });
 
-    if (response.user == null) {
+    if (userId.isEmpty) {
       throw 'Failed to create executive account';
     }
 
     // Explicitly create profile record
     await client.from('profiles').insert({
-      'id': response.user!.id,
+      'id': userId,
       'full_name': fullName,
       'username': username,
       'role': 'executive',
@@ -71,23 +105,19 @@ class SupabaseService {
     final email = '$username@naturebiotic.local';
     
     // Create auth user
-    final response = await client.auth.signUp(
-      email: email,
-      password: password,
-      data: {
-        'username': username,
-        'full_name': fullName,
-        'role': 'store',
-      },
-    );
+    final userId = await _signUpDirect(email, password, {
+      'username': username,
+      'full_name': fullName,
+      'role': 'store',
+    });
 
-    if (response.user == null) {
+    if (userId.isEmpty) {
       throw 'Failed to create store account';
     }
 
     // Create profile record
     await client.from('profiles').insert({
-      'id': response.user!.id,
+      'id': userId,
       'full_name': fullName,
       'username': username,
       'role': 'store',
@@ -103,23 +133,19 @@ class SupabaseService {
     final email = '$username@naturebiotic.local';
 
     // Create auth user
-    final response = await client.auth.signUp(
-      email: email,
-      password: password,
-      data: {
-        'username': username,
-        'full_name': fullName,
-        'role': 'manager',
-      },
-    );
+    final userId = await _signUpDirect(email, password, {
+      'username': username,
+      'full_name': fullName,
+      'role': 'manager',
+    });
 
-    if (response.user == null) {
+    if (userId.isEmpty) {
       throw 'Failed to create manager account';
     }
 
     // Create profile record
     await client.from('profiles').insert({
-      'id': response.user!.id,
+      'id': userId,
       'full_name': fullName,
       'username': username,
       'role': 'manager',
@@ -135,23 +161,19 @@ class SupabaseService {
     final email = '$username@naturebiotic.local';
 
     // Create auth user
-    final response = await client.auth.signUp(
-      email: email,
-      password: password,
-      data: {
-        'username': username,
-        'full_name': fullName,
-        'role': 'telecaller',
-      },
-    );
+    final userId = await _signUpDirect(email, password, {
+      'username': username,
+      'full_name': fullName,
+      'role': 'telecaller',
+    });
 
-    if (response.user == null) {
+    if (userId.isEmpty) {
       throw 'Failed to create telecaller account';
     }
 
     // Create profile record
     await client.from('profiles').insert({
-      'id': response.user!.id,
+      'id': userId,
       'full_name': fullName,
       'username': username,
       'role': 'telecaller',
@@ -195,12 +217,31 @@ class SupabaseService {
     try {
       final response = await client
           .from('profiles')
-          .select('id, username, full_name, sales_target')
+          .select('id, username, full_name, sales_target, role')
           .eq('role', 'executive')
           .order('full_name');
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       debugPrint('Error in getExecutives: $e');
+      return [];
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getTeamMembers() async {
+    try {
+      final user = client.auth.currentUser;
+      var query = client
+          .from('profiles')
+          .select('id, username, full_name, sales_target, role, avatar_url');
+      
+      if (user != null) {
+        query = query.neq('id', user.id);
+      }
+      
+      final response = await query.order('full_name');
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      debugPrint('Error in getTeamMembers: $e');
       return [];
     }
   }
@@ -1301,6 +1342,37 @@ class SupabaseService {
       return stock;
     } catch (e) {
       debugPrint('Error in getDetailedExecutiveStock: $e');
+      return {};
+    }
+  }
+
+  static Future<Map<String, Map<String, double>>> getPendingDetailedStock({String? userId}) async {
+    try {
+      final targetUserId = userId ?? client.auth.currentUser?.id;
+      if (targetUserId == null) return {};
+
+      final response = await client.from('store_transactions')
+          .select()
+          .eq('executive_id', targetUserId)
+          .eq('transaction_type', 'DELIVERY')
+          .eq('status', 'PENDING');
+
+      final txs = List<Map<String, dynamic>>.from(response);
+      Map<String, Map<String, double>> pendingStock = {};
+
+      for (var tx in txs) {
+        final item = (tx['item_name']?.toString() ?? 'Unknown').trim();
+        final rawUnit = tx['unit']?.toString() ?? 'Units';
+        final unit = rawUnit.split(' {₹')[0].trim();
+        final qty = double.tryParse(tx['quantity']?.toString() ?? '0') ?? 0.0;
+
+        if (!pendingStock.containsKey(item)) pendingStock[item] = {};
+        pendingStock[item]![unit] = (pendingStock[item]![unit] ?? 0.0) + qty;
+      }
+
+      return pendingStock;
+    } catch (e) {
+      debugPrint('Error in getPendingDetailedStock: $e');
       return {};
     }
   }

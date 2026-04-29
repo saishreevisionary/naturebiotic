@@ -23,7 +23,9 @@ class _AddFarmerScreenState extends State<AddFarmerScreen> {
   final _nameController = TextEditingController();
   final _villageController = TextEditingController();
   final _mobileController = TextEditingController();
-  final _addressController = TextEditingController();
+  final _talukController = TextEditingController();
+  final _districtController = TextEditingController();
+  final _landmarkController = TextEditingController();
   String? _selectedCategory;
   List<String> _categories = ['Hot', 'Warm', 'Cold'];
   bool _isLoading = false;
@@ -36,7 +38,15 @@ class _AddFarmerScreenState extends State<AddFarmerScreen> {
       _nameController.text = widget.farmer!['name'] ?? '';
       _villageController.text = widget.farmer!['village'] ?? '';
       _mobileController.text = widget.farmer!['mobile'] ?? '';
-      _addressController.text = widget.farmer!['address'] ?? '';
+      String addr = widget.farmer!['address'] ?? '';
+      List<String> parts = addr.split('\n');
+      if (parts.length >= 3) {
+        _talukController.text = parts[0];
+        _districtController.text = parts[1];
+        _landmarkController.text = parts[2];
+      } else {
+        _talukController.text = addr;
+      }
       _selectedCategory = widget.farmer!['category'];
     }
   }
@@ -67,7 +77,7 @@ class _AddFarmerScreenState extends State<AddFarmerScreen> {
         'name': _nameController.text.trim(),
         'village': _villageController.text.trim(),
         'mobile': _mobileController.text.trim(),
-        'address': _addressController.text.trim(),
+        'address': '${_talukController.text.trim()}\n${_districtController.text.trim()}\n${_landmarkController.text.trim()}',
         'category': _selectedCategory,
         'created_at': DateTime.now().toIso8601String(),
       };
@@ -168,6 +178,12 @@ class _AddFarmerScreenState extends State<AddFarmerScreen> {
                 dbKey = 'mobile';
               else if (key.contains('village'))
                 dbKey = 'village';
+              else if (key.contains('taluk'))
+                dbKey = 'taluk';
+              else if (key.contains('district'))
+                dbKey = 'district';
+              else if (key.contains('landmark'))
+                dbKey = 'landmark';
               else if (key.contains('address'))
                 dbKey = 'address';
               else if (key.contains('category'))
@@ -206,6 +222,11 @@ class _AddFarmerScreenState extends State<AddFarmerScreen> {
             }
 
             farmer['mobile'] = cleanMobile;
+
+            // Reconstruct address if separate fields were provided
+            if (farmer['taluk'] != null || farmer['district'] != null || farmer['landmark'] != null) {
+              farmer['address'] = '${farmer['taluk'] ?? ''}\n${farmer['district'] ?? ''}\n${farmer['landmark'] ?? ''}';
+            }
 
             // Ensure all recognized keys exist in every map to maintain consistent schema
             for (var k in ['mobile', 'village', 'address', 'category']) {
@@ -246,12 +267,14 @@ class _AddFarmerScreenState extends State<AddFarmerScreen> {
     try {
       setState(() => _isLoading = true);
 
-      const headers = ['name', 'mobile', 'village', 'address', 'category'];
+      const headers = ['name', 'mobile', 'village', 'taluk', 'district', 'landmark', 'category'];
       const exampleRow = [
         'John Doe',
         '9876543210',
         'Greenfield',
-        '123 Main St',
+        'Maddur',
+        'Mandya',
+        'Near Post Office',
         'Warm',
       ];
 
@@ -426,13 +449,33 @@ class _AddFarmerScreenState extends State<AddFarmerScreen> {
                     child: Column(
                       children: [
                         TextFormField(
-                          controller: _addressController,
-                          maxLines: 3,
+                          controller: _talukController,
                           decoration: const InputDecoration(
-                            labelText: 'Address',
-                            hintText: 'Enter complete address',
+                            labelText: 'Taluk',
+                            hintText: 'Enter taluk',
                             fillColor: Colors.white,
                           ),
+                          validator: (v) => v!.isEmpty ? 'Required' : null,
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _districtController,
+                          decoration: const InputDecoration(
+                            labelText: 'District',
+                            hintText: 'Enter district',
+                            fillColor: Colors.white,
+                          ),
+                          validator: (v) => v!.isEmpty ? 'Required' : null,
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _landmarkController,
+                          decoration: const InputDecoration(
+                            labelText: 'Landmark',
+                            hintText: 'Enter landmark (e.g. Near Bus Stand)',
+                            fillColor: Colors.white,
+                          ),
+                          validator: (v) => v!.isEmpty ? 'Required' : null,
                         ),
                         const SizedBox(height: 16),
                         DropdownButtonFormField<String>(

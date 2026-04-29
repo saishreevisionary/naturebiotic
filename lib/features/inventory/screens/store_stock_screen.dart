@@ -19,6 +19,7 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
   int _pendingCount = 0;
   Map<String, double> _stockInHand = {};
   Map<String, Map<String, double>> _detailedStock = {};
+  Map<String, Map<String, double>> _pendingDetailedStock = {};
   String _userRole = 'executive';
   String _userName = 'User';
   List<Map<String, dynamic>> _usageHistory = [];
@@ -46,10 +47,13 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
         final pending = await SupabaseService.getPendingStoreTransactions();
         final transactions = await SupabaseService.getExecutiveTransactions(SupabaseService.client.auth.currentUser!.id);
 
+        final pendingDetailed = await SupabaseService.getPendingDetailedStock();
+
         if (mounted) {
           setState(() {
             _stockInHand = stock;
             _detailedStock = detailed;
+            _pendingDetailedStock = pendingDetailed;
             _usageHistory = usage;
             _allTransactions = transactions;
             _pendingCount = pending.length;
@@ -1035,7 +1039,7 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
   }
 
   Widget _buildHifiInventoryList() {
-    if (_stockInHand.isEmpty) {
+    if (_stockInHand.isEmpty && _pendingDetailedStock.isEmpty) {
       return const SliverToBoxAdapter(
         child: Center(
           child: Padding(
@@ -1056,14 +1060,20 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
           mainAxisExtent: 220, // Taller cards for more details
         ),
         delegate: SliverChildBuilderDelegate((context, index) {
-          final productName = _detailedStock.keys.elementAt(index);
-          final variants = _detailedStock[productName]!;
+          // Combine keys from both detailed and pending stock
+          final allProductNames = {..._detailedStock.keys, ..._pendingDetailedStock.keys}.toList();
+          final productName = allProductNames[index];
+          
+          final variants = _detailedStock[productName] ?? {};
+          final pendingVariants = _pendingDetailedStock[productName] ?? {};
           
           double totalQty = 0;
           variants.forEach((_, q) {
-            // Only add positive stock to total for display
             if (q > 0) totalQty += q;
           });
+
+          double totalPending = 0;
+          pendingVariants.forEach((_, q) => totalPending += q);
           
           final isLow = totalQty < 10;
           final color = isLow ? Colors.red : AppColors.primary;
@@ -1139,24 +1149,50 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
                                   ],
                                 ),
                               ),
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: color.withOpacity(0.1),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Text(
-                                  totalQty.toStringAsFixed(0),
-                                  style: TextStyle(
-                                    color: color,
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 16,
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: color.withOpacity(0.1),
+                                    shape: BoxShape.circle,
                                   ),
+                                  child: Text(
+                                    totalQty.toStringAsFixed(0),
+                                    style: TextStyle(
+                                      color: color,
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (totalPending > 0) ...[
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: Colors.orange.withOpacity(0.2)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.pending_actions_rounded, color: Colors.orange, size: 12),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      '+${totalPending.toStringAsFixed(0)} PENDING',
+                                      style: const TextStyle(
+                                        color: Colors.orange,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
-                          ),
-                          const Spacer(),
+                            const Spacer(),
                           Text(
                             'BREAKDOWN',
                             style: TextStyle(

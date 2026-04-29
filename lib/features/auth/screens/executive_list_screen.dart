@@ -12,21 +12,21 @@ class ExecutiveListScreen extends StatefulWidget {
 }
 
 class _ExecutiveListScreenState extends State<ExecutiveListScreen> {
-  List<Map<String, dynamic>> _executives = [];
+  List<Map<String, dynamic>> _teamMembers = [];
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadExecutives();
+    _loadTeamMembers();
   }
 
-  Future<void> _loadExecutives() async {
+  Future<void> _loadTeamMembers() async {
     try {
-      final data = await SupabaseService.getExecutives();
+      final data = await SupabaseService.getTeamMembers();
       if (mounted) {
         setState(() {
-          _executives = data;
+          _teamMembers = data;
           _isLoading = false;
         });
       }
@@ -40,10 +40,10 @@ class _ExecutiveListScreenState extends State<ExecutiveListScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Executive Team'),
+        title: const Text('Team Management'),
         actions: [
           IconButton(
-            onPressed: _loadExecutives,
+            onPressed: _loadTeamMembers,
             icon: const Icon(Icons.refresh_rounded),
           ),
         ],
@@ -51,19 +51,20 @@ class _ExecutiveListScreenState extends State<ExecutiveListScreen> {
       body:
           _isLoading
               ? const Center(child: CircularProgressIndicator())
-              : _executives.isEmpty
-              ? const Center(child: Text('No executives found.'))
+              : _teamMembers.isEmpty
+              ? const Center(child: Text('No team members found.'))
               : Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 800),
                   child: ListView.builder(
                     padding: const EdgeInsets.all(24.0),
-                    itemCount: _executives.length,
+                    itemCount: _teamMembers.length,
                     itemBuilder: (context, index) {
-                      final executive = _executives[index];
+                      final member = _teamMembers[index];
+                      final role = member['role'] ?? 'unknown';
                       return InkWell(
                         onTap: () {
-                          _showOptions(executive);
+                          _showOptions(member);
                         },
                         borderRadius: BorderRadius.circular(16),
                         child: Container(
@@ -79,13 +80,13 @@ class _ExecutiveListScreenState extends State<ExecutiveListScreen> {
                               CircleAvatar(
                                 backgroundColor: AppColors.secondary,
                                 backgroundImage:
-                                    executive['avatar_url'] != null
-                                        ? NetworkImage(executive['avatar_url'])
+                                    member['avatar_url'] != null
+                                        ? NetworkImage(member['avatar_url'])
                                         : null,
                                 child:
-                                    executive['avatar_url'] == null
+                                    member['avatar_url'] == null
                                         ? Text(
-                                          executive['full_name']?[0] ?? 'E',
+                                          member['full_name']?[0] ?? 'U',
                                           style: const TextStyle(
                                             color: AppColors.primary,
                                             fontWeight: FontWeight.bold,
@@ -99,18 +100,38 @@ class _ExecutiveListScreenState extends State<ExecutiveListScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      executive['full_name'] ?? 'N/A',
+                                      member['full_name'] ?? 'N/A',
                                       style: const TextStyle(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 16,
                                       ),
                                     ),
-                                    Text(
-                                      '@${executive['username'] ?? 'unknown'}',
-                                      style: const TextStyle(
-                                        color: AppColors.textGray,
-                                        fontSize: 13,
-                                      ),
+                                    Row(
+                                      children: [
+                                        Text(
+                                          '@${member['username'] ?? 'unknown'}',
+                                          style: const TextStyle(
+                                            color: AppColors.textGray,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.primary.withOpacity(0.1),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            role.toUpperCase(),
+                                            style: const TextStyle(
+                                              color: AppColors.primary,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
@@ -130,7 +151,9 @@ class _ExecutiveListScreenState extends State<ExecutiveListScreen> {
     );
   }
 
-  void _showOptions(Map<String, dynamic> executive) {
+  void _showOptions(Map<String, dynamic> member) {
+    final bool isExecutive = member['role'] == 'executive';
+    
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -153,38 +176,60 @@ class _ExecutiveListScreenState extends State<ExecutiveListScreen> {
                   const NeverScrollableScrollPhysics(), // Only scroll if needed via bottom sheet behavior
               children: [
                 Text(
-                  executive['full_name'] ?? 'Executive Options',
+                  member['full_name'] ?? 'Member Options',
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  '@${executive['username']}',
-                  style: const TextStyle(
-                    color: AppColors.textGray,
-                    fontSize: 13,
-                  ),
+                Row(
+                  children: [
+                    Text(
+                      '@${member['username']}',
+                      style: const TextStyle(
+                        color: AppColors.textGray,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        (member['role'] ?? 'unknown').toString().toUpperCase(),
+                        style: const TextStyle(
+                          color: AppColors.primary,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 32),
-                _optionItem(
-                  Icons.agriculture_rounded,
-                  'Assign Farms',
-                  'Manage farms assigned to this executive',
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder:
-                            (context) =>
-                                ExecutiveAssignmentScreen(executive: executive),
-                      ),
-                    ).then((_) => _loadExecutives());
-                  },
-                ),
-                const SizedBox(height: 16),
+                if (isExecutive) ...[
+                  _optionItem(
+                    Icons.agriculture_rounded,
+                    'Assign Farms',
+                    'Manage farms assigned to this executive',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder:
+                              (context) =>
+                                  ExecutiveAssignmentScreen(executive: member),
+                        ),
+                      ).then((_) => _loadTeamMembers());
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                ],
                 _optionItem(
                   Icons.history_rounded,
                   'Attendance & Leaves',
@@ -196,23 +241,25 @@ class _ExecutiveListScreenState extends State<ExecutiveListScreen> {
                       MaterialPageRoute(
                         builder:
                             (context) => AttendanceHistoryScreen(
-                              userId: executive['id'],
+                              userId: member['id'],
                             ),
                       ),
                     );
                   },
                 ),
                 const SizedBox(height: 16),
-                _optionItem(
-                  Icons.track_changes_rounded,
-                  'Set Sales Target',
-                  'Monthly target: ₹${executive['sales_target'] ?? 0}',
-                  onTap: () {
-                    Navigator.pop(context);
-                    _showTargetDialog(executive);
-                  },
-                ),
-                const SizedBox(height: 16),
+                if (isExecutive) ...[
+                  _optionItem(
+                    Icons.track_changes_rounded,
+                    'Set Sales Target',
+                    'Monthly target: ₹${member['sales_target'] ?? 0}',
+                    onTap: () {
+                      Navigator.pop(context);
+                      _showTargetDialog(member);
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                ],
                 _optionItem(
                   Icons.phonelink_erase_rounded,
                   'Reset Device Pairing',
@@ -243,7 +290,7 @@ class _ExecutiveListScreenState extends State<ExecutiveListScreen> {
                     );
 
                     if (confirm == true) {
-                      await SupabaseService.resetUserDevice(executive['id']);
+                      await SupabaseService.resetUserDevice(member['id']);
                       if (mounted) {
                         Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -361,7 +408,7 @@ class _ExecutiveListScreenState extends State<ExecutiveListScreen> {
                       executive['id'],
                       target,
                     );
-                    _loadExecutives(); // Refresh list to show new target
+                    _loadTeamMembers(); // Refresh list to show new target
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(

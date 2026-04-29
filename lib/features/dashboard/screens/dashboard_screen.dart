@@ -785,7 +785,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         delay: 400,
         child: _workActionCard(
           context,
-          title: 'Executive Management',
+          title: 'Team Management',
           subtitle: 'Manage team, targets & assignments',
           icon: Icons.people_alt_rounded,
           color: AppColors.primary,

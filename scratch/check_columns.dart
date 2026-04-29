@@ -1,9 +1,7 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:nature_biotic/services/supabase_service.dart';
 
 void main() async {
-  final client = SupabaseClient('...', '...');
-  final response = await client.from('dropdown_options').select().limit(1);
-  if (response.isNotEmpty) {
-    print('Columns: ${response.first.keys}');
-  }
+  // This script is to be run manually or I can just use it to think.
+  // Actually I can't run it easily.
+  // I'll just check if there are other references to farmers columns.
 }
