@@ -10,7 +10,7 @@ class LocalDatabaseService {
   static Database? _database;
   static Future<Database?>? _initFuture;
   static const String _databaseName = "nature_biotic_local.db";
-  static const int _databaseVersion = 10;
+  static const int _databaseVersion = 11;
 
   static Future<Database?> get database async {
     if (kIsWeb) return null;
@@ -171,11 +171,20 @@ class LocalDatabaseService {
       // Migration to version 10: Add landmark and intercrop to farms, and updated_at to store_transactions
       try {
         await db.execute('ALTER TABLE farms ADD COLUMN landmark TEXT');
+      } catch (_) {}
+      try {
         await db.execute('ALTER TABLE farms ADD COLUMN intercrop TEXT');
+      } catch (_) {}
+      try {
         await db.execute('ALTER TABLE store_transactions ADD COLUMN updated_at TEXT');
-      } catch (e) {
-        debugPrint('DB Upgrade Error (v10): $e');
-      }
+      } catch (_) {}
+    }
+
+    if (oldVersion < 11) {
+      // Version 11: Safety check for updated_at column
+      try {
+        await db.execute('ALTER TABLE store_transactions ADD COLUMN updated_at TEXT');
+      } catch (_) {}
     }
   }
 

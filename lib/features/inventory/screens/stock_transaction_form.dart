@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:nature_biotic/core/theme.dart';
 import 'package:nature_biotic/services/supabase_service.dart';
 import 'package:nature_biotic/services/local_database_service.dart';
+import 'package:nature_biotic/services/sync_manager.dart';
 import 'package:uuid/uuid.dart';
 
 class StockTransactionForm extends StatefulWidget {
@@ -234,6 +235,8 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
             operation: widget.initialData != null ? 'UPDATE' : 'INSERT',
           );
         }
+        // Trigger immediate sync to push the transaction to Supabase for the receiver
+        SyncManager().sync();
       }
 
       if (mounted) {
