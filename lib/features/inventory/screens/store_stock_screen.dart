@@ -17,6 +17,8 @@ class StoreStockScreen extends StatefulWidget {
 class _StoreStockScreenState extends State<StoreStockScreen> {
   bool _isLoading = true;
   int _pendingCount = 0;
+  int _rejectedCount = 0;
+  List<Map<String, dynamic>> _rejectedTransactions = [];
   Map<String, double> _stockInHand = {};
   Map<String, Map<String, double>> _detailedStock = {};
   Map<String, Map<String, double>> _pendingDetailedStock = {};
@@ -62,6 +64,7 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
         }
       } else {
         final pending = await SupabaseService.getPendingStoreTransactions();
+        final rejected = await SupabaseService.getRejectedStoreTransactions();
         final stock = await SupabaseService.getUnifiedStoreStock();
         final detailed = await SupabaseService.getDetailedStoreStock();
         final storeTxs = await SupabaseService.getStoreTransactions();
@@ -102,6 +105,8 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
         if (mounted) {
           setState(() {
             _pendingCount = pending.length;
+            _rejectedCount = rejected.length;
+            _rejectedTransactions = rejected;
             _stockInHand = stock;
             _detailedStock = detailed;
             _allTransactions = combinedTxs;
@@ -393,6 +398,14 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
               ),
             ],
           ),
+          if (_pendingCount > 0) ...[
+            const SizedBox(height: 24),
+            _buildPendingAlert(),
+          ],
+          if (_rejectedCount > 0) ...[
+            const SizedBox(height: 24),
+            _buildRejectedAlert(),
+          ],
           const SizedBox(height: 48),
           Text(
             'Quick Actions',
@@ -705,6 +718,13 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
                 child: _buildPendingAlert(),
+              ),
+            ),
+          if (_rejectedCount > 0)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                child: _buildRejectedAlert(),
               ),
             ),
           if (lowStock.isNotEmpty)
@@ -1555,6 +1575,17 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
+                if (tx['status'] != null && tx['status'] != 'ACCEPTED') ...[
+                  Text(
+                    tx['status'].toString().replaceAll('_ACKNOWLEDGED', ''),
+                    style: TextStyle(
+                      color: tx['status'].toString().contains('REJECTED') ? Colors.red : Colors.orange,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 10,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                ],
                 Text(
                   '${(type == 'DELIVERY' || (isField && type == 'RECEIVED')) ? '-' : '+'}${tx['quantity']}',
                   style: TextStyle(
@@ -1570,8 +1601,26 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
                     color: AppColors.textGray,
                   ),
                 ),
-              ],
+               ],
             ),
+            if (tx['status'] == 'REJECTED' || tx['status'] == 'REJECTED_ACKNOWLEDGED') ...[
+              const SizedBox(width: 8),
+              IconButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => StockTransactionForm(
+                        transactionType: 'DELIVERY',
+                        initialData: tx,
+                      ),
+                    ),
+                  ).then((_) => _refreshData());
+                },
+                icon: const Icon(Icons.edit_note_rounded, color: Colors.blue),
+                tooltip: 'Edit Rejected Delivery',
+              ),
+            ],
           ],
         ),
       ),
@@ -1965,6 +2014,92 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildRejectedAlert() {
+    return Column(
+      children: _rejectedTransactions.map((tx) {
+        return EntranceAnimation(
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.orange.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.orange.withOpacity(0.3)),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.warning_rounded,
+                  color: Colors.deepOrange,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Delivery Rejected',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.deepOrange,
+                        ),
+                      ),
+                      Text(
+                        '${tx['profiles']?['full_name'] ?? 'Executive'} rejected ${tx['quantity']} ${tx['unit']} of ${tx['item_name']}.',
+                        style: const TextStyle(fontSize: 12, color: Colors.deepOrange),
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    try {
+                      await SupabaseService.acknowledgeRejectedTransaction(tx['id'].toString());
+                      _refreshData();
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                        );
+                      }
+                    }
+                  },
+                  style: TextButton.styleFrom(
+                    backgroundColor: Colors.deepOrange,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  ),
+                  child: const Text('OK'),
+                ),
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => StockTransactionForm(
+                          transactionType: 'DELIVERY',
+                          initialData: tx,
+                        ),
+                      ),
+                    ).then((_) => _refreshData());
+                  },
+                  style: TextButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.deepOrange,
+                    side: const BorderSide(color: Colors.deepOrange),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  ),
+                  child: const Text('Edit'),
+                ),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 

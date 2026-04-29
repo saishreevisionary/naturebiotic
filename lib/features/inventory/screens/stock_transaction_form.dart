@@ -7,8 +7,13 @@ import 'package:uuid/uuid.dart';
 
 class StockTransactionForm extends StatefulWidget {
   final String transactionType; // PURCHASE, DELIVERY, RETURN
+  final Map<String, dynamic>? initialData;
 
-  const StockTransactionForm({super.key, required this.transactionType});
+  const StockTransactionForm({
+    super.key, 
+    required this.transactionType,
+    this.initialData,
+  });
 
   @override
   State<StockTransactionForm> createState() => _StockTransactionFormState();
@@ -74,6 +79,31 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
         setState(() {
           _masterProducts = products;
           _productVendors = vendorMap;
+
+          // If editing, populate the form
+          if (widget.initialData != null) {
+            final data = widget.initialData!;
+            _itemNameController.text = data['item_name'] ?? '';
+            _quantityController.text = data['quantity']?.toString() ?? '';
+            _unitController.text = data['unit']?.toString() ?? 'Units';
+            _vendorNameController.text = data['vendor_name'] ?? '';
+            _selectedExecutiveId = data['executive_id'];
+
+            // Find and set selected product and variant
+            for (var p in products) {
+              if (p['label'] == data['item_name']) {
+                _selectedProduct = p;
+                final variants = List<Map<String, dynamic>>.from(p['variants'] ?? []);
+                for (var v in variants) {
+                  if (v['label'] == _unitController.text) {
+                    _selectedVariant = v;
+                    break;
+                  }
+                }
+                break;
+              }
+            }
+          }
         });
       }
     } catch (e) {
@@ -160,7 +190,7 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
                                _buyerNameController.text.trim().isNotEmpty;
 
       final data = {
-        'id': transactionId,
+        'id': widget.initialData?['id'] ?? transactionId,
         'item_name': _itemNameController.text,
         'transaction_type': widget.transactionType,
         'quantity': double.parse(_quantityController.text),
@@ -169,18 +199,22 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
         'vendor_name': isDirectPurchase ? _buyerNameController.text.trim() : _vendorNameController.text,
         'status': (widget.transactionType == 'PURCHASE' || isDirectPurchase) ? 'ACCEPTED' : 'PENDING',
         'created_by': user?.id,
-        'created_at': DateTime.now().toIso8601String(),
+        'created_at': widget.initialData?['created_at'] ?? DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
         if (isDirectPurchase) 'accepted_at': DateTime.now().toIso8601String(),
       };
 
       if (kIsWeb) {
-        // Direct push for Web since local DB is disabled
-        await SupabaseService.addStoreTransaction(data);
+        if (widget.initialData != null) {
+          await SupabaseService.updateStoreTransaction(data['id'], data);
+        } else {
+          await SupabaseService.addStoreTransaction(data);
+        }
       } else {
         await LocalDatabaseService.saveAndQueue(
           tableName: 'store_transactions',
           data: data,
-          operation: 'INSERT',
+          operation: widget.initialData != null ? 'UPDATE' : 'INSERT',
         );
       }
 

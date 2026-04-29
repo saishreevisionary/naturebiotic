@@ -801,7 +801,16 @@ class SupabaseService {
     final cleanData = _cleanPayload(data);
     // Ensure nested profiles mapping isn't sent in raw insert if it's there
     cleanData.remove('profiles');
-    await client.from('store_transactions').insert(cleanData);
+    await client.from('store_transactions').insert({
+      ...cleanData,
+      'created_by': client.auth.currentUser?.id,
+    });
+  }
+
+  static Future<void> updateStoreTransaction(String id, Map<String, dynamic> data) async {
+    final cleanData = _cleanPayload(data);
+    cleanData.remove('profiles');
+    await client.from('store_transactions').update(cleanData).eq('id', id);
   }
 
   static Future<List<Map<String, dynamic>>> getPendingStoreTransactions() async {
@@ -829,6 +838,41 @@ class SupabaseService {
     } catch (e) {
       debugPrint('Error in getPendingStoreTransactions: $e');
       return [];
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getRejectedStoreTransactions() async {
+    try {
+      final user = client.auth.currentUser;
+      if (user == null) return [];
+      
+      final profile = await getProfile();
+      final role = profile?['role'];
+
+      // Only Admin and Store workers care about rejected deliveries they sent
+      if (role != 'admin' && role != 'store') return [];
+
+      final response = await client.from('store_transactions')
+          .select('*, profiles!store_transactions_executive_id_fkey(full_name)')
+          .eq('status', 'REJECTED')
+          .eq('transaction_type', 'DELIVERY')
+          .order('created_at', ascending: false);
+
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      debugPrint('Error in getRejectedStoreTransactions: $e');
+      return [];
+    }
+  }
+
+  static Future<void> acknowledgeRejectedTransaction(String transactionId) async {
+    try {
+      await client.from('store_transactions').update({
+        'status': 'REJECTED_ACKNOWLEDGED',
+      }).eq('id', transactionId);
+    } catch (e) {
+      debugPrint('Error in acknowledgeRejectedTransaction: $e');
+      rethrow;
     }
   }
 
