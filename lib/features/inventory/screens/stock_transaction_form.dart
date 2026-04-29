@@ -195,6 +195,7 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
 
       final isDirectPurchase = widget.transactionType == 'DELIVERY' && 
                                _userRole == 'store' && 
+                               _selectedExecutiveId == null &&
                                _buyerNameController.text.trim().isNotEmpty;
 
       final List<Map<String, dynamic>> transactionList = [];
@@ -294,14 +295,25 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
                         const SizedBox(height: 24),
                         
                         if (_userRole == 'store' && widget.transactionType == 'DELIVERY') ...[
-                          _buildSectionTitle('Direct Purchase'),
-                          const SizedBox(height: 16),
-                          _textField(
-                            _buyerNameController,
-                            'Buyer Name',
-                            'Who bought this?',
-                            Icons.person_add_alt_1_rounded,
-                            optional: true,
+                          _buildSectionTitle('Direct Purchase (Optional)'),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Enter buyer name ONLY if selling directly from store without an executive.',
+                            style: TextStyle(fontSize: 11, color: Colors.grey[600], fontStyle: FontStyle.italic),
+                          ),
+                          const SizedBox(height: 12),
+                          AbsorbPointer(
+                            absorbing: _selectedExecutiveId != null,
+                            child: Opacity(
+                              opacity: _selectedExecutiveId != null ? 0.5 : 1.0,
+                              child: _textField(
+                                _buyerNameController,
+                                'Buyer Name',
+                                _selectedExecutiveId != null ? 'Clear executive to use direct sale' : 'Who bought this?',
+                                Icons.person_add_alt_1_rounded,
+                                optional: true,
+                              ),
+                            ),
                           ),
                           const SizedBox(height: 24),
                         ],
