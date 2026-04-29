@@ -10,7 +10,7 @@ class LocalDatabaseService {
   static Database? _database;
   static Future<Database?>? _initFuture;
   static const String _databaseName = "nature_biotic_local.db";
-  static const int _databaseVersion = 9;
+  static const int _databaseVersion = 10;
 
   static Future<Database?> get database async {
     if (kIsWeb) return null;
@@ -165,6 +165,15 @@ class LocalDatabaseService {
         }
       } catch (e) {
         debugPrint('DB Upgrade Error (v9): $e');
+      }
+    }
+
+    if (oldVersion < 10) {
+      // Migration to version 10: Add updated_at to store_transactions
+      try {
+        await db.execute('ALTER TABLE store_transactions ADD COLUMN updated_at TEXT');
+      } catch (e) {
+        debugPrint('DB Upgrade Error (v10): $e');
       }
     }
   }
@@ -329,7 +338,8 @@ class LocalDatabaseService {
         status TEXT,
         accepted_at TEXT,
         created_by TEXT,
-        created_at TEXT
+        created_at TEXT,
+        updated_at TEXT
       )
     ''');
   }
