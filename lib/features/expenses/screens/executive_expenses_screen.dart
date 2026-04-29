@@ -131,9 +131,38 @@ class _ExecutiveExpenseDashboardState extends State<ExecutiveExpenseDashboard> {
               style: TextStyle(color: AppColors.textGray),
             ),
             const SizedBox(height: 32),
-            ElevatedButton(
-              onPressed: _loadActiveExpense,
-              child: const Text('Refresh'),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Column(
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: () async {
+                        await SupabaseService.startExecutiveTrip();
+                        _loadActiveExpense();
+                      },
+                      child: const Text(
+                        'Start New Trip',
+                        style: TextStyle(color: Colors.white, fontSize: 16),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextButton.icon(
+                    onPressed: _loadActiveExpense,
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('Refresh Status'),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
