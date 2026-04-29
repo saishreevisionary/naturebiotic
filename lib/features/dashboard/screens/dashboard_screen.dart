@@ -1551,6 +1551,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   (context) => FarmSalesListScreen(
                     initialTransactions: _filteredTransactions,
                     allProducts: _allProducts,
+                    allFarms: _allFarms,
                   ),
             ),
           );
@@ -1741,6 +1742,19 @@ class _DashboardScreenState extends State<DashboardScreen>
               Colors.red.shade300,
               Icons.pending_actions_rounded,
               currencyFormat,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => FarmSalesListScreen(
+                      initialTransactions: _allTransactions,
+                      allProducts: _allProducts,
+                      allFarms: _allFarms,
+                      mode: 'SALES',
+                    ),
+                  ),
+                );
+              },
             ),
             const SizedBox(width: 16),
             _metricBox(
@@ -1749,6 +1763,18 @@ class _DashboardScreenState extends State<DashboardScreen>
               Colors.green.shade300,
               Icons.check_circle_outline_rounded,
               currencyFormat,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => FarmSalesListScreen(
+                      initialTransactions: _allTransactions,
+                      allProducts: _allProducts,
+                      mode: 'SALES',
+                    ),
+                  ),
+                );
+              },
             ),
           ],
         ),
@@ -1761,7 +1787,19 @@ class _DashboardScreenState extends State<DashboardScreen>
               Colors.orange.shade300,
               Icons.account_balance_wallet_rounded,
               currencyFormat,
-              onTap: () => _showBreakdownSheet('Outstanding'),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => FarmSalesListScreen(
+                      initialTransactions: _allTransactions,
+                      allProducts: _allProducts,
+                      allFarms: _allFarms,
+                      mode: 'OUTSTANDING',
+                    ),
+                  ),
+                );
+              },
             ),
             const SizedBox(width: 16),
             _metricBox(
@@ -1770,7 +1808,19 @@ class _DashboardScreenState extends State<DashboardScreen>
               Colors.cyan.shade300,
               Icons.payments_rounded,
               currencyFormat,
-              onTap: () => _showBreakdownSheet('Collection'),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => FarmSalesListScreen(
+                      initialTransactions: _allTransactions,
+                      allProducts: _allProducts,
+                      allFarms: _allFarms,
+                      mode: 'COLLECTION',
+                    ),
+                  ),
+                );
+              },
             ),
           ],
         ),
@@ -1789,6 +1839,9 @@ class _DashboardScreenState extends State<DashboardScreen>
     return Expanded(
       child: Material(
         color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(24),
           child: Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
@@ -1883,6 +1936,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               ],
             ),
           ),
+        ),
       ),
     );
   }

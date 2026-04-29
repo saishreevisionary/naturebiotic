@@ -26,8 +26,10 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
   final _placeController = TextEditingController();
   final _placeKeywordsController = TextEditingController();
   final _areaController = TextEditingController();
+  final _landmarkController = TextEditingController();
 
   String? _soilType;
+  String? _intercrop;
   String? _irrigationType;
   String? _waterSource;
   String? _waterQty;
@@ -43,6 +45,7 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
   ];
   List<String> _waterQtys = ['Ample', 'surplus', 'Scarcity'];
   List<String> _powerSources = ['EB', 'Diesel Pump', 'Solar'];
+  List<String> _intercropOptions = ['Yes', 'No'];
 
   // Additional Contacts
   final List<Map<String, TextEditingController>> _contactControllers = [];
@@ -79,6 +82,8 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
       _waterSource = widget.farm!['water_source'];
       _waterQty = widget.farm!['water_quantity'];
       _powerSource = widget.farm!['power_source'];
+      _landmarkController.text = widget.farm!['landmark'] ?? '';
+      _intercrop = widget.farm!['intercrop'];
       _existingReportUrl = widget.farm!['report_url'];
 
       // Load existing contacts
@@ -143,25 +148,31 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
           }
 
           // Ensure selected values are in the lists, but only if they are not null
-          if (_soilType != null && !_soilTypes.contains(_soilType)) {
+          if (_soilType != null && _soilTypes.isNotEmpty && !_soilTypes.contains(_soilType)) {
             _soilType = _soilTypes.first;
           }
+          if (_intercrop != null && _intercropOptions.isNotEmpty && !_intercropOptions.contains(_intercrop)) {
+            _intercrop = null;
+          }
           if (_irrigationType != null &&
+              _irrigationTypes.isNotEmpty &&
               !_irrigationTypes.contains(_irrigationType)) {
             _irrigationType = _irrigationTypes.first;
           }
-          if (_waterSource != null && !_waterSources.contains(_waterSource)) {
+          if (_waterSource != null && _waterSources.isNotEmpty && !_waterSources.contains(_waterSource)) {
             _waterSource = _waterSources.first;
           }
-          if (_waterQty != null && !_waterQtys.contains(_waterQty)) {
+          if (_waterQty != null && _waterQtys.isNotEmpty && !_waterQtys.contains(_waterQty)) {
             _waterQty = _waterQtys.first;
           }
-          if (_powerSource != null && !_powerSources.contains(_powerSource)) {
+          if (_powerSource != null && _powerSources.isNotEmpty && !_powerSources.contains(_powerSource)) {
             _powerSource = _powerSources.first;
           }
         });
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Error in _fetchOptions: $e');
+    }
   }
 
   Future<void> _resolveGoogleMapsLink() async {
@@ -529,6 +540,7 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
       controllers['phone']?.dispose();
     }
     _placeKeywordsController.dispose();
+    _landmarkController.dispose();
     super.dispose();
   }
 
@@ -563,6 +575,8 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
         'water_source': _waterSource,
         'water_quantity': _waterQty,
         'power_source': _powerSource,
+        'landmark': _landmarkController.text.trim(),
+        'intercrop': _intercrop,
         'farmer_id': widget.farmerId ?? widget.farm?['farmer_id'],
         'report_url': reportUrl,
         'created_at': DateTime.now().toIso8601String(),
@@ -754,8 +768,17 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
                         TextFormField(
                           controller: _placeKeywordsController,
                           decoration: const InputDecoration(
-                            labelText: 'Place / Village',
+                            labelText: 'Place / Village / District',
                             hintText: 'Type your own keywords or village name',
+                            fillColor: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _landmarkController,
+                          decoration: const InputDecoration(
+                            labelText: 'Landmark',
+                            hintText: 'Enter nearby landmark',
                             fillColor: Colors.white,
                           ),
                         ),
@@ -778,6 +801,13 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
                           _soilTypes,
                           _soilType,
                           (v) => setState(() => _soilType = v ?? _soilType),
+                        ),
+                        const SizedBox(height: 16),
+                        _buildDropdown(
+                          'Intercrop',
+                          _intercropOptions,
+                          _intercrop,
+                          (v) => setState(() => _intercrop = v ?? _intercrop),
                         ),
                       ],
                     ),
@@ -1084,7 +1114,7 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
       value: value,
       decoration: InputDecoration(labelText: label, fillColor: Colors.white),
       items:
-          items.map((String item) {
+          (items ?? []).map((String item) {
             return DropdownMenuItem(value: item, child: Text(item));
           }).toList(),
       onChanged: onChanged,
