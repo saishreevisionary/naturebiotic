@@ -982,23 +982,25 @@ class SupabaseService {
     return stock;
   }
 
-  static Future<Map<String, dynamic>> addDropdownOption(String type, String label, {int? parentId, double? mrp, double? offerPrice}) async {
+  static Future<Map<String, dynamic>> addDropdownOption(String type, String label, {int? parentId, double? mrp, double? offerPrice, String? imageUrl}) async {
     final data = {
       'type': type,
       'label': label,
       'parent_id': parentId,
       'mrp': mrp,
       'offer_price': offerPrice,
+      'image_url': imageUrl,
     };
     final response = await client.from('dropdown_options').insert(_cleanPayload(data)).select().single();
     return response;
   }
 
-  static Future<void> updateDropdownOption(int id, String label, {double? mrp, double? offerPrice}) async {
+  static Future<void> updateDropdownOption(int id, String label, {double? mrp, double? offerPrice, String? imageUrl}) async {
     await client.from('dropdown_options').update({
       'label': label,
       'mrp': mrp,
       'offer_price': offerPrice,
+      'image_url': imageUrl,
     }).eq('id', id);
   }
 

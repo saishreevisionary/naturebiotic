@@ -479,7 +479,7 @@ class _AddFarmerScreenState extends State<AddFarmerScreen> {
                         ),
                         const SizedBox(height: 16),
                         DropdownButtonFormField<String>(
-                          initialValue: _selectedCategory,
+                          value: _selectedCategory,
                           decoration: const InputDecoration(
                             labelText: 'Category',
                             fillColor: Colors.white,

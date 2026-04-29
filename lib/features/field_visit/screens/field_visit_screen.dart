@@ -46,7 +46,7 @@ class _FieldVisitScreenState extends State<FieldVisitScreen> {
                     child: Column(
                       children: [
                         DropdownButtonFormField<String>(
-                          initialValue: _selectedFarmer,
+                          value: _selectedFarmer,
                           decoration: const InputDecoration(
                             labelText: 'Select Farmer',
                             fillColor: Colors.white,
@@ -66,7 +66,7 @@ class _FieldVisitScreenState extends State<FieldVisitScreen> {
                         ),
                         const SizedBox(height: 16),
                         DropdownButtonFormField<String>(
-                          initialValue: _selectedProblem,
+                          value: _selectedProblem,
                           decoration: const InputDecoration(
                             labelText: 'Identify Problem',
                             fillColor: Colors.white,

@@ -433,7 +433,7 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
 
   Widget _buildProductDropdown() {
     return DropdownButtonFormField<Map<String, dynamic>>(
-      initialValue: _selectedProduct,
+      value: _selectedProduct,
       hint: const Text('Select Brand / Product'),
       decoration: InputDecoration(
         labelText: 'Product',
@@ -478,7 +478,7 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
     }).toList();
 
     return DropdownButtonFormField<Map<String, dynamic>>(
-      initialValue: _selectedVariant,
+      value: _selectedVariant,
       hint: const Text('Select Pocket/Pouch Size'),
       decoration: InputDecoration(
         labelText: 'Size',
@@ -506,7 +506,7 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
 
   Widget _dropdownField() {
     return DropdownButtonFormField<String>(
-      initialValue: _selectedExecutiveId,
+      value: _selectedExecutiveId,
       decoration: InputDecoration(
         labelText: 'Select Executive',
         prefixIcon: const Icon(Icons.person_rounded, size: 20),

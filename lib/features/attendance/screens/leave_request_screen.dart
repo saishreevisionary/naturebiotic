@@ -137,7 +137,7 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
                     child: Column(
                       children: [
                         DropdownButtonFormField<String>(
-                          initialValue: _leaveType,
+                          value: _leaveType,
                           decoration: const InputDecoration(
                             labelText: 'Leave Type',
                             fillColor: Colors.white,
