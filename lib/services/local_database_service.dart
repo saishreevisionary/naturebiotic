@@ -168,10 +168,11 @@ class LocalDatabaseService {
       }
     }
     if (oldVersion < 10) {
-      // Migration to version 10: Add landmark and intercrop to farms
+      // Migration to version 10: Add landmark and intercrop to farms, and updated_at to store_transactions
       try {
         await db.execute('ALTER TABLE farms ADD COLUMN landmark TEXT');
         await db.execute('ALTER TABLE farms ADD COLUMN intercrop TEXT');
+        await db.execute('ALTER TABLE store_transactions ADD COLUMN updated_at TEXT');
       } catch (e) {
         debugPrint('DB Upgrade Error (v10): $e');
       }
@@ -340,7 +341,8 @@ class LocalDatabaseService {
         status TEXT,
         accepted_at TEXT,
         created_by TEXT,
-        created_at TEXT
+        created_at TEXT,
+        updated_at TEXT
       )
     ''');
   }

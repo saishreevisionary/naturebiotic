@@ -344,7 +344,25 @@ class _ExecutiveCallDetailsScreenState extends State<ExecutiveCallDetailsScreen>
                   children: [
                     const Icon(Icons.person_pin_rounded, size: 14, color: AppColors.primary),
                     const SizedBox(width: 6),
-                    Text('Farmer: $farmerName', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    Expanded(
+                      child: Text(
+                        'Farmer: $farmerName', 
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        'By: ${widget.executiveName}', 
+                        style: const TextStyle(fontSize: 10, color: AppColors.primary, fontWeight: FontWeight.bold)
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 8),

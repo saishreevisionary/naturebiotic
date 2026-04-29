@@ -366,7 +366,22 @@ class _ExecutiveDialerScreenState extends State<ExecutiveDialerScreen> with Widg
                               child: const Icon(Icons.call_made_rounded, color: Colors.green, size: 20),
                             ),
                             title: Text(farmerName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                            subtitle: Text('${log['phone_number'] ?? 'Unknown'} • $timeStr'),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('${log['phone_number'] ?? 'Unknown'} • $timeStr'),
+                                if (log['profiles']?['full_name'] != null)
+                                  Text(
+                                    'Spoke: ${log['profiles']['full_name']}',
+                                    style: TextStyle(
+                                      color: AppColors.primary, 
+                                      fontSize: 11, 
+                                      fontWeight: FontWeight.bold,
+                                      backgroundColor: AppColors.primary.withOpacity(0.05)
+                                    ),
+                                  ),
+                              ],
+                            ),
                             trailing: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               crossAxisAlignment: CrossAxisAlignment.end,
