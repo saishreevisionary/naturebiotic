@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:nature_biotic/core/theme.dart';
 import 'package:flutter/gestures.dart';
@@ -6,11 +7,17 @@ import 'package:nature_biotic/features/auth/screens/update_password_screen.dart'
 import 'package:nature_biotic/features/auth/screens/splash_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:nature_biotic/services/sync_manager.dart';
+import 'package:sqflite_common_ffi/sqflite_common_ffi.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  if (Platform.isWindows || Platform.isLinux) {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  }
 
   await Supabase.initialize(
     url: 'https://utujkxrobmzlvudpvapc.supabase.co',
