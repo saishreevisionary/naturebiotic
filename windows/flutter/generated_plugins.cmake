@@ -9,6 +9,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   geolocator_windows
   permission_handler_windows
   printing
+  sqlite3_flutter_libs
   url_launcher_windows
 )
 

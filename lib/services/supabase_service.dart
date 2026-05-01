@@ -317,24 +317,48 @@ class SupabaseService {
   }
 
   static Future<void> addFarmer(Map<String, dynamic> farmerData) async {
-    await client.from('farmers').insert({
-      ..._cleanPayload(farmerData),
-      'created_by': client.auth.currentUser?.id,
-    });
+    final cleanData = _cleanPayload(farmerData);
+    final userId = client.auth.currentUser?.id;
+    
+    // Ensure created_by is set if not already present
+    if (cleanData['created_by'] == null && userId != null) {
+      cleanData['created_by'] = userId;
+    }
+
+    debugPrint('SUPABASE: Adding farmer: ${cleanData['name']} (ID: ${cleanData['id']})');
+    
+    try {
+      await client.from('farmers').insert(cleanData);
+      debugPrint('SUPABASE: Farmer added successfully');
+    } catch (e) {
+      debugPrint('SUPABASE ERROR: Failed to add farmer: $e');
+      rethrow;
+    }
   }
 
   static Future<void> addFarmersBulk(List<Map<String, dynamic>> farmersData) async {
     final userId = client.auth.currentUser?.id;
-    final farmersWithCreatedBy = farmersData.map((farmer) => {
-      ..._cleanPayload(farmer),
-      'created_by': userId,
+    final farmersWithCreatedBy = farmersData.map((farmer) {
+      final clean = _cleanPayload(farmer);
+      if (clean['created_by'] == null && userId != null) {
+        clean['created_by'] = userId;
+      }
+      return clean;
     }).toList();
     
+    debugPrint('SUPABASE: Adding ${farmersWithCreatedBy.length} farmers in bulk');
     await client.from('farmers').insert(farmersWithCreatedBy);
   }
 
   static Future<void> updateFarmer(String id, Map<String, dynamic> farmerData) async {
-    await client.from('farmers').update(_cleanPayload(farmerData)).eq('id', id);
+    final cleanData = _cleanPayload(farmerData);
+    // Remove ID and created_at/by from update payload to avoid issues
+    cleanData.remove('id');
+    cleanData.remove('created_at');
+    cleanData.remove('created_by');
+
+    debugPrint('SUPABASE: Updating farmer: $id');
+    await client.from('farmers').update(cleanData).eq('id', id);
   }
 
   static Future<void> deleteFarmer(String id) async {

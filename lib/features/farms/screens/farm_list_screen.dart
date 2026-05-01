@@ -420,26 +420,7 @@ class _FarmListScreenState extends State<FarmListScreen> {
                   ),
                 ),
               ),
-      floatingActionButton: _userRole == 'manager' 
-        ? null 
-        : EntranceAnimation(
-            delay: 800,
-            child: ScaleButton(
-              onTap: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const AddFarmScreen()),
-                );
-                _loadFarms();
-              },
-              child: FloatingActionButton(
-                heroTag: 'farm_fab',
-                onPressed: null,
-                backgroundColor: AppColors.primary,
-                child: const Icon(Icons.add_rounded, color: Colors.white),
-              ),
-            ),
-          ),
+      floatingActionButton: null,
     );
   }
 }

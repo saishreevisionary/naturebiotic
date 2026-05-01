@@ -73,6 +73,8 @@ class _AddFarmerScreenState extends State<AddFarmerScreen> {
 
     setState(() => _isLoading = true);
     try {
+      final currentUserId = SupabaseService.client.auth.currentUser?.id;
+
       final data = {
         'name': _nameController.text.trim(),
         'village': _villageController.text.trim(),
@@ -80,6 +82,7 @@ class _AddFarmerScreenState extends State<AddFarmerScreen> {
         'address': '${_talukController.text.trim()}\n${_districtController.text.trim()}\n${_landmarkController.text.trim()}',
         'category': _selectedCategory,
         'created_at': DateTime.now().toIso8601String(),
+        'created_by': currentUserId,
       };
 
       // NEW OFFLINE-FIRST LOGIC
@@ -123,8 +126,17 @@ class _AddFarmerScreenState extends State<AddFarmerScreen> {
       }
     } catch (e) {
       if (mounted) {
+        String errorMessage = 'Error: $e';
+        if (e.toString().contains('farmers_category_check')) {
+          errorMessage = 'Database Error: The selected category is not allowed by the database constraint. Please update the "farmers_category_check" constraint in Supabase.';
+        }
+        
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
         );
       }
     } finally {

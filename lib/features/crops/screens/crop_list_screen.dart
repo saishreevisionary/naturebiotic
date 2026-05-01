@@ -101,50 +101,20 @@ class _CropListScreenState extends State<CropListScreen> {
                   ),
                 ),
           ),
-      floatingActionButton: EntranceAnimation(
-        delay: 800,
-        child: ScaleButton(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const AddCropScreen()),
-            ).then((value) {
-              if (value == true) _loadCrops();
-            });
-          },
-          child: FloatingActionButton(
-            heroTag: 'crop_fab',
-            onPressed: null,
-            backgroundColor: AppColors.primary,
-            child: const Icon(Icons.add_rounded, color: Colors.white),
-          ),
-        ),
-      ),
+      floatingActionButton: null,
     );
   }
 
   Widget _buildEmptyState() {
-    return Center(
+    return const Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.eco_outlined, size: 64, color: AppColors.textGray),
-          const SizedBox(height: 16),
-          const Text('No crops found', style: TextStyle(color: AppColors.textGray, fontSize: 16)),
-          const SizedBox(height: 24),
-          ScaleButton(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const AddCropScreen()),
-              ).then((value) {
-                if (value == true) _loadCrops();
-              });
-            },
-            child: ElevatedButton(
-              onPressed: null,
-              child: const Text('Add Your First Crop'),
-            ),
+          Icon(Icons.eco_outlined, size: 64, color: AppColors.textGray),
+          SizedBox(height: 16),
+          Text(
+            'No crops found',
+            style: TextStyle(color: AppColors.textGray, fontSize: 16),
           ),
         ],
       ),

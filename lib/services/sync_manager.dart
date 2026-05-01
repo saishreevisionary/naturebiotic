@@ -84,8 +84,10 @@ class SyncManager {
           );
           continue;
         }
-
-        if (item == null) continue;
+        if (item == null) {
+          debugPrint('SYNC WARNING: Sync item $queueId is null, skipping');
+          continue;
+        }
 
         final String tableName = item['table_name'];
         final String operation = item['operation'];
@@ -93,14 +95,12 @@ class SyncManager {
         final Map<String, dynamic> payload = jsonDecode(item['payload']);
 
         try {
-          debugPrint('SYNC: Processing $tableName record $recordId...');
+          debugPrint('SYNC: Executing $operation for $tableName:$recordId');
           await _processSyncItem(tableName, operation, payload);
           await LocalDatabaseService.updateSyncStatus(queueId, 'SYNCED');
-          debugPrint('SYNC: Successfully synced $tableName record $recordId');
+          debugPrint('SYNC SUCCESS: $tableName:$recordId');
         } catch (e) {
-          debugPrint(
-            'SYNC: ERROR in _processSyncItem for $tableName ($recordId): $e',
-          );
+          debugPrint('SYNC FAILURE: $tableName:$recordId: $e');
           await LocalDatabaseService.updateSyncStatus(
             queueId,
             'FAILED',

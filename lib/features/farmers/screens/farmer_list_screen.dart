@@ -19,6 +19,7 @@ class FarmerListScreen extends StatefulWidget {
 class _FarmerListScreenState extends State<FarmerListScreen> {
   List<Map<String, dynamic>> _farmers = [];
   String? _userRole;
+  List<String> _categories = ['Hot', 'Warm', 'Cold'];
   bool _isLoading = true;
   String? _selectedCategory;
   final TextEditingController _searchController = TextEditingController();
@@ -32,11 +33,33 @@ class _FarmerListScreenState extends State<FarmerListScreen> {
   @override
   void initState() {
     super.initState();
-    _loadFarmers();
+    _loadInitialData();
+  }
+
+  Future<void> _loadInitialData() async {
+    await Future.wait([
+      _loadFarmers(),
+      _loadCategories(),
+    ]);
+  }
+
+  Future<void> _loadCategories() async {
+    try {
+      final options = await SupabaseService.getDropdownOptions('farmer_category');
+      if (options.isNotEmpty) {
+        if (mounted) {
+          setState(() {
+            _categories = options.map((e) => e['label'].toString()).toList();
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading categories: $e');
+    }
   }
 
   Future<void> _loadFarmers() async {
-    setState(() => _isLoading = true);
+    if (mounted) setState(() => _isLoading = true);
     try {
       final profile = await SupabaseService.getProfile();
       _userRole = profile?['role'];
@@ -71,7 +94,19 @@ class _FarmerListScreenState extends State<FarmerListScreen> {
     }
   }
 
-
+  Color _getCategoryColor(String? category) {
+    if (category == null) return AppColors.textGray;
+    switch (category) {
+      case 'Hot':
+        return AppColors.hot;
+      case 'Warm':
+        return AppColors.warm;
+      case 'Cold':
+        return AppColors.cold;
+      default:
+        return AppColors.primary;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -163,27 +198,19 @@ class _FarmerListScreenState extends State<FarmerListScreen> {
                           physics: const BouncingScrollPhysics(),
                           child: Row(
                             children: [
-                              FilterChipWidget(
-                                label: 'Hot', 
-                                color: AppColors.hot,
-                                isSelected: _selectedCategory == 'Hot',
-                                onTap: () => setState(() => _selectedCategory = _selectedCategory == 'Hot' ? null : 'Hot'),
-                              ),
-                              const SizedBox(width: 12),
-                              FilterChipWidget(
-                                label: 'Warm', 
-                                color: AppColors.warm,
-                                isSelected: _selectedCategory == 'Warm',
-                                onTap: () => setState(() => _selectedCategory = _selectedCategory == 'Warm' ? null : 'Warm'),
-                              ),
-                              const SizedBox(width: 12),
-                              FilterChipWidget(
-                                label: 'Cold', 
-                                color: AppColors.cold,
-                                isSelected: _selectedCategory == 'Cold',
-                                onTap: () => setState(() => _selectedCategory = _selectedCategory == 'Cold' ? null : 'Cold'),
-                              ),
-                              const SizedBox(width: 20),
+                              ..._categories.map((category) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 12),
+                                  child: FilterChipWidget(
+                                    label: category,
+                                    color: _getCategoryColor(category),
+                                    isSelected: _selectedCategory == category,
+                                    onTap: () => setState(() => _selectedCategory =
+                                        _selectedCategory == category ? null : category),
+                                  ),
+                                );
+                              }),
+                              const SizedBox(width: 8),
                               TextButton.icon(
                                 onPressed: () {
                                   setState(() {
@@ -195,7 +222,10 @@ class _FarmerListScreenState extends State<FarmerListScreen> {
                                 label: const Text('Clear Filters'),
                                 style: TextButton.styleFrom(
                                   foregroundColor: AppColors.textGray,
-                                  textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                                  textStyle: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
                                 ),
                               ),
                             ],
@@ -359,15 +389,6 @@ class _FarmerListScreenState extends State<FarmerListScreen> {
             ),
           ),
     );
-  }
-
-  Color _getCategoryColor(String? category) {
-    switch (category) {
-      case 'Hot': return AppColors.hot;
-      case 'Warm': return AppColors.warm;
-      case 'Cold': return AppColors.cold;
-      default: return AppColors.warm;
-    }
   }
 }
 
