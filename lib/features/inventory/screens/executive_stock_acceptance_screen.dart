@@ -13,6 +13,8 @@ class ExecutiveStockAcceptanceScreen extends StatefulWidget {
 class _ExecutiveStockAcceptanceScreenState extends State<ExecutiveStockAcceptanceScreen> {
   bool _isLoading = true;
   List<Map<String, dynamic>> _pendingTransactions = [];
+  String? _currentUserId;
+  String? _userRole;
 
   @override
   void initState() {
@@ -24,9 +26,12 @@ class _ExecutiveStockAcceptanceScreenState extends State<ExecutiveStockAcceptanc
     setState(() => _isLoading = true);
     try {
       final pending = await SupabaseService.getPendingStoreTransactions();
+      final profile = await SupabaseService.getProfile();
       if (mounted) {
         setState(() {
           _pendingTransactions = pending;
+          _currentUserId = SupabaseService.client.auth.currentUser?.id;
+          _userRole = profile?['role'];
           _isLoading = false;
         });
       }
@@ -44,13 +49,56 @@ class _ExecutiveStockAcceptanceScreenState extends State<ExecutiveStockAcceptanc
       barrierDismissible: false,
       builder: (context) => const Center(child: CircularProgressIndicator(color: Colors.white)),
     );
-
+ 
     try {
       await SupabaseService.updateStoreTransactionStatus(id, status);
       if (mounted) {
         Navigator.pop(context); // Close loading
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Stock ${status.toLowerCase()} successfully')),
+        );
+        _loadPending();
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close loading
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+ 
+  Future<void> _handleDelete(String id) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Delivery?'),
+        content: const Text('Are you sure you want to delete this pending delivery? This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true), 
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+ 
+    if (confirm != true) return;
+ 
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator(color: Colors.white)),
+    );
+ 
+    try {
+      await SupabaseService.deleteStoreTransaction(id);
+      if (mounted) {
+        Navigator.pop(context); // Close loading
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Delivery deleted successfully')),
         );
         _loadPending();
       }
@@ -137,28 +185,64 @@ class _ExecutiveStockAcceptanceScreenState extends State<ExecutiveStockAcceptanc
                 const SizedBox(height: 12),
                 const Divider(),
                 const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextButton(
-                        onPressed: () => _handleAcceptance(tx['id'], false),
-                        child: const Text('Reject', style: TextStyle(color: Colors.red)),
+                // Logic for Admin/Store viewing DELIVERIES (Handover Pending)
+                if ((_userRole == 'admin' || _userRole == 'store') && isDelivery) ...[
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.hourglass_empty_rounded, size: 16, color: Colors.orange.shade700),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Handover Pending',
+                            style: TextStyle(
+                              color: Colors.orange.shade700,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () => _handleAcceptance(tx['id'], true),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
+                      // Admins can delete any pending delivery, Store can delete their own
+                      if (_userRole == 'admin' || (_userRole == 'store' && tx['created_by'] == _currentUserId))
+                        TextButton.icon(
+                          onPressed: () => _handleDelete(tx['id']),
+                          icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 18),
+                          label: const Text('Delete Delivery', style: TextStyle(color: Colors.red, fontSize: 13)),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            backgroundColor: Colors.red.withOpacity(0.05),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
                         ),
-                        child: const Text('Accept Stock'),
+                    ],
+                  ),
+                ] else ...[
+                  // Standard Accept/Reject for receivers
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextButton(
+                          onPressed: () => _handleAcceptance(tx['id'], false),
+                          child: const Text('Reject', style: TextStyle(color: Colors.red)),
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () => _handleAcceptance(tx['id'], true),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                          ),
+                          child: const Text('Accept Stock'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),

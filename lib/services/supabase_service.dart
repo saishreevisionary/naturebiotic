@@ -227,6 +227,20 @@ class SupabaseService {
     }
   }
 
+  static Future<List<Map<String, dynamic>>> getAllStaff() async {
+    try {
+      final response = await client
+          .from('profiles')
+          .select('id, username, full_name, sales_target, role')
+          .inFilter('role', ['executive', 'manager', 'telecaller', 'store'])
+          .order('full_name');
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      debugPrint('Error in getAllStaff: $e');
+      return [];
+    }
+  }
+
   static Future<List<Map<String, dynamic>>> getTeamMembers() async {
     try {
       final user = client.auth.currentUser;
@@ -304,8 +318,9 @@ class SupabaseService {
       final profile = await getProfile();
       var query = client.from('farmers').select();
       
-      if (profile?['role'] == 'executive') {
-        // For executives, show only farmers they created
+      final role = profile?['role'];
+      if (role == 'executive' || role == 'telecaller') {
+        // For executives and telecallers, show only farmers they created
         query = query.eq('created_by', client.auth.currentUser!.id);
       }
       
@@ -404,10 +419,11 @@ class SupabaseService {
     print('DEBUG: getFarms - User ID: ${user?.id}');
     print('DEBUG: getFarms - Role: ${profile?['role']}');
     
-    if (profile?['role'] == 'executive') {
+    final role = profile?['role'];
+    if (role == 'executive' || role == 'telecaller') {
       final userId = user!.id;
       print('DEBUG: getFarms - Filtering by assigned_to: $userId');
-      // THE NEW WORKFLOW: Executives ONLY see farms assigned to them
+      // THE NEW WORKFLOW: Executives/Telecallers ONLY see farms assigned to them
       query = query.eq('assigned_to', userId);
     }
     
@@ -479,8 +495,9 @@ class SupabaseService {
     final user = client.auth.currentUser;
     final profile = await getProfile();
     
-    if (profile?['role'] == 'executive' && user != null) {
-      // Executives see crops for farms assigned to them
+    final role = profile?['role'];
+    if ((role == 'executive' || role == 'telecaller') && user != null) {
+      // Executives/Telecallers see crops for farms assigned to them
       final response = await client
           .from('crops')
           .select('*, farms!inner(name, assigned_to, farmers(name))')
@@ -615,9 +632,10 @@ class SupabaseService {
       final user = client.auth.currentUser;
       final profile = await getProfile();
       
-      if (profile?['role'] == 'executive' && user != null) {
-        // Executives only see reports for farms assigned to them
-        // Fallback: Just get all reports created by this executive
+      final role = profile?['role'];
+      if ((role == 'executive' || role == 'telecaller') && user != null) {
+        // Executives/Telecallers only see reports for farms assigned to them
+        // Fallback: Just get all reports created by this user
         final response = await client
             .from('reports')
             .select(columns ?? '*, farms(name, assigned_to, farmers(name)), crops(name)')
@@ -753,17 +771,17 @@ class SupabaseService {
 
     // Farmers count
     var farmersQuery = client.from('farmers').select('id');
-    if (role == 'executive') farmersQuery = farmersQuery.eq('created_by', userId);
+    if (role == 'executive' || role == 'telecaller') farmersQuery = farmersQuery.eq('created_by', userId);
     final farmersRes = await farmersQuery.count(CountOption.exact);
 
     // Farms count
     var farmsQuery = client.from('farms').select('id');
-    if (role == 'executive') farmsQuery = farmsQuery.eq('assigned_to', userId);
+    if (role == 'executive' || role == 'telecaller') farmsQuery = farmsQuery.eq('assigned_to', userId);
     final farmsRes = await farmsQuery.count(CountOption.exact);
 
     // Reports count
     var reportsQuery = client.from('reports').select('id');
-    if (role == 'executive') {
+    if (role == 'executive' || role == 'telecaller') {
       reportsQuery = reportsQuery.eq('created_by', userId);
     }
     final reportsRes = await reportsQuery.count(CountOption.exact);
@@ -847,8 +865,8 @@ class SupabaseService {
 
       var query = client.from('store_transactions').select('*, profiles:executive_id(full_name)').eq('status', 'PENDING');
 
-      if (role == 'executive') {
-        // Executive only sees pending deliveries sent TO them
+      if (role == 'executive' || role == 'telecaller') {
+        // Executive/Telecaller only sees pending deliveries sent TO them
         query = query.eq('executive_id', user.id).eq('transaction_type', 'DELIVERY');
       } else if (role == 'store') {
         // Store only sees pending returns sent TO the store
@@ -874,15 +892,27 @@ class SupabaseService {
       final role = profile?['role'];
 
       // Only Admin and Store workers care about rejected deliveries they sent
-      if (role != 'admin' && role != 'store') return [];
+      if (role != 'admin' && role != 'store' && role != 'executive' && role != 'telecaller') return [];
+      
+      if (role == 'admin' || role == 'store') {
+        final response = await client.from('store_transactions')
+            .select('*, profiles:executive_id(full_name)')
+            .eq('status', 'REJECTED')
+            .eq('transaction_type', 'DELIVERY')
+            .order('created_at', ascending: false);
 
-      final response = await client.from('store_transactions')
-          .select('*, profiles:executive_id(full_name)')
-          .eq('status', 'REJECTED')
-          .eq('transaction_type', 'DELIVERY')
-          .order('created_at', ascending: false);
+        return List<Map<String, dynamic>>.from(response);
+      } else {
+        final userId = user.id;
+        final response = await client.from('store_transactions')
+            .select('*, profiles:executive_id(full_name)')
+            .eq('executive_id', userId)
+            .eq('status', 'REJECTED')
+            .eq('transaction_type', 'DELIVERY')
+            .order('created_at', ascending: false);
 
-      return List<Map<String, dynamic>>.from(response);
+        return List<Map<String, dynamic>>.from(response);
+      }
     } catch (e) {
       debugPrint('Error in getRejectedStoreTransactions: $e');
       return [];
@@ -900,16 +930,15 @@ class SupabaseService {
     }
   }
 
-  static Future<void> updateStoreTransactionStatus(String transactionId, String status) async {
-    try {
-      await client.from('store_transactions').update({
-        'status': status,
-        'accepted_at': status == 'ACCEPTED' ? DateTime.now().toIso8601String() : null,
-      }).eq('id', transactionId);
-    } catch (e) {
-      debugPrint('Error updateStoreTransactionStatus: $e');
-      rethrow;
-    }
+  static Future<void> updateStoreTransactionStatus(String id, String status) async {
+    await client.from('store_transactions').update({
+      'status': status,
+      'accepted_at': status == 'ACCEPTED' ? DateTime.now().toIso8601String() : null,
+    }).eq('id', id);
+  }
+
+  static Future<void> deleteStoreTransaction(String id) async {
+    await client.from('store_transactions').delete().eq('id', id);
   }
 
   static Future<Map<String, double>> getStoreStock() async {
@@ -1212,11 +1241,11 @@ class SupabaseService {
     final now = DateTime.now();
     final startOfToday = DateTime(now.year, now.month, now.day);
     
-    // 1. Get total executives
+    // 1. Get total field staff (Executives and Telecallers)
     final execResponse = await client
         .from('profiles')
         .select('id')
-        .eq('role', 'executive');
+        .inFilter('role', ['executive', 'telecaller']);
     final totalExecutives = (execResponse as List).length;
 
     if (totalExecutives == 0) return {'present': 0, 'absent': 0};
@@ -1314,7 +1343,7 @@ class SupabaseService {
     
     if (userId != null) {
       query = query.eq('executive_id', userId);
-    } else if (profile?['role'] == 'executive') {
+    } else if (profile?['role'] == 'executive' || profile?['role'] == 'telecaller') {
       query = query.eq('executive_id', client.auth.currentUser!.id);
     }
 

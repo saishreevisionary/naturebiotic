@@ -33,7 +33,7 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
 
   String? _selectedExecutiveId;
   String? _userRole;
-  List<Map<String, dynamic>> _executives = [];
+  List<Map<String, dynamic>> _staffMembers = [];
   Map<int, String> _productVendors = {};
   Map<String, Map<String, double>> _detailedStock = {};
 
@@ -55,7 +55,7 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
     if (mounted) {
       setState(() {
         _userRole = profile?['role'];
-        if (_userRole == 'executive') {
+        if (_userRole == 'executive' || _userRole == 'telecaller') {
           _selectedExecutiveId = user?.id;
         }
       });
@@ -118,12 +118,14 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
 
     if (widget.transactionType == 'DELIVERY' ||
         widget.transactionType == 'RETURN') {
-      // For Store users, show the dropdown. For Executives, we already set the ID.
-      if (_userRole != 'executive') {
-        final execs = await SupabaseService.getExecutives();
+      // For Store/Admin users, show the dropdown. For Executives/Telecallers, we already set the ID.
+      if (_userRole != 'executive' && _userRole != 'telecaller') {
+        final staff = await SupabaseService.getAllStaff();
+        final storeStock = await SupabaseService.getDetailedStoreStock();
         if (mounted) {
           setState(() {
-            _executives = execs;
+            _staffMembers = staff;
+            _detailedStock = storeStock;
             _isLoadingData = false;
           });
         }
@@ -147,7 +149,7 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
     if (widget.transactionType == 'DELIVERY' && _userRole == 'store') {
       if (_selectedExecutiveId == null && _buyerNameController.text.trim().isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select an executive or enter buyer name'), backgroundColor: Colors.red),
+          const SnackBar(content: Text('Please select a staff member or enter buyer name'), backgroundColor: Colors.red),
         );
         return;
       }
@@ -171,8 +173,9 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
         );
         return;
       }
-
-      if (_userRole == 'executive' && widget.transactionType == 'RETURN') {
+      
+      // Stock validation for Executives/Telecallers on RETURN
+      if ((_userRole == 'executive' || _userRole == 'telecaller') && widget.transactionType == 'RETURN') {
         final productName = item.product?['label'] ?? '';
         final variantName = item.variant?['label'] ?? '';
         final availableQty = _detailedStock[productName]?[variantName] ?? 0.0;
@@ -182,6 +185,23 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
             SnackBar(
               backgroundColor: Colors.red,
               content: Text('Insufficient stock for $productName ($variantName). Available: $availableQty'),
+            ),
+          );
+          return;
+        }
+      }
+
+      // Stock validation for Store/Admin on DELIVERY
+      if ((_userRole == 'store' || _userRole == 'admin') && widget.transactionType == 'DELIVERY') {
+        final productName = item.product?['label'] ?? '';
+        final variantName = item.variant?['label'] ?? '';
+        final availableQty = _detailedStock[productName]?[variantName] ?? 0.0;
+        
+        if (qty > availableQty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: Colors.red,
+              content: Text('Insufficient store stock for $productName ($variantName). Available: $availableQty'),
             ),
           );
           return;
@@ -287,7 +307,7 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
 
                     if (widget.transactionType == 'DELIVERY' ||
                         widget.transactionType == 'RETURN') ...[
-                      if (_userRole != 'executive') ...[
+                      if (_userRole != 'executive' && _userRole != 'telecaller') ...[
                         _buildSectionTitle(
                           widget.transactionType == 'DELIVERY'
                               ? 'Delivery Target'
@@ -312,7 +332,7 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
                               child: _textField(
                                 _buyerNameController,
                                 'Buyer Name',
-                                _selectedExecutiveId != null ? 'Clear executive to use direct sale' : 'Who bought this?',
+                                _selectedExecutiveId != null ? 'Clear staff to use direct sale' : 'Who bought this?',
                                 Icons.person_add_alt_1_rounded,
                                 optional: true,
                               ),
@@ -454,16 +474,17 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
     return DropdownButtonFormField<String>(
       value: _selectedExecutiveId,
       decoration: InputDecoration(
-        labelText: 'Select Executive',
+        labelText: 'Select Staff Member',
         prefixIcon: const Icon(Icons.person_rounded, size: 20),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         filled: true,
         fillColor: Colors.white,
       ),
-      items: (_executives).map((exec) {
+      items: (_staffMembers).map((staff) {
+        final role = staff['role']?.toString().toUpperCase() ?? '';
         return DropdownMenuItem<String>(
-          value: exec['id'],
-          child: Text(exec['full_name'] ?? 'Unknown'),
+          value: staff['id'],
+          child: Text('${staff['full_name'] ?? 'Unknown'} ($role)'),
         );
       }).toList(),
       onChanged: (val) {
@@ -476,7 +497,7 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
         if (widget.transactionType == 'DELIVERY' && _userRole == 'store') {
           return null;
         }
-        return val == null ? 'Please select an executive' : null;
+        return val == null ? 'Please select a staff member' : null;
       },
     );
   }

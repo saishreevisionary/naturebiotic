@@ -172,8 +172,8 @@ class _AddStockEntryScreenState extends State<AddStockEntryScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     // Check if any row has no product selected
-    // Check stock for executives
-    if (_userRole == 'executive' && _transactionType == 'RECEIVED') {
+    // Check stock for executives and telecallers
+    if ((_userRole == 'executive' || _userRole == 'telecaller') && _transactionType == 'RECEIVED') {
       for (var row in _itemRows) {
         final requestedQty = double.tryParse(row.qtyController.text) ?? 0.0;
         final available = _myStock[row.selectedItem]?[row.selectedUnit] ?? 0.0;
@@ -542,7 +542,7 @@ class _AddStockEntryScreenState extends State<AddStockEntryScreen> {
     return Row(
       children: [
         _typeOption('RECEIVED', Colors.green, Icons.download_rounded),
-        if (_userRole != 'executive') ...[
+        if (_userRole != 'executive' && _userRole != 'telecaller') ...[
           const SizedBox(width: 8),
           _typeOption('DELIVERED', Colors.orange, Icons.upload_rounded),
           const SizedBox(width: 8),

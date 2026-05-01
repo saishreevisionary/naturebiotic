@@ -602,9 +602,9 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
         farmData['contacts'] = contacts;
       }
 
-      // Auto-assign if created by an executive (and not just an edit)
+      // Auto-assign if created by an executive/telecaller (and not just an edit)
       if (!_isEdit &&
-          userProfile?['role'] == 'executive' &&
+          (userProfile?['role'] == 'executive' || userProfile?['role'] == 'telecaller') &&
           currentUserId != null) {
         farmData['assigned_to'] = currentUserId;
       } else if (_isEdit) {
@@ -707,7 +707,9 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
                           controller: _placeController,
                           onChanged: (v) {
                             if (_isResolvingAuto) return;
-                            // Strictly allow link resolution ONLY for non-executives
+                            // Strictly allow link resolution ONLY for non-executives/non-telecallers
+                            // Wait, telecallers ARE office-based, so they SHOULD have link resolution.
+                            // The logic currently excludes executives. I will exclude executives only.
                             if (_userRole != 'executive' &&
                                 v.startsWith('http') &&
                                 (v.contains('maps.app.goo.gl') ||

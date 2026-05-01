@@ -26,8 +26,8 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
   String _userName = 'User';
   List<Map<String, dynamic>> _usageHistory = [];
   List<Map<String, dynamic>> _allTransactions = [];
-  List<Map<String, dynamic>> _executives = [];
-  Map<String, double> _executiveStockTotals = {};
+  List<Map<String, dynamic>> _staffMembers = [];
+  Map<String, double> _staffStockTotals = {};
 
   @override
   void initState() {
@@ -42,7 +42,7 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
       _userRole = profile?['role'] ?? 'executive';
       _userName = profile?['full_name'] ?? 'User';
 
-      if (_userRole == 'executive') {
+      if (_userRole == 'executive' || _userRole == 'telecaller') {
         final stock = await SupabaseService.getExecutiveStock();
         final detailed = await SupabaseService.getDetailedExecutiveStock();
         final usage = await SupabaseService.getExecutiveStockUsage();
@@ -86,19 +86,19 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
           return dateB.compareTo(dateA);
         });
 
-        List<Map<String, dynamic>> executives = [];
-        Map<String, double> execStockTotals = {};
+        List<Map<String, dynamic>> staff = [];
+        Map<String, double> staffStockTotals = {};
 
         if (_userRole == 'admin' || _userRole == 'store') {
-          executives = await SupabaseService.getExecutives();
-          // Pre-calculate stock totals for each executive to show in the list
-          for (var exec in executives) {
-            final execStock = await SupabaseService.getExecutiveStock(
-              userId: exec['id'],
+          staff = await SupabaseService.getAllStaff();
+          // Pre-calculate stock totals for each staff member to show in the list
+          for (var member in staff) {
+            final staffStock = await SupabaseService.getExecutiveStock(
+              userId: member['id'],
             );
             double total = 0;
-            execStock.forEach((key, value) => total += value);
-            execStockTotals[exec['id']] = total;
+            staffStock.forEach((key, value) => total += value);
+            staffStockTotals[member['id']] = total;
           }
         }
 
@@ -110,8 +110,8 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
             _stockInHand = stock;
             _detailedStock = detailed;
             _allTransactions = combinedTxs;
-            _executives = executives;
-            _executiveStockTotals = execStockTotals;
+            _staffMembers = staff;
+            _staffStockTotals = staffStockTotals;
             _isLoading = false;
           });
         }
@@ -141,7 +141,7 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
 
   void _openTransactionForm(String type) {
     if (type == 'RETURN') {
-      if (_userRole == 'executive') {
+      if (_userRole == 'executive' || _userRole == 'telecaller') {
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -217,7 +217,7 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
                         tabs: const [
                           Tab(text: 'Store Stock'),
                           Tab(text: 'Purchase History'),
-                          Tab(text: 'Executive Status'),
+                          Tab(text: 'Staff Status'),
                         ],
                       ),
                     ),
@@ -237,7 +237,7 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
                   children: [
                     _buildWideStoreStockTab(lowStock),
                     _buildPurchaseHistoryTab(),
-                    if (_userRole != 'executive') _buildExecutiveStockTab(),
+                    if (_userRole != 'executive') _buildStaffStockTab(),
                   ],
                 ),
               ),
@@ -249,10 +249,10 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
 
     // Default Layout (Mobile or Executive)
     return DefaultTabController(
-      length: _userRole == 'executive' ? 2 : 3,
+      length: (_userRole == 'executive' || _userRole == 'telecaller') ? 2 : 3,
       child: Scaffold(
         backgroundColor: AppColors.background,
-        appBar: _userRole == 'executive' 
+        appBar: (_userRole == 'executive' || _userRole == 'telecaller') 
             ? AppBar(
                 title: const Text('My Inventory'),
                 backgroundColor: Colors.white,
@@ -263,7 +263,7 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
             : null,
         body: NestedScrollView(
           headerSliverBuilder: (context, innerBoxIsScrolled) => [
-            if (_userRole != 'executive') _buildHero(),
+            if (_userRole != 'executive' && _userRole != 'telecaller') _buildHero(),
             SliverToBoxAdapter(
               child: TabBar(
                 isScrollable: false,
@@ -271,7 +271,7 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
                 tabs: [
                   const Tab(text: 'Stock'), 
                   const Tab(text: 'History'), 
-                  if (_userRole != 'executive') const Tab(text: 'Execs')
+                  if (_userRole != 'executive' && _userRole != 'telecaller') const Tab(text: 'Staff')
                 ],
               ),
             ),
@@ -279,8 +279,8 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
           body: TabBarView(
             children: [
               _buildStoreStockTab(lowStock),
-              _userRole == 'executive' ? _buildHifiExecutiveHistoryTab() : _buildPurchaseHistoryTab(),
-              if (_userRole != 'executive') _buildExecutiveStockTab(),
+              (_userRole == 'executive' || _userRole == 'telecaller') ? _buildHifiExecutiveHistoryTab() : _buildPurchaseHistoryTab(),
+              if (_userRole != 'executive' && _userRole != 'telecaller') _buildStaffStockTab(),
             ],
           ),
         ),
@@ -706,7 +706,7 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
 
 
   Widget _buildStoreStockTab(List<MapEntry<String, double>> lowStock) {
-    if (_userRole == 'executive') {
+    if (_userRole == 'executive' || _userRole == 'telecaller') {
       return _buildHifiExecutiveStockView(lowStock);
     }
     return RefreshIndicator(
@@ -1405,20 +1405,19 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
         },
       ),
     );
-  }
-
-  Widget _buildExecutiveStockTab() {
+  }  Widget _buildStaffStockTab() {
     return RefreshIndicator(
       onRefresh: _refreshData,
       child:
-          _executives.isEmpty
-              ? const Center(child: Text('No executives found'))
+          _staffMembers.isEmpty
+               ? const Center(child: Text('No staff members found'))
               : ListView.builder(
                 padding: const EdgeInsets.all(16),
-                itemCount: _executives.length,
+                itemCount: _staffMembers.length,
                 itemBuilder: (context, index) {
-                  final exec = _executives[index];
-                  final totalStock = _executiveStockTotals[exec['id']] ?? 0.0;
+                  final member = _staffMembers[index];
+                  final totalStock = _staffStockTotals[member['id']] ?? 0.0;
+                  final role = member['role']?.toString().toUpperCase() ?? 'STAFF';
 
                   return EntranceAnimation(
                     child: Card(
@@ -1433,7 +1432,7 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
                         leading: CircleAvatar(
                           backgroundColor: AppColors.primary.withOpacity(0.1),
                           child: Text(
-                            exec['full_name']?[0] ?? 'E',
+                            member['full_name']?[0] ?? 'S',
                             style: const TextStyle(
                               color: AppColors.primary,
                               fontWeight: FontWeight.bold,
@@ -1441,10 +1440,16 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
                           ),
                         ),
                         title: Text(
-                          exec['full_name'] ?? 'Unknown',
+                          member['full_name'] ?? 'Unknown',
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
-                        subtitle: Text('Total Units in Hand: $totalStock'),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(role, style: TextStyle(color: AppColors.primary.withOpacity(0.6), fontSize: 10, fontWeight: FontWeight.bold)),
+                            Text('Total Units in Hand: $totalStock'),
+                          ],
+                        ),
                         trailing: const Icon(
                           Icons.chevron_right_rounded,
                           color: AppColors.primary,
@@ -1455,8 +1460,8 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
                             MaterialPageRoute(
                               builder:
                                   (context) => ExecutiveStockDetailScreen(
-                                    executiveId: exec['id'],
-                                    executiveName: exec['full_name'],
+                                    executiveId: member['id'],
+                                    executiveName: member['full_name'],
                                   ),
                             ),
                           );
@@ -2003,7 +2008,7 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
                       ),
                     ),
                     const Text(
-                      'You have stock waiting for your acceptance.',
+                      'You have stock pending handover or waiting for acceptance.',
                       style: TextStyle(fontSize: 12, color: Colors.redAccent),
                     ),
                   ],
