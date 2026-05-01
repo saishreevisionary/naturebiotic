@@ -8,7 +8,7 @@ plugins {
 android {
     namespace = "com.naturebiotic.app"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = "28.2.13676358"
+    ndkVersion = "27.2.12479018"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11

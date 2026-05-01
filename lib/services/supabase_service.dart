@@ -604,18 +604,31 @@ class SupabaseService {
     }
   }
 
-  static Future<List<Map<String, dynamic>>> getReportsForCrop(String cropId, {String? cropName}) async {
-    var query = client.from('reports').select();
-    
-    if (cropName != null && cropName.isNotEmpty) {
-      // Show reports where this crop is the primary crop OR mentioned in a multi-crop analysis
-      query = query.or('crop_id.eq.$cropId,problem.ilike.%--- Crop: $cropName ---%');
+  static Future<List<Map<String, dynamic>>> getReportsForCrop(
+    String cropId, {
+    String? cropName,
+    String? farmId,
+  }) async {
+    if (cropName != null && cropName.isNotEmpty && farmId != null) {
+      // Show reports where this crop is the primary crop OR mentioned in a
+      // multi-crop analysis, but ALWAYS scoped to the same farm to prevent
+      // same-named crops on different farms from leaking into each other.
+      final response = await client
+          .from('reports')
+          .select()
+          .eq('farm_id', farmId)
+          .or('crop_id.eq.$cropId,problem.ilike.%--- Crop: $cropName ---%')
+          .order('created_at', ascending: false);
+      return List<Map<String, dynamic>>.from(response);
     } else {
-      query = query.eq('crop_id', cropId);
+      // Fallback: filter strictly by crop_id only
+      final response = await client
+          .from('reports')
+          .select()
+          .eq('crop_id', cropId)
+          .order('created_at', ascending: false);
+      return List<Map<String, dynamic>>.from(response);
     }
-    
-    final response = await query.order('created_at', ascending: false);
-    return List<Map<String, dynamic>>.from(response);
   }
 
   static Future<List<Map<String, dynamic>>> getReportsForFarm(String farmId) async {
@@ -625,6 +638,40 @@ class SupabaseService {
         .eq('farm_id', farmId)
         .order('created_at', ascending: false);
     return List<Map<String, dynamic>>.from(response);
+  }
+
+  // ── Farm Collections ─────────────────────────────────────────────────────
+
+  /// Insert a new amount-collection entry for a farm.
+  static Future<void> addFarmCollection(Map<String, dynamic> data) async {
+    await client.from('farm_collections').insert({
+      ..._cleanPayload(data),
+      'created_by': client.auth.currentUser?.id,
+    });
+  }
+
+  /// Fetch all collection entries for a specific farm, newest first.
+  static Future<List<Map<String, dynamic>>> getFarmCollections(String farmId) async {
+    try {
+      final response = await client
+          .from('farm_collections')
+          .select()
+          .eq('farm_id', farmId)
+          .order('created_at', ascending: false);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      debugPrint('Error in getFarmCollections: $e');
+      return [];
+    }
+  }
+
+  /// Return the sum of all collected amounts for a farm.
+  static Future<double> getTotalCollectedForFarm(String farmId) async {
+    final collections = await getFarmCollections(farmId);
+    return collections.fold<double>(
+      0.0,
+      (double sum, c) => sum + (double.tryParse(c['amount'].toString()) ?? 0.0),
+    );
   }
 
   static Future<List<Map<String, dynamic>>> getReports({String? columns}) async {

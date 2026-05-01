@@ -265,6 +265,11 @@ class SyncManager {
           await SupabaseService.addStoreTransaction(cleanPayload);
         }
         break;
+      case 'farm_collections':
+        if (operation == 'INSERT') {
+          await SupabaseService.addFarmCollection(cleanPayload);
+        }
+        break;
     }
   }
 }

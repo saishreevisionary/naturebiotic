@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:nature_biotic/core/theme.dart';
 import 'package:nature_biotic/services/supabase_service.dart';
 import 'package:nature_biotic/features/farms/screens/stock_management_screen.dart';
+import 'package:nature_biotic/features/farms/screens/add_collection_screen.dart';
+import 'package:nature_biotic/features/farms/screens/collection_history_screen.dart';
+import 'package:nature_biotic/features/farms/screens/add_stock_entry_screen.dart';
 import 'package:intl/intl.dart';
 
 class FarmSalesListScreen extends StatefulWidget {
@@ -25,6 +28,7 @@ class FarmSalesListScreen extends StatefulWidget {
 class _FarmSalesListScreenState extends State<FarmSalesListScreen> {
   final currencyFormat = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
   Map<String, Map<String, dynamic>> _farmSales = {};
+  List<Map<String, dynamic>> _availableFarms = [];
   bool _isLoading = true;
 
   @override
@@ -108,6 +112,7 @@ class _FarmSalesListScreenState extends State<FarmSalesListScreen> {
     
     // First try to resolve from passed allFarms
     if (widget.allFarms.isNotEmpty) {
+      _availableFarms = widget.allFarms;
       _applyFarmData(widget.allFarms);
     }
     
@@ -131,6 +136,11 @@ class _FarmSalesListScreenState extends State<FarmSalesListScreen> {
 
   Future<void> _loadFarmNames() async {
     final farms = await SupabaseService.getFarms();
+    if (mounted) {
+      setState(() {
+        _availableFarms = farms;
+      });
+    }
     _applyFarmData(farms);
   }
 
@@ -171,6 +181,121 @@ class _FarmSalesListScreenState extends State<FarmSalesListScreen> {
                       itemBuilder: (context, index) => _buildFarmCard(list[index]),
                     ),
             ),
+      floatingActionButton: (widget.mode == 'COLLECTION' || widget.mode == 'SALES')
+          ? FloatingActionButton.extended(
+              onPressed: () => _showFarmSelectionDialog(context),
+              icon: const Icon(Icons.add_rounded),
+              label: Text(widget.mode == 'COLLECTION' ? 'Add Collection' : 'Record Stock'),
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            )
+          : null,
+    );
+  }
+
+  void _showFarmSelectionDialog(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.75,
+        decoration: const BoxDecoration(
+          color: AppColors.background,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(widget.mode == 'COLLECTION' ? 'Select Farm for Collection' : 'Select Farm for Stock', 
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textBlack)
+                  ),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 20), 
+                      onPressed: () => Navigator.pop(context),
+                      color: AppColors.textGray,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: _availableFarms.isEmpty 
+                ? const Center(child: Text('No farms available', style: TextStyle(color: AppColors.textGray)))
+                : ListView.separated(
+                  padding: const EdgeInsets.only(left: 20, right: 20, bottom: 40),
+                  itemCount: _availableFarms.length,
+                  separatorBuilder: (context, index) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final farm = _availableFarms[index];
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.black.withOpacity(0.04)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.02),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          )
+                        ]
+                      ),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        leading: Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.agriculture_rounded, color: AppColors.primary, size: 24),
+                        ),
+                        title: Text(farm['name'] ?? 'Unknown Farm', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                        subtitle: Text(farm['farmers']?['name'] ?? 'No Farmer', style: const TextStyle(color: AppColors.textGray, fontSize: 13)),
+                        trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textGray),
+                        onTap: () {
+                          Navigator.pop(context); // close bottom sheet
+                          if (widget.mode == 'COLLECTION') {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => AddCollectionScreen(
+                                  farmId: farm['id'].toString(),
+                                  farmName: farm['name'] ?? 'Unknown Farm',
+                                  farmerName: farm['farmers']?['name'],
+                                ),
+                              ),
+                            ).then((_) => _processData()); // Refresh after return
+                          } else {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => AddStockEntryScreen(
+                                  farmId: farm['id'].toString(),
+                                  farmName: farm['name'] ?? 'Unknown Farm',
+                                ),
+                              ),
+                            ).then((_) => _processData()); // Refresh after return
+                          }
+                        },
+                      ),
+                    );
+                  },
+                ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -218,15 +343,28 @@ class _FarmSalesListScreenState extends State<FarmSalesListScreen> {
         shadowColor: AppColors.shadow.withOpacity(0.1),
         child: InkWell(
           onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => StockManagementScreen(
-                  farmId: data['farm_id'],
-                  farmName: data['farm_name'],
+            if (widget.mode == 'COLLECTION') {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => CollectionHistoryScreen(
+                    farmId: data['farm_id'],
+                    farmName: data['farm_name'],
+                    farmerName: data['farmer_name'],
+                  ),
                 ),
-              ),
-            );
+              ).then((_) => _processData());
+            } else {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => StockManagementScreen(
+                    farmId: data['farm_id'],
+                    farmName: data['farm_name'],
+                  ),
+                ),
+              ).then((_) => _processData());
+            }
           },
           borderRadius: BorderRadius.circular(24),
           child: Padding(

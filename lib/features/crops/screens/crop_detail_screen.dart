@@ -50,9 +50,11 @@ class __CropDetailScreenState extends State<CropDetailScreen> {
 
   Future<void> _loadReports() async {
     try {
+      final farmId = widget.crop['farm_id']?.toString();
       final remoteReports = await SupabaseService.getReportsForCrop(
         widget.crop['id'].toString(),
         cropName: widget.crop['name'],
+        farmId: farmId,
       );
       List<Map<String, dynamic>> localReports = [];
 
@@ -60,8 +62,8 @@ class __CropDetailScreenState extends State<CropDetailScreen> {
         final cropName = widget.crop['name'] ?? '';
         localReports = await LocalDatabaseService.getData(
           'reports',
-          where: 'crop_id = ? OR problem LIKE ?',
-          whereArgs: [widget.crop['id'].toString(), '%--- Crop: $cropName ---%'],
+          where: 'farm_id = ? AND (crop_id = ? OR problem LIKE ?)',
+          whereArgs: [farmId ?? '', widget.crop['id'].toString(), '%--- Crop: $cropName ---%'],
           columns: [
             'id',
             'farm_id',

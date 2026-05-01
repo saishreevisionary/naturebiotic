@@ -353,26 +353,10 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
                   Builder(
                     builder: (context) {
                       String unitDisplay = tx['unit'] ?? 'N/A';
-                      String collectionSuffix = "";
 
-                      // Check for packed collection amount: "500 ml {₹2000}"
+                      // Remove old `{₹...}` suffix if it exists for backwards compatibility
                       if (unitDisplay.contains('{₹')) {
-                        final parts = unitDisplay.split(' {₹');
-                        unitDisplay = parts[0];
-                        if (parts.length > 1) {
-                          collectionSuffix = "₹${parts[1].replaceAll('}', '')}";
-                        }
-                      } else if (double.tryParse(
-                                tx['collected_amount']?.toString() ?? '0',
-                              ) !=
-                              null &&
-                          (double.tryParse(
-                                    tx['collected_amount']?.toString() ?? '0',
-                                  ) ??
-                                  0.0) >
-                              0) {
-                        // Fallback for local-only collected_amount field
-                        collectionSuffix = "₹${tx['collected_amount']}";
+                        unitDisplay = unitDisplay.split(' {₹')[0];
                       }
 
                       return Column(
@@ -391,15 +375,6 @@ class _StockManagementScreenState extends State<StockManagementScreen> {
                                           : Colors.orange),
                             ),
                           ),
-                          if (collectionSuffix.isNotEmpty)
-                            Text(
-                              'Collection: $collectionSuffix',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.green,
-                              ),
-                            ),
                         ],
                       );
                     },

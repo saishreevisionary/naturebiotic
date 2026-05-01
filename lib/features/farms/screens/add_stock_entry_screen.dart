@@ -26,7 +26,6 @@ class _AddStockEntryScreenState extends State<AddStockEntryScreen> {
 
   final List<StockItemRow> _itemRows = [StockItemRow()];
   String _transactionType = 'RECEIVED';
-  final _collectionController = TextEditingController();
 
   List<String> _itemOptions = [];
   List<Map<String, dynamic>> _allProducts = [];
@@ -195,23 +194,13 @@ class _AddStockEntryScreenState extends State<AddStockEntryScreen> {
       final timestamp = DateTime.now().toIso8601String();
 
       for (var row in _itemRows) {
-        final collectionAmt =
-            _transactionType == 'RECEIVED'
-                ? (double.tryParse(_collectionController.text) ?? 0.0)
-                : 0.0;
-
         final data = {
           'id': const Uuid().v4(),
           'farm_id': widget.farmId,
           'item_name': row.selectedItem,
           'transaction_type': _transactionType,
           'quantity': double.tryParse(row.qtyController.text) ?? 0.0,
-          // Pack the collection amount into the unit field for cloud sync if type is RECEIVED
-          'unit':
-              _transactionType == 'RECEIVED' && collectionAmt > 0
-                  ? "${row.selectedUnit} {₹$collectionAmt}"
-                  : row.selectedUnit,
-          'collected_amount': collectionAmt,
+          'unit': row.selectedUnit,
           'executive_id': SupabaseService.client.auth.currentUser?.id,
           'created_at': timestamp,
         };
@@ -279,29 +268,6 @@ class _AddStockEntryScreenState extends State<AddStockEntryScreen> {
                       ),
                       const SizedBox(height: 12),
                       _buildTypeSelector(),
-
-                      if (_transactionType == 'RECEIVED') ...[
-                        const SizedBox(height: 24),
-                        const Text(
-                          'Collection Amount',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: _collectionController,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          decoration: const InputDecoration(
-                            labelText: 'Amount Collected (₹)',
-                            hintText: 'Enter amount if any',
-                            prefixIcon: Icon(
-                              Icons.account_balance_wallet_rounded,
-                            ),
-                          ),
-                        ),
-                      ],
-
                       const SizedBox(height: 24),
 
                       ListView.separated(

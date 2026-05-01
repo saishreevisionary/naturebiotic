@@ -10,7 +10,7 @@ class LocalDatabaseService {
   static Database? _database;
   static Future<Database?>? _initFuture;
   static const String _databaseName = "nature_biotic_local.db";
-  static const int _databaseVersion = 11;
+  static const int _databaseVersion = 12;
 
   static Future<Database?> get database async {
     if (kIsWeb) return null;
@@ -186,6 +186,26 @@ class LocalDatabaseService {
         await db.execute('ALTER TABLE store_transactions ADD COLUMN updated_at TEXT');
       } catch (_) {}
     }
+
+    if (oldVersion < 12) {
+      // Version 12: Add farm_collections table
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS farm_collections (
+            id TEXT PRIMARY KEY,
+            farm_id TEXT NOT NULL,
+            farmer_name TEXT,
+            amount REAL NOT NULL,
+            notes TEXT,
+            created_by TEXT,
+            created_at TEXT,
+            sync_status TEXT DEFAULT 'pending'
+          )
+        ''');
+      } catch (e) {
+        debugPrint('DB Upgrade Error (v12): $e');
+      }
+    }
   }
 
   static Future<void> _onCreate(Database db, int version) async {
@@ -352,6 +372,20 @@ class LocalDatabaseService {
         created_by TEXT,
         created_at TEXT,
         updated_at TEXT
+      )
+    ''');
+
+    // Farm Collections table
+    await db.execute('''
+      CREATE TABLE farm_collections (
+        id TEXT PRIMARY KEY,
+        farm_id TEXT NOT NULL,
+        farmer_name TEXT,
+        amount REAL NOT NULL,
+        notes TEXT,
+        created_by TEXT,
+        created_at TEXT,
+        sync_status TEXT DEFAULT 'pending'
       )
     ''');
   }

@@ -9,6 +9,7 @@ import 'package:nature_biotic/features/crops/screens/crop_detail_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:nature_biotic/services/local_database_service.dart';
 import 'package:nature_biotic/features/farms/screens/stock_management_screen.dart';
+import 'package:nature_biotic/features/farms/screens/collection_history_screen.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 import 'package:nature_biotic/core/call_tracker.dart';
@@ -528,6 +529,26 @@ class _FarmDetailScreenState extends State<FarmDetailScreen> with WidgetsBinding
                             Icons.inventory_rounded, 
                             'Inventory', 
                             'Stock Mgt',
+                            isLink: true,
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => CollectionHistoryScreen(
+                                  farmId: _farm['id'].toString(),
+                                  farmName: _farm['name'] ?? 'This Farm',
+                                  farmerName: _farmer?['name'],
+                                ),
+                              ),
+                            );
+                          },
+                          child: _infoCard(
+                            Icons.account_balance_wallet_rounded, 
+                            'Payments', 
+                            'Collections',
                             isLink: true,
                           ),
                         ),
