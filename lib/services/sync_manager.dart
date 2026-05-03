@@ -14,17 +14,34 @@ class SyncManager {
   bool _syncRequestedAgain = false;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
+  /// Reactive connectivity state — listen to show/hide the offline banner
+  final ValueNotifier<bool> isOnline = ValueNotifier(true);
+
+  /// Reactive pending sync count — shows how many items are queued
+  final ValueNotifier<int> pendingCount = ValueNotifier(0);
+
+  /// Timestamp of last successful sync pass (null if never synced this session)
+  final ValueNotifier<DateTime?> lastSyncedAt = ValueNotifier(null);
+
   void initialize() {
     if (kIsWeb) return;
-    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
-      results,
-    ) {
-      if (results.any((r) => r != ConnectivityResult.none)) {
-        sync();
-      }
+
+    // Set initial connectivity state immediately
+    Connectivity().checkConnectivity().then((results) {
+      isOnline.value = results.any((r) => r != ConnectivityResult.none);
     });
-    // Initial sync attempt
+
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen(
+      (results) {
+        final nowOnline = results.any((r) => r != ConnectivityResult.none);
+        isOnline.value = nowOnline;
+        if (nowOnline) sync();
+      },
+    );
+
+    // Initial sync attempt + populate pending count
     sync();
+    _updatePendingCount();
   }
 
   void dispose() {
@@ -51,7 +68,16 @@ class SyncManager {
     } while (_syncRequestedAgain);
 
     _isSyncing = false;
+    await _updatePendingCount();
     debugPrint('SYNC: All synchronization passes finished.');
+  }
+
+  Future<void> _updatePendingCount() async {
+    if (kIsWeb) return;
+    final ids = await LocalDatabaseService.getPendingSyncIds();
+    pendingCount.value = ids.length;
+    // Mark the last time we completed a sync check
+    if (ids.isEmpty) lastSyncedAt.value = DateTime.now();
   }
 
   Future<void> _performSync() async {
@@ -236,6 +262,7 @@ class SyncManager {
         break;
       case 'crops':
         if (operation == 'INSERT') await SupabaseService.addCrop(cleanPayload);
+        if (operation == 'UPDATE') await SupabaseService.updateCrop(cleanPayload['id'].toString(), cleanPayload);
         break;
       case 'reports':
         if (operation == 'INSERT') {
@@ -263,11 +290,19 @@ class SyncManager {
       case 'store_transactions':
         if (operation == 'INSERT') {
           await SupabaseService.addStoreTransaction(cleanPayload);
+        } else if (operation == 'UPDATE') {
+          await SupabaseService.updateStoreTransaction(cleanPayload['id'].toString(), cleanPayload);
         }
         break;
       case 'farm_collections':
         if (operation == 'INSERT') {
           await SupabaseService.addFarmCollection(cleanPayload);
+        } else if (operation == 'UPDATE') {
+          // Generic fallback: push the entire payload to Supabase
+          await SupabaseService.client
+              .from('farm_collections')
+              .update(cleanPayload)
+              .eq('id', cleanPayload['id'].toString());
         }
         break;
     }

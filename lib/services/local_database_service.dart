@@ -10,7 +10,7 @@ class LocalDatabaseService {
   static Database? _database;
   static Future<Database?>? _initFuture;
   static const String _databaseName = "nature_biotic_local.db";
-  static const int _databaseVersion = 12;
+  static const int _databaseVersion = 13;
 
   static Future<Database?> get database async {
     if (kIsWeb) return null;
@@ -206,7 +206,23 @@ class LocalDatabaseService {
         debugPrint('DB Upgrade Error (v12): $e');
       }
     }
+
+    if (oldVersion < 13) {
+      // Version 13: Add universal cache table
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS cached_data (
+            cache_key TEXT PRIMARY KEY,
+            payload TEXT,
+            cached_at TEXT
+          )
+        ''');
+      } catch (e) {
+        debugPrint('DB Upgrade Error (v13): $e');
+      }
+    }
   }
+
 
   static Future<void> _onCreate(Database db, int version) async {
     // Farmers table
@@ -388,6 +404,14 @@ class LocalDatabaseService {
         sync_status TEXT DEFAULT 'pending'
       )
     ''');
+    // Cached Data table (universal local cache for read-only remote data)
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS cached_data (
+        cache_key TEXT PRIMARY KEY,
+        payload TEXT,
+        cached_at TEXT
+      )
+    ''');
   }
 
   // Generic Save and Queue method
@@ -552,5 +576,102 @@ class LocalDatabaseService {
       'status': status,
       'error': error,
     }, where: 'id = ?', whereArgs: [queueId]);
+  }
+
+  // ============================================================
+  // Universal Cache Helpers
+  // ============================================================
+
+  /// Save a list of records to the local cache under a given key.
+  static Future<void> saveCache(String key, List<Map<String, dynamic>> data) async {
+    final db = await database;
+    if (db == null) return;
+    await db.insert(
+      'cached_data',
+      {
+        'cache_key': key,
+        'payload': jsonEncode(data),
+        'cached_at': DateTime.now().toIso8601String(),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Retrieve cached records by key. Returns null if no cache exists.
+  static Future<List<Map<String, dynamic>>?> getCache(String key) async {
+    final db = await database;
+    if (db == null) return null;
+    final results = await db.query('cached_data', where: 'cache_key = ?', whereArgs: [key]);
+    if (results.isEmpty) return null;
+    final raw = results.first['payload'] as String?;
+    if (raw == null) return null;
+    try {
+      final decoded = jsonDecode(raw) as List;
+      return decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Returns the ISO timestamp of when the cache was last written.
+  static Future<String?> getCacheTimestamp(String key) async {
+    final db = await database;
+    if (db == null) return null;
+    final results = await db.query(
+      'cached_data',
+      columns: ['cached_at'],
+      where: 'cache_key = ?',
+      whereArgs: [key],
+    );
+    return results.firstOrNull?['cached_at'] as String?;
+  }
+
+  /// Merges a list of remote/cached records with any local pending records
+  /// from the SQLite table. Local pending records overwrite base records
+  /// if they share an ID.
+  static Future<List<Map<String, dynamic>>> mergeWithPending(
+    String tableName,
+    List<Map<String, dynamic>> baseData,
+  ) async {
+    if (kIsWeb) return baseData;
+    
+    try {
+      final localData = await getData(tableName);
+      if (localData.isEmpty) return baseData;
+
+      final Map<String, Map<String, dynamic>> merged = {};
+      
+      // 1. Add base data
+      for (var item in baseData) {
+        if (item['id'] != null) {
+          merged[item['id'].toString()] = item;
+        }
+      }
+      
+      // 2. Overwrite/add local pending data
+      for (var item in localData) {
+        if (item['id'] != null) {
+          merged[item['id'].toString()] = {
+            ...?merged[item['id'].toString()],
+            ...item
+          };
+        }
+      }
+      
+      // 3. Convert back to list and sort descending by created_at
+      final result = merged.values.toList();
+      result.sort((a, b) {
+        final dateA = DateTime.tryParse(a['created_at']?.toString() ?? '') ?? 
+                      DateTime.fromMillisecondsSinceEpoch(0);
+        final dateB = DateTime.tryParse(b['created_at']?.toString() ?? '') ?? 
+                      DateTime.fromMillisecondsSinceEpoch(0);
+        return dateB.compareTo(dateA); // Descending
+      });
+      
+      return result;
+    } catch (e) {
+      debugPrint('Error merging pending data for $tableName: $e');
+      return baseData;
+    }
   }
 }
