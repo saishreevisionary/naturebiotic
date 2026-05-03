@@ -18,10 +18,10 @@ class FarmerListScreen extends StatefulWidget {
 
 class _FarmerListScreenState extends State<FarmerListScreen> {
   List<Map<String, dynamic>> _farmers = [];
+  List<Map<String, dynamic>> _teamMembers = [];
   String? _userRole;
-  List<String> _categories = ['Hot', 'Warm', 'Cold'];
   bool _isLoading = true;
-  String? _selectedCategory;
+  String? _selectedStaffId;
   final TextEditingController _searchController = TextEditingController();
 
   @override
@@ -39,22 +39,20 @@ class _FarmerListScreenState extends State<FarmerListScreen> {
   Future<void> _loadInitialData() async {
     await Future.wait([
       _loadFarmers(),
-      _loadCategories(),
+      _loadTeamMembers(),
     ]);
   }
 
-  Future<void> _loadCategories() async {
+  Future<void> _loadTeamMembers() async {
     try {
-      final options = await SupabaseService.getDropdownOptions('farmer_category');
-      if (options.isNotEmpty) {
-        if (mounted) {
-          setState(() {
-            _categories = options.map((e) => e['label'].toString()).toList();
-          });
-        }
+      final team = await SupabaseService.getAllStaff();
+      if (mounted) {
+        setState(() {
+          _teamMembers = team;
+        });
       }
     } catch (e) {
-      debugPrint('Error loading categories: $e');
+      debugPrint('Error loading team: $e');
     }
   }
 
@@ -193,43 +191,55 @@ class _FarmerListScreenState extends State<FarmerListScreen> {
                           ),
                         ),
                         const SizedBox(height: 20),
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          physics: const BouncingScrollPhysics(),
-                          child: Row(
-                            children: [
-                              ..._categories.map((category) {
-                                return Padding(
-                                  padding: const EdgeInsets.only(right: 12),
-                                  child: FilterChipWidget(
-                                    label: category,
-                                    color: _getCategoryColor(category),
-                                    isSelected: _selectedCategory == category,
-                                    onTap: () => setState(() => _selectedCategory =
-                                        _selectedCategory == category ? null : category),
-                                  ),
-                                );
-                              }),
-                              const SizedBox(width: 8),
-                              TextButton.icon(
-                                onPressed: () {
-                                  setState(() {
-                                    _selectedCategory = null;
-                                    _searchController.clear();
-                                  });
-                                },
-                                icon: const Icon(Icons.backspace_outlined, size: 16),
-                                label: const Text('Clear Filters'),
-                                style: TextButton.styleFrom(
-                                  foregroundColor: AppColors.textGray,
-                                  textStyle: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 13,
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+                                ),
+                                child: DropdownButtonHideUnderline(
+                                  child: DropdownButton<String>(
+                                    value: _selectedStaffId,
+                                    hint: const Text('Filter by Staff Member'),
+                                    isExpanded: true,
+                                    icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.primary),
+                                    items: [
+                                      const DropdownMenuItem<String>(
+                                        value: null,
+                                        child: Text('All Staff Members'),
+                                      ),
+                                      ..._teamMembers.map((staff) {
+                                        return DropdownMenuItem<String>(
+                                          value: staff['id'],
+                                          child: Text(staff['full_name'] ?? 'Staff'),
+                                        );
+                                      }).toList(),
+                                    ],
+                                    onChanged: (v) => setState(() => _selectedStaffId = v),
                                   ),
                                 ),
                               ),
-                            ],
-                          ),
+                            ),
+                            const SizedBox(width: 12),
+                            TextButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  _selectedStaffId = null;
+                                  _searchController.clear();
+                                });
+                              },
+                              icon: const Icon(Icons.backspace_outlined, size: 16),
+                              label: const Text('Clear'),
+                              style: TextButton.styleFrom(
+                                foregroundColor: AppColors.textGray,
+                                textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -249,9 +259,9 @@ class _FarmerListScreenState extends State<FarmerListScreen> {
                       final category = f['category'];
                       
                       final matchesQuery = name.contains(query) || village.contains(query) || mobile.contains(query);
-                      final matchesCategory = _selectedCategory == null || category == _selectedCategory;
+                      final matchesStaff = _selectedStaffId == null || f['created_by'] == _selectedStaffId;
                       
-                      return matchesQuery && matchesCategory;
+                      return matchesQuery && matchesStaff;
                     }).toList();
 
                     if (filtered.isEmpty) {

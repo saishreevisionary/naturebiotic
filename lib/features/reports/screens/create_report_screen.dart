@@ -181,12 +181,17 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
       double totalRequired = 0;
       final perUnit = rec.perUnit?.toLowerCase() ?? '';
       
-      if (perUnit.contains('acre')) {
+      final double fillerQty = double.tryParse(rec.fillerQty.text) ?? 0;
+
+      if (fillerQty > 0) {
+        // Use manual quantity from form if provided
+        totalRequired = dose * fillerQty;
+      } else if (perUnit.contains('acre')) {
         totalRequired = dose * _cropAcre;
-      } else if (perUnit.contains('plant')) {
+      } else if (perUnit.contains('plant') || perUnit.contains('tree')) {
         totalRequired = dose * _cropCount;
       } else {
-        // Default to 1 if no unit matched
+        // Default to 1 if no unit matched and no filler qty provided
         totalRequired = dose;
       }
 
@@ -575,7 +580,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
           if (row.product.text.isNotEmpty) {
             recStr += '${row.product.text} (${row.application.text}) - '
                 'Dose: ${row.dose.text} ${row.doseUnit ?? ""} per ${row.perUnit ?? ""}, '
-                'Filler: ${row.filler.text} ${row.fillerQty.text} ${row.fillerUnit ?? ""}\n';
+                'Filler: ${row.filler.text} ${row.fillerQty.text}\n';
           }
         }
         if (recStr.isNotEmpty) combinedRecommendations += header + recStr + '\n';
@@ -1748,12 +1753,22 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
     return TextField(
       controller: controller,
       keyboardType: isNumber ? TextInputType.number : TextInputType.text,
-      style: const TextStyle(fontSize: 12),
+      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(fontSize: 10),
+        labelStyle: const TextStyle(fontSize: 10, color: AppColors.primary),
         contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         isDense: true,
+        filled: true,
+        fillColor: AppColors.secondary.withOpacity(0.05),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: AppColors.secondary.withOpacity(0.3)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: AppColors.primary),
+        ),
       ),
       onChanged: (_) => setState(() {}),
     );
@@ -1774,7 +1789,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
             children: [
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.only(bottom: 8.0),
+                  padding: const EdgeInsets.only(bottom: 4.0),
                   child: DropdownButtonFormField<String>(
                     value:
                         _productOptions.any(
@@ -1784,9 +1799,10 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                             : null,
                     decoration: const InputDecoration(
                       labelText: 'Product Name',
+                      isDense: true,
                       contentPadding: EdgeInsets.symmetric(
                         horizontal: 16,
-                        vertical: 8,
+                        vertical: 10,
                       ),
                     ),
                     items:
@@ -1833,9 +1849,10 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                           : null,
                   decoration: const InputDecoration(
                     labelText: 'Application',
+                    isDense: true,
                     contentPadding: EdgeInsets.symmetric(
                       horizontal: 16,
-                      vertical: 8,
+                      vertical: 10,
                     ),
                   ),
                   items:
@@ -1858,98 +1875,110 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          // Dose and Filler stacked vertically to prevent overflow
+          // Dose and Unit in one row
           Row(
             children: [
               Expanded(
-                child: Row(
-                  children: [
-                    Expanded(
-                      flex: 2,
-                      child: TextField(
-                        controller: row.dose,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Dose',
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                        ),
-                        onChanged: (_) => _syncCostEstimations(),
-                      ),
+                flex: 1,
+                child: TextField(
+                  controller: row.dose,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'Dose',
+                    isDense: true,
+                    filled: true,
+                    fillColor: AppColors.secondary.withOpacity(0.05),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      flex: 2,
-                      child: DropdownButtonFormField<String>(
-                        value:
-                            _doseUnitOptions.any(
-                                  (u) => u['label'] == row.doseUnit,
-                                )
-                                ? row.doseUnit
-                                : null,
-                        decoration: const InputDecoration(
-                          labelText: 'Unit',
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                        ),
-                        items:
-                            _doseUnitOptions.map((u) {
-                              return DropdownMenuItem<String>(
-                                value: u['label'].toString(),
-                                child: Text(
-                                  u['label'].toString(),
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                              );
-                            }).toList(),
-                        onChanged: (val) {
-                          setState(() => row.doseUnit = val);
-                          _syncCostEstimations();
-                        },
-                      ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: AppColors.secondary.withOpacity(0.3)),
                     ),
-                    Expanded(
-                      flex: 2,
-                      child: DropdownButtonFormField<String>(
-                        value:
-                            _perUnitOptions.any(
-                                  (u) => u['label'] == row.perUnit,
-                                )
-                                ? row.perUnit
-                                : null,
-                        decoration: const InputDecoration(
-                          labelText: 'Per',
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                        ),
-                        items:
-                            _perUnitOptions.map((u) {
-                              return DropdownMenuItem<String>(
-                                value: u['label'].toString(),
-                                child: Text(
-                                  u['label'].toString(),
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                              );
-                            }).toList(),
-                        onChanged: (val) {
-                          setState(() => row.perUnit = val);
-                          _syncCostEstimations();
-                        },
-                      ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: AppColors.primary),
                     ),
-                  ],
+                  ),
+                  onChanged: (_) => _syncCostEstimations(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 1,
+                child: DropdownButtonFormField<String>(
+                  value:
+                      _doseUnitOptions.any(
+                            (u) => u['label'] == row.doseUnit,
+                          )
+                          ? row.doseUnit
+                          : null,
+                  decoration: const InputDecoration(
+                    labelText: 'Unit',
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                  ),
+                  items:
+                      _doseUnitOptions.map((u) {
+                        return DropdownMenuItem<String>(
+                          value: u['label'].toString(),
+                          child: Text(
+                            u['label'].toString(),
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        );
+                      }).toList(),
+                  onChanged: (val) {
+                    setState(() => row.doseUnit = val);
+                    _syncCostEstimations();
+                  },
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
+          // Per unit in its own row to prevent horizontal overflow
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value:
+                      _perUnitOptions.any(
+                            (u) => u['label'] == row.perUnit,
+                          )
+                          ? row.perUnit
+                          : null,
+                  decoration: const InputDecoration(
+                    labelText: 'Per Unit (e.g. Acre, Litre, Plant)',
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                  ),
+                  items:
+                      _perUnitOptions.map((u) {
+                        return DropdownMenuItem<String>(
+                          value: u['label'].toString(),
+                          child: Text(
+                            u['label'].toString(),
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        );
+                      }).toList(),
+                  onChanged: (val) {
+                    setState(() => row.perUnit = val);
+                    _syncCostEstimations();
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
           Row(
             children: [
               Expanded(
@@ -1967,9 +1996,10 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                                 : null,
                         decoration: const InputDecoration(
                           labelText: 'Filler (Material)',
+                          isDense: true,
                           contentPadding: EdgeInsets.symmetric(
                             horizontal: 12,
-                            vertical: 8,
+                            vertical: 10,
                           ),
                         ),
                         items:
@@ -1992,38 +2022,6 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                     Expanded(
                       flex: 2,
                       child: _miniField(row.fillerQty, 'Qty', isNumber: true),
-                    ),
-                    const SizedBox(width: 8),
-                    // Filler Unit Dropdown
-                    Expanded(
-                      flex: 2,
-                      child: DropdownButtonFormField<String>(
-                        value:
-                            _fillerUnitOptions.any(
-                                  (u) => u['label'] == row.fillerUnit,
-                                )
-                                ? row.fillerUnit
-                                : null,
-                        decoration: const InputDecoration(
-                          labelText: 'Qty/Unit',
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                        ),
-                        items:
-                            _fillerUnitOptions.map((u) {
-                              return DropdownMenuItem<String>(
-                                value: u['label'].toString(),
-                                child: Text(
-                                  u['label'].toString(),
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                              );
-                            }).toList(),
-                        onChanged:
-                            (val) => setState(() => row.fillerUnit = val),
-                      ),
                     ),
                   ],
                 ),

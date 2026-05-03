@@ -185,9 +185,9 @@ class _ExecutiveDialerScreenState extends State<ExecutiveDialerScreen> with Widg
           title: const Text('Nature Biotic Dialer'),
           bottom: const TabBar(
             tabs: [
-              Tab(icon: Icon(Icons.dialpad_rounded), text: 'Dialer'),
-              Tab(icon: Icon(Icons.contacts_rounded), text: 'Contacts'),
               Tab(icon: Icon(Icons.history_rounded), text: 'Recents'),
+              Tab(icon: Icon(Icons.contacts_rounded), text: 'Contacts'),
+              Tab(icon: Icon(Icons.dialpad_rounded), text: 'Dialer'),
             ],
             indicatorColor: AppColors.primary,
             labelColor: AppColors.primary,
@@ -199,9 +199,9 @@ class _ExecutiveDialerScreenState extends State<ExecutiveDialerScreen> with Widg
             constraints: const BoxConstraints(maxWidth: 800),
             child: TabBarView(
               children: [
-                _buildDialerTab(),
-                _buildContactsTab(),
                 _buildRecentsTab(),
+                _buildContactsTab(),
+                _buildDialerTab(),
               ],
             ),
           ),

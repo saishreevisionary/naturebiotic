@@ -216,7 +216,7 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
                         labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                         tabs: const [
                           Tab(text: 'Store Stock'),
-                          Tab(text: 'Purchase History'),
+                          Tab(text: 'History'),
                           Tab(text: 'Staff Status'),
                         ],
                       ),
@@ -236,7 +236,7 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
                 child: TabBarView(
                   children: [
                     _buildWideStoreStockTab(lowStock),
-                    _buildPurchaseHistoryTab(),
+                    _buildHistoryTab(),
                     if (_userRole != 'executive') _buildStaffStockTab(),
                   ],
                 ),
@@ -248,8 +248,9 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
     }
 
     // Default Layout (Mobile or Executive)
+    final bool isStaff = _userRole == 'executive' || _userRole == 'telecaller';
     return DefaultTabController(
-      length: (_userRole == 'executive' || _userRole == 'telecaller') ? 2 : 3,
+      length: isStaff ? 2 : 3,
       child: Scaffold(
         backgroundColor: AppColors.background,
         appBar: (_userRole == 'executive' || _userRole == 'telecaller') 
@@ -271,7 +272,7 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
                 tabs: [
                   const Tab(text: 'Stock'), 
                   const Tab(text: 'History'), 
-                  if (_userRole != 'executive' && _userRole != 'telecaller') const Tab(text: 'Staff')
+                  if (!isStaff) const Tab(text: 'Staff')
                 ],
               ),
             ),
@@ -279,8 +280,8 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
           body: TabBarView(
             children: [
               _buildStoreStockTab(lowStock),
-              (_userRole == 'executive' || _userRole == 'telecaller') ? _buildHifiExecutiveHistoryTab() : _buildPurchaseHistoryTab(),
-              if (_userRole != 'executive' && _userRole != 'telecaller') _buildStaffStockTab(),
+              _buildHistoryTab(),
+              if (!isStaff) _buildStaffStockTab(),
             ],
           ),
         ),
@@ -465,25 +466,20 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
           if (_stockInHand.isEmpty)
             const Center(child: Text('No stock recorded yet.'))
           else
-            LayoutBuilder(
-              builder: (context, constraints) {
-                return GridView.builder(
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1000),
+                child: ListView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 380,
-                    mainAxisExtent: 180,
-                    crossAxisSpacing: 24,
-                    mainAxisSpacing: 24,
-                  ),
                   itemCount: _stockInHand.length,
                   itemBuilder: (context, index) {
                     final productName = _detailedStock.keys.elementAt(index);
                     final variants = _detailedStock[productName]!;
-                    return _buildWideInventoryCard(productName, variants);
+                    return _buildWideInventoryListItem(productName, variants);
                   },
-                );
-              },
+                ),
+              ),
             ),
         ],
       ),
@@ -591,7 +587,7 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
     );
   }
 
-  Widget _buildWideInventoryCard(String name, Map<String, double> variants) {
+  Widget _buildWideInventoryListItem(String name, Map<String, double> variants) {
     double totalQty = 0;
     variants.forEach((_, q) {
       if (q > 0) totalQty += q;
@@ -600,104 +596,130 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
     final isLow = totalQty < 10;
     
     return Container(
-      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.black.withOpacity(0.04)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.01),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: isLow ? Colors.red.withOpacity(0.05) : AppColors.background,
-                  borderRadius: BorderRadius.circular(12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: isLow ? Colors.red.withOpacity(0.05) : AppColors.background,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              isLow ? Icons.error_outline_rounded : Icons.inventory_2_outlined,
+              color: isLow ? Colors.red : AppColors.primary.withOpacity(0.6),
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 24),
+          Expanded(
+            flex: 3,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 18,
+                    color: AppColors.textBlack,
+                  ),
                 ),
-                child: Icon(
-                  isLow ? Icons.error_outline_rounded : Icons.inventory_2_outlined,
-                  color: isLow ? Colors.red : AppColors.primary.withOpacity(0.6),
-                  size: 20,
+                const SizedBox(height: 4),
+                Text(
+                  isLow ? 'RESTOCK SOON' : 'STABLE STOCK',
+                  style: TextStyle(
+                    color: isLow ? Colors.red : AppColors.primary.withOpacity(0.6),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 20),
-              Expanded(
-                child: Column(
+              ],
+            ),
+          ),
+          const SizedBox(width: 24),
+          Expanded(
+            flex: 5,
+            child: Wrap(
+              spacing: 32,
+              runSpacing: 12,
+              children: variants.entries.map((v) {
+                final displayQty = v.value > 0 ? v.value : 0.0;
+                return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      name,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 16,
-                        color: AppColors.textBlack,
+                      v.key,
+                      style: TextStyle(
+                        color: AppColors.textGray.withOpacity(0.6),
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 2),
                     Text(
-                      isLow ? 'RESTOCK SOON' : 'IN STOCK',
-                      style: TextStyle(
-                        color: isLow ? Colors.red : AppColors.primary.withOpacity(0.6),
-                        fontSize: 10,
+                      displayQty.toStringAsFixed(0),
+                      style: const TextStyle(
+                        color: AppColors.textBlack,
+                        fontSize: 16,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
                   ],
-                ),
-              ),
-              Text(
-                totalQty.toStringAsFixed(0),
-                style: TextStyle(
-                  color: isLow ? Colors.red : AppColors.primary,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 24,
-                ),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                'PCS',
-                style: TextStyle(
-                  color: AppColors.textGray.withOpacity(0.3),
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
+                );
+              }).toList(),
+            ),
           ),
-          const SizedBox(height: 16),
-          const Divider(height: 1),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 24,
-            runSpacing: 12,
-            children: variants.entries.map((v) {
-              final displayQty = v.value > 0 ? v.value : 0.0;
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          const SizedBox(width: 24),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
                 children: [
                   Text(
-                    v.key,
+                    totalQty.toStringAsFixed(0),
                     style: TextStyle(
-                      color: AppColors.textGray.withOpacity(0.6),
-                      fontSize: 10,
+                      color: isLow ? Colors.red : AppColors.primary,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 32,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'PCS',
+                    style: TextStyle(
+                      color: AppColors.textGray.withOpacity(0.3),
+                      fontSize: 12,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  Text(
-                    displayQty.toStringAsFixed(0),
-                    style: const TextStyle(
-                      color: AppColors.textBlack,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
                 ],
-              );
-            }).toList(),
+              ),
+              Text(
+                'TOTAL QUANTITY',
+                style: TextStyle(
+                  color: AppColors.textGray.withOpacity(0.4),
+                  fontSize: 9,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -1264,123 +1286,81 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
     );
   }
 
-  Widget _buildHifiExecutiveHistoryTab() {
-    final transactions = _allTransactions.where((tx) {
-      if (tx['_source'] == 'store') {
-        return tx['transaction_type'] == 'DELIVERY' || tx['transaction_type'] == 'RETURN';
-      }
-      return true; // Include field transactions
+  Widget _buildHistoryTab() {
+    final bool isWide = MediaQuery.of(context).size.width > 900;
+
+    return DefaultTabController(
+      length: 3,
+      child: Column(
+        children: [
+          Container(
+            color: Colors.white,
+            alignment: Alignment.center,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: isWide ? 1100 : double.infinity),
+              child: TabBar(
+                labelColor: AppColors.primary,
+                unselectedLabelColor: Colors.grey[400],
+                indicatorColor: AppColors.primary,
+                indicatorWeight: 3,
+                labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                tabs: const [
+                  Tab(text: 'Purchases'),
+                  Tab(text: 'Deliveries'),
+                  Tab(text: 'Returns'),
+                ],
+              ),
+            ),
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                _buildFilteredHistoryTab('PURCHASE'),
+                _buildFilteredHistoryTab('DELIVERY'),
+                _buildFilteredHistoryTab('RETURN'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilteredHistoryTab(String type) {
+    final transactions = _allTransactions ?? [];
+    final bool isWide = MediaQuery.of(context).size.width > 900;
+    
+    final filtered = transactions.where((tx) {
+      final txType = tx['transaction_type']?.toString().toUpperCase() ?? '';
+      return txType == type;
     }).toList();
+
+    Widget content = filtered.isEmpty 
+        ? Center(child: Text('No $type history found'))
+        : ListView.builder(
+            padding: EdgeInsets.symmetric(
+              horizontal: isWide ? 0 : 16,
+              vertical: 16
+            ),
+            itemCount: filtered.length,
+            itemBuilder: (context, index) {
+              final tx = filtered[index];
+              return _buildTransactionHistoryCard(tx);
+            },
+          );
+
+    if (isWide) {
+      content = Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1100),
+          child: content,
+        ),
+      );
+    }
 
     return RefreshIndicator(
       onRefresh: _refreshData,
-      child: transactions.isEmpty 
-        ? const Center(child: Text('No transaction history found'))
-        : ListView.builder(
-            padding: const EdgeInsets.all(20),
-            itemCount: transactions.length,
-            itemBuilder: (context, index) {
-              final tx = transactions[index];
-              final date = DateTime.tryParse(tx['created_at']?.toString() ?? '') ?? DateTime.now();
-              final dateStr = '${date.day} ${_getMonthName(date.month)} ${date.year}';
-              final timeStr = '${date.hour}:${date.minute.toString().padLeft(2, '0')}';
-              
-              final type = tx['transaction_type']?.toString().toUpperCase() ?? '';
-              final isField = tx['_source'] == 'field';
-              
-              // From Executive perspective:
-              // Addition (+): Store DELIVERY, Field RETURN
-              // Subtraction (-): Store RETURN, Field RECEIVED/DELIVERED
-              final bool isAddition = (type == 'DELIVERY' && !isField) || (type == 'RETURN' && isField);
-              
-              final status = tx['status']?.toString().toUpperCase() ?? 'PENDING';
-              final isAccepted = status == 'ACCEPTED';
-              
-              String entityName = isField ? (tx['farms']?['name'] ?? 'Unknown Farm') : 'Warehouse';
-              String actionText = '';
-              if (isField) {
-                actionText = type == 'RETURN' ? 'Received from' : 'Delivered to';
-              } else {
-                actionText = type == 'DELIVERY' ? 'Received from' : 'Returned to';
-              }
-              
-              return EntranceAnimation(
-                child: Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(color: Colors.black.withOpacity(0.01), blurRadius: 10, offset: const Offset(0, 4)),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: isAddition ? Colors.green.withOpacity(0.05) : Colors.purple.withOpacity(0.05),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          isAddition ? Icons.local_shipping_rounded : Icons.keyboard_return_rounded,
-                          color: isAddition ? Colors.green : Colors.purple,
-                          size: 20,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              tx['item_name'] ?? 'Unknown',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '$actionText $entityName • $dateStr',
-                              style: TextStyle(color: AppColors.textGray.withOpacity(0.6), fontSize: 11),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            '${isAddition ? '+' : '-'}${tx['quantity']} ${tx['unit']}',
-                            style: TextStyle(
-                              color: isAddition ? Colors.green : Colors.red,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: isAccepted ? Colors.green.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              status,
-                              style: TextStyle(
-                                color: isAccepted ? Colors.green : Colors.orange,
-                                fontSize: 8,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
+      child: content,
     );
   }
 
@@ -1389,39 +1369,25 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
     return months[month - 1];
   }
 
-  Widget _buildPurchaseHistoryTab() {
-    final transactions = _allTransactions ?? [];
-    // Show everything for Admin/Store, but keep the name "Purchase History" or maybe just show all stock movements
-    final purchases = transactions.toList(); // Showing all for now as requested
+  Widget _buildStaffStockTab() {
+    final bool isWide = MediaQuery.of(context).size.width > 900;
+    
+    Widget content = _staffMembers.isEmpty
+        ? const Center(child: Text('No staff members found'))
+        : ListView.builder(
+            padding: EdgeInsets.symmetric(
+              horizontal: isWide ? 0 : 16,
+              vertical: 16
+            ),
+            itemCount: _staffMembers.length,
+            itemBuilder: (context, index) {
+              final member = _staffMembers[index];
+              final totalStock = _staffStockTotals[member['id']] ?? 0.0;
+              final role = member['role']?.toString().toUpperCase() ?? 'STAFF';
 
-    return RefreshIndicator(
-      onRefresh: _refreshData,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: purchases.length,
-        itemBuilder: (context, index) {
-          final tx = purchases[index];
-          return _buildTransactionHistoryCard(tx);
-        },
-      ),
-    );
-  }  Widget _buildStaffStockTab() {
-    return RefreshIndicator(
-      onRefresh: _refreshData,
-      child:
-          _staffMembers.isEmpty
-               ? const Center(child: Text('No staff members found'))
-              : ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: _staffMembers.length,
-                itemBuilder: (context, index) {
-                  final member = _staffMembers[index];
-                  final totalStock = _staffStockTotals[member['id']] ?? 0.0;
-                  final role = member['role']?.toString().toUpperCase() ?? 'STAFF';
-
-                  return EntranceAnimation(
-                    child: Card(
-                      margin: const EdgeInsets.only(bottom: 12),
+              return EntranceAnimation(
+                child: Card(
+                  margin: const EdgeInsets.only(bottom: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
                       ),
@@ -1470,7 +1436,20 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
                     ),
                   );
                 },
-              ),
+              );
+
+    if (isWide) {
+      content = Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1100),
+          child: content,
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _refreshData,
+      child: content,
     );
   }
 
@@ -1488,7 +1467,15 @@ class _StoreStockScreenState extends State<StoreStockScreen> {
       if (type == 'PURCHASE') {
         entityName = tx['vendor_name'] ?? 'Vendor';
       } else if (type == 'DELIVERY' || type == 'RETURN') {
-        entityName = tx['profiles']?['full_name'] ?? 'Executive';
+        // Handle Direct Sales (where executive_id is null)
+        final profileName = tx['profiles']?['full_name'];
+        if (profileName != null) {
+          entityName = profileName;
+        } else if (tx['vendor_name'] != null) {
+          entityName = tx['vendor_name']; // For Direct Sales, this is the buyer name
+        } else {
+          entityName = 'Direct Sale';
+        }
       }
     }
 
