@@ -22,6 +22,9 @@ import 'package:nature_biotic/features/farmers/screens/farmer_detail_screen.dart
 import 'package:nature_biotic/features/farms/screens/farm_detail_screen.dart';
 import 'package:nature_biotic/features/crops/screens/crop_detail_screen.dart';
 import 'package:nature_biotic/features/reports/screens/report_generator_screen.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:uuid/uuid.dart';
+import 'package:nature_biotic/features/expenses/widgets/trip_widgets.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -34,6 +37,8 @@ class _DashboardScreenState extends State<DashboardScreen>
     with SingleTickerProviderStateMixin {
   bool _isAdmin = false;
   bool _isManager = false;
+  bool _isExecutive = false;
+  bool _isTelecaller = false;
   String _userName = 'User';
   String _avatarUrl = '';
   bool _isLoading = true;
@@ -44,6 +49,8 @@ class _DashboardScreenState extends State<DashboardScreen>
   int _totalItemsReturned = 0;
   String _selectedPeriod = 'This Month';
   DateTimeRange? _customDateRange;
+  Map<String, dynamic>? _activeTrip;
+  final ImagePicker _picker = ImagePicker();
 
   // Stats
   int _farmerCount = 0;
@@ -106,7 +113,17 @@ class _DashboardScreenState extends State<DashboardScreen>
       final profile = await SupabaseService.getProfile();
       final isAdmin = profile?['role'] == 'admin';
       final isManager = profile?['role'] == 'manager';
+      final isExecutive = profile?['role'] == 'executive';
+      final isTelecaller = profile?['role'] == 'telecaller';
       final attendance = await SupabaseService.getTodayAttendance();
+      
+      Map<String, dynamic>? activeTrip;
+      if (isExecutive || isTelecaller) {
+        final userId = SupabaseService.client.auth.currentUser?.id;
+        if (userId != null) {
+          activeTrip = await SupabaseService.getActiveExpenseForExecutive(userId);
+        }
+      }
 
       final farmers = await SupabaseService.getFarmers();
       final farms = await SupabaseService.getFarms();
@@ -156,9 +173,12 @@ class _DashboardScreenState extends State<DashboardScreen>
         setState(() {
           _isAdmin = isAdmin;
           _isManager = isManager;
+          _isExecutive = isExecutive;
+          _isTelecaller = isTelecaller;
           _userName = profile?['full_name']?.split(' ')[0] ?? 'User';
           _avatarUrl = profile?['avatar_url'] ?? '';
           _todayAttendance = attendance;
+          _activeTrip = activeTrip;
           _recentActivities = activities ?? [];
 
           _allFarmers = farmers ?? [];
@@ -325,8 +345,41 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     _totalCollection = totalCollection;
     _totalOutstanding = revenue - totalCollection;
-    _salesToAchieve =
-        (_salesTarget - revenue).clamp(0, double.infinity).toDouble();
+
+    // Target Logic for field staff (Executive, Telecaller, Manager)
+    if (!_isAdmin && (_isExecutive || _isTelecaller || _isManager)) {
+      final now = DateTime.now();
+      
+      // 1. Calculate working days in current month (excluding Sundays)
+      int totalDaysInMonth = DateTime(now.year, now.month + 1, 0).day;
+      int workingDaysInMonth = 0;
+      for (int i = 1; i <= totalDaysInMonth; i++) {
+        if (DateTime(now.year, now.month, i).weekday != DateTime.sunday) {
+          workingDaysInMonth++;
+        }
+      }
+
+      // 2. Calculate daily target base
+      double dailyTarget = _salesTarget / (workingDaysInMonth > 0 ? workingDaysInMonth : 1);
+
+      // 3. Determine target for the selected period
+      double targetForPeriod;
+      if (_selectedPeriod == 'Today') {
+        targetForPeriod = dailyTarget;
+      } else if (_selectedPeriod == 'This Week') {
+        targetForPeriod = dailyTarget * 6; // Standard 6-day working week
+      } else {
+        // For 'This Month', 'This Year', or 'Customise', show the monthly target
+        targetForPeriod = _salesTarget;
+      }
+
+      // 4. Calculate remaining target for the selected period
+      // 'revenue' is already calculated for the selected period in the loop above
+      _salesToAchieve = (targetForPeriod - revenue).clamp(0, double.infinity).toDouble();
+    } else {
+      // Admin or other: Show remaining monthly target vs selected period revenue
+      _salesToAchieve = (_salesTarget - revenue).clamp(0, double.infinity).toDouble();
+    }
 
     _filteredTransactions = validTransactions;
 
@@ -717,7 +770,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       children: [
         // Top Line: Visits (Redirects to Reports History)
         StatCard(
-          title: 'Total Visits (Analysis History)',
+          title: _isTelecaller ? 'Total Calls' : 'Total Visits (Analysis History)',
           value: _reportCount.toString(),
           icon: Icons.analytics_rounded,
           gradient: const [Color(0xFF673AB7), Color(0xFF4527A0)],
@@ -1210,6 +1263,71 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
+  Future<String?> _captureAndUpload(String bucketId) async {
+    final XFile? photo = await _picker.pickImage(
+      source: ImageSource.camera,
+      imageQuality: 50,
+    );
+    if (photo != null) {
+      final bytes = await photo.readAsBytes();
+      final extension = photo.path.split('.').last;
+      final fileName = '${const Uuid().v4()}.$extension';
+
+      try {
+        return await SupabaseService.uploadImage(bytes, fileName, bucketId);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Upload failed: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+    return null;
+  }
+
+  void _showStartTripDialog() {
+    if (_activeTrip == null) {
+      // Step 1: Create the trip record if it doesn't exist
+      SupabaseService.startExecutiveTrip().then((_) => _loadDashboardData());
+      return;
+    }
+
+    // Step 2: Show the odometer form
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => StartTripForm(
+          expenseId: _activeTrip!['id'],
+          onStarted: () {
+            Navigator.pop(context);
+            _loadDashboardData();
+          },
+          onCapture: () => _captureAndUpload('expense-documents'),
+        ),
+      ),
+    );
+  }
+
+  void _showEndTripDialog() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => EndTripDialogContent(
+        expenseId: _activeTrip!['id'],
+        startOdometer: double.tryParse(_activeTrip!['start_odometer_reading']?.toString() ?? '0') ?? 0.0,
+        onEnded: _loadDashboardData,
+        onCapture: () => _captureAndUpload('expense-documents'),
+      ),
+    );
+  }
+
   Widget _buildPremiumHeader() {
     String greeting = 'Hi ${_userName.split(' ')[0]}';
 
@@ -1391,6 +1509,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                       ),
                     ),
                   const SizedBox(width: 6),
+                  // Trip/Odometer Action
+                  if (_isExecutive || _isTelecaller)
+                    _buildTripActionButton(),
+                  const SizedBox(width: 6),
                   _headerActionIcon(
                     icon: Icons.power_settings_new_rounded,
                     color: Colors.redAccent,
@@ -1401,6 +1523,110 @@ class _DashboardScreenState extends State<DashboardScreen>
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTripActionButton() {
+    bool hasActiveTrip = _activeTrip != null;
+    bool needsOdometer = hasActiveTrip && _activeTrip!['start_odometer_reading'] == null;
+    bool tripInProgress = hasActiveTrip && _activeTrip!['start_odometer_reading'] != null && _activeTrip!['end_odometer_reading'] == null;
+
+    IconData icon;
+    String label;
+    VoidCallback onTap;
+    List<Color> gradientColors;
+
+    if (!hasActiveTrip) {
+      icon = Icons.play_arrow_rounded;
+      label = 'Start Trip';
+      onTap = () {
+        if (_todayAttendance == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please Check In first to start a trip'),
+              backgroundColor: Colors.orange,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          return;
+        }
+        _showStartTripDialog();
+      };
+      gradientColors = [const Color(0xFF1976D2), const Color(0xFF0D47A1)]; // Blue
+    } else if (needsOdometer) {
+      icon = Icons.speed_rounded;
+      label = 'Enter Odo';
+      onTap = () {
+        if (_todayAttendance == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please Check In first to enter odometer'),
+              backgroundColor: Colors.orange,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          return;
+        }
+        _showStartTripDialog();
+      };
+      gradientColors = [const Color(0xFFFFA000), const Color(0xFFFF6F00)]; // Orange
+    } else if (tripInProgress) {
+      icon = Icons.stop_rounded;
+      label = 'End Trip';
+      onTap = () {
+        if (_todayAttendance == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please Check In first to end your trip'),
+              backgroundColor: Colors.orange,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          return;
+        }
+        _showEndTripDialog();
+      };
+      gradientColors = [const Color(0xFFD32F2F), const Color(0xFFB71C1C)]; // Red
+    } else {
+      return const SizedBox.shrink();
+    }
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: gradientColors,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: gradientColors[1].withOpacity(0.35),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: Colors.white, size: 15),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: GoogleFonts.outfit(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1426,6 +1652,24 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   Future<void> _handleLogout() async {
+    // Check if the user is currently checked in (has a today record but no check-out time)
+    final bool isCurrentlyCheckedIn = _todayAttendance != null && _todayAttendance!['check_out_time'] == null;
+
+    if (isCurrentlyCheckedIn && !_isAdmin && !_isManager) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please Check Out before logging out'),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const AttendanceScreen()),
+      ).then((_) => _loadDashboardData());
+      return;
+    }
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(

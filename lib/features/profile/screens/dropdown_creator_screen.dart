@@ -40,7 +40,7 @@ class _DropdownCreatorScreenState extends State<DropdownCreatorScreen> {
     'age_unit': 'Age Units',
     'life_unit': 'Life Units',
     'count_unit': 'Count Units',
-    'acre_unit': 'Acre/Scale Units',
+    'acre_unit': 'Area/Scale Units',
     'yield_unit': 'Yield Units',
     'yield_period': 'Yield Periods (e.g. Per Month)',
     'filler_material': 'Filler Materials (e.g. Water, Soil)',

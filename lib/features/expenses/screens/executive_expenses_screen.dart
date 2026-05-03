@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:typed_data';
+import 'package:nature_biotic/features/expenses/widgets/trip_widgets.dart';
 import 'package:uuid/uuid.dart';
 
 class ExecutiveExpenseDashboard extends StatefulWidget {
@@ -75,21 +76,12 @@ class _ExecutiveExpenseDashboardState extends State<ExecutiveExpenseDashboard> {
     }
 
     if (_activeExpense == null) {
-      return _buildNoActiveExpense();
+      return _buildNoActiveTripPlaceholder();
     }
 
     final allotmentStatus = _activeExpense!['allotment_status'];
     if (allotmentStatus == 'PENDING') {
       return _buildPendingReceipt();
-    }
-
-    final startOdometer = _activeExpense!['start_odometer_reading'];
-    if (startOdometer == null) {
-      return _StartTripForm(
-        expenseId: _activeExpense!['id'],
-        onStarted: _loadActiveExpense,
-        onCapture: () => _captureAndUpload('expense-documents'),
-      );
     }
 
     final endOdometer = _activeExpense!['end_odometer_reading'];
@@ -105,7 +97,7 @@ class _ExecutiveExpenseDashboardState extends State<ExecutiveExpenseDashboard> {
     return _buildSubmitReturn();
   }
 
-  Widget _buildNoActiveExpense() {
+  Widget _buildNoActiveTripPlaceholder() {
     return Scaffold(
       appBar: AppBar(title: const Text('Expenses')),
       body: Center(
@@ -113,13 +105,13 @@ class _ExecutiveExpenseDashboardState extends State<ExecutiveExpenseDashboard> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              Icons.payments_outlined,
+              Icons.directions_car_rounded,
               size: 80,
               color: AppColors.primary.withOpacity(0.2),
             ),
             const SizedBox(height: 24),
             Text(
-              'No Active Allocation',
+              'No Active Trip',
               style: GoogleFonts.outfit(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
@@ -127,42 +119,14 @@ class _ExecutiveExpenseDashboardState extends State<ExecutiveExpenseDashboard> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Waiting for Manager to allot funds.',
+              'Please start a trip from the Dashboard.',
               style: TextStyle(color: AppColors.textGray),
             ),
             const SizedBox(height: 32),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32),
-              child: Column(
-                children: [
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: () async {
-                        await SupabaseService.startExecutiveTrip();
-                        _loadActiveExpense();
-                      },
-                      child: const Text(
-                        'Start New Trip',
-                        style: TextStyle(color: Colors.white, fontSize: 16),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextButton.icon(
-                    onPressed: _loadActiveExpense,
-                    icon: const Icon(Icons.refresh_rounded),
-                    label: const Text('Refresh Status'),
-                  ),
-                ],
-              ),
+            TextButton.icon(
+              onPressed: _loadActiveExpense,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Refresh Status'),
             ),
           ],
         ),
@@ -366,16 +330,6 @@ class _ExecutiveExpenseDashboardState extends State<ExecutiveExpenseDashboard> {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                    onPressed: _showEndTripDialog,
-                    icon: const Icon(Icons.stop_circle_rounded),
-                    label: const Text('End Trip'),
-                  ),
-                ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: ElevatedButton.icon(
@@ -409,42 +363,18 @@ class _ExecutiveExpenseDashboardState extends State<ExecutiveExpenseDashboard> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder:
-          (context) => _AddExpenseDialogContent(
-            expenseId: _activeExpense!['id'],
-            onAdded: _loadActiveExpense,
-            onCapture: () => _captureAndUpload('expense-documents'),
-          ),
-    );
-  }
-
-  void _showEndTripDialog() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      builder: (context) => _AddExpenseDialogContent(
+        expenseId: _activeExpense!['id'],
+        onAdded: _loadActiveExpense,
+        onCapture: () => _captureAndUpload('expense-documents'),
       ),
-      builder:
-          (context) => _EndTripDialogContent(
-            expenseId: _activeExpense!['id'],
-            startOdometer: double.tryParse(_activeExpense!['start_odometer_reading']?.toString() ?? '0') ?? 0.0,
-            onEnded: _loadActiveExpense,
-            onCapture: () => _captureAndUpload('expense-documents'),
-          ),
     );
   }
 
   Widget _buildSubmitReturn() {
-    final allotted =
-        double.tryParse(_activeExpense!['amount_allotted'].toString()) ?? 0.0;
-    final items = List<Map<String, dynamic>>.from(
-      _activeExpense!['expense_items'] ?? [],
-    );
-    final spent = items.fold(
-      0.0,
-      (sum, item) => sum + (double.tryParse(item['amount'].toString()) ?? 0.0),
-    );
+    final allotted = double.tryParse(_activeExpense!['amount_allotted'].toString()) ?? 0.0;
+    final items = List<Map<String, dynamic>>.from(_activeExpense!['expense_items'] ?? []);
+    final spent = items.fold(0.0, (sum, item) => sum + (double.tryParse(item['amount'].toString()) ?? 0.0));
     final balance = allotted - spent;
     final isClaim = balance < 0;
     final returnController = TextEditingController(text: isClaim ? balance.abs().toString() : balance.toString());
@@ -463,10 +393,7 @@ class _ExecutiveExpenseDashboardState extends State<ExecutiveExpenseDashboard> {
             const SizedBox(height: 24),
             Text(
               isClaim ? 'Expense Claim' : 'Trip Finished',
-              style: GoogleFonts.outfit(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
+              style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             if (_activeExpense!['start_odometer_reading'] != null && _activeExpense!['end_odometer_reading'] != null) ...[
               const SizedBox(height: 12),
@@ -487,7 +414,7 @@ class _ExecutiveExpenseDashboardState extends State<ExecutiveExpenseDashboard> {
               isClaim 
                 ? 'You have spent more than allotted. Submit a claim for the difference.'
                 : 'Enter the amount you are returning to the manager.',
-              style: TextStyle(color: AppColors.textGray),
+              style: const TextStyle(color: AppColors.textGray),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 32),
@@ -497,9 +424,7 @@ class _ExecutiveExpenseDashboardState extends State<ExecutiveExpenseDashboard> {
               decoration: InputDecoration(
                 labelText: isClaim ? 'Claim Amount' : 'Return Amount',
                 prefixText: '₹ ',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
             const Spacer(),
@@ -512,17 +437,10 @@ class _ExecutiveExpenseDashboardState extends State<ExecutiveExpenseDashboard> {
                 ),
                 onPressed: () async {
                   final amount = double.tryParse(returnController.text) ?? 0.0;
-                  // If it's a claim, we store it as a negative return_amount to distinguish
-                  await SupabaseService.submitReturn(
-                    _activeExpense!['id'],
-                    isClaim ? -amount : amount,
-                  );
+                  await SupabaseService.submitReturn(_activeExpense!['id'], isClaim ? -amount : amount);
                   _loadActiveExpense();
                 },
-                child: Text(
-                  isClaim ? 'Submit Claim' : 'Submit Return',
-                  style: const TextStyle(color: Colors.white),
-                ),
+                child: Text(isClaim ? 'Submit Claim' : 'Submit Return', style: const TextStyle(color: Colors.white)),
               ),
             ),
           ],
@@ -537,29 +455,13 @@ class _ExecutiveExpenseDashboardState extends State<ExecutiveExpenseDashboard> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.hourglass_empty_rounded,
-              size: 80,
-              color: Colors.orange,
-            ),
+            const Icon(Icons.hourglass_empty_rounded, size: 80, color: Colors.orange),
             const SizedBox(height: 24),
-            Text(
-              'Awaiting Manager Approval',
-              style: GoogleFonts.outfit(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            Text('Awaiting Manager Approval', style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            const Text(
-              'You have submitted the return amount.',
-              style: TextStyle(color: AppColors.textGray),
-            ),
+            const Text('You have submitted the return amount.', style: TextStyle(color: AppColors.textGray)),
             const SizedBox(height: 32),
-            ElevatedButton(
-              onPressed: _loadActiveExpense,
-              child: const Text('Check Status'),
-            ),
+            ElevatedButton(onPressed: _loadActiveExpense, child: const Text('Check Status')),
           ],
         ),
       ),
@@ -569,19 +471,9 @@ class _ExecutiveExpenseDashboardState extends State<ExecutiveExpenseDashboard> {
   Widget _summaryBlock(String label, String value) {
     return Column(
       children: [
-        Text(
-          label,
-          style: const TextStyle(color: Colors.white70, fontSize: 12),
-        ),
+        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
         const SizedBox(height: 4),
-        Text(
-          value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 18,
-          ),
-        ),
+        Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
       ],
     );
   }
@@ -590,236 +482,20 @@ class _ExecutiveExpenseDashboardState extends State<ExecutiveExpenseDashboard> {
     IconData icon;
     Color color;
     switch (category) {
-      case 'FOOD':
-        icon = Icons.restaurant_rounded;
-        color = Colors.orange;
-        break;
-      case 'FUEL':
-        icon = Icons.local_gas_station_rounded;
-        color = Colors.blue;
-        break;
-      case 'COURIER':
-        icon = Icons.local_shipping_rounded;
-        color = Colors.purple;
-        break;
-      case 'DRIVER':
-        icon = Icons.person_rounded;
-        color = Colors.teal;
-        break;
-      default:
-        icon = Icons.more_horiz_rounded;
-        color = Colors.grey;
+      case 'FOOD': icon = Icons.restaurant_rounded; color = Colors.orange; break;
+      case 'FUEL': icon = Icons.local_gas_station_rounded; color = Colors.blue; break;
+      case 'COURIER': icon = Icons.local_shipping_rounded; color = Colors.purple; break;
+      case 'DRIVER': icon = Icons.person_rounded; color = Colors.teal; break;
+      default: icon = Icons.more_horiz_rounded; color = Colors.grey;
     }
     return Container(
       padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        shape: BoxShape.circle,
-      ),
+      decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
       child: Icon(icon, color: color, size: 20),
     );
   }
 }
 
-// --- Specialized Form Widgets for Better Responsiveness ---
-
-class _StartTripForm extends StatefulWidget {
-  final String expenseId;
-  final VoidCallback onStarted;
-  final Future<String?> Function() onCapture;
-
-  const _StartTripForm({
-    required this.expenseId,
-    required this.onStarted,
-    required this.onCapture,
-  });
-
-  @override
-  State<_StartTripForm> createState() => _StartTripFormState();
-}
-
-class _StartTripFormState extends State<_StartTripForm> {
-  String? _selectedVehicle;
-  String? _selectedOwnership;
-  final _odometerController = TextEditingController();
-  String? _odometerPhoto;
-  bool _isSubmitting = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final bool canStart =
-        _selectedVehicle != null &&
-        _selectedOwnership != null &&
-        _odometerController.text.isNotEmpty &&
-        _odometerPhoto != null &&
-        !_isSubmitting;
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('Start Trip')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Vehicle Type',
-              style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                _choiceChip(
-                  'Two Wheeler',
-                  _selectedVehicle == 'TWO_WHEELER',
-                  () => setState(() => _selectedVehicle = 'TWO_WHEELER'),
-                ),
-                const SizedBox(width: 12),
-                _choiceChip(
-                  'Four Wheeler',
-                  _selectedVehicle == 'FOUR_WHEELER',
-                  () => setState(() => _selectedVehicle = 'FOUR_WHEELER'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Vehicle Ownership',
-              style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                _choiceChip(
-                  'Own Vehicle',
-                  _selectedOwnership == 'OWN',
-                  () => setState(() => _selectedOwnership = 'OWN'),
-                ),
-                const SizedBox(width: 12),
-                _choiceChip(
-                  'Company Vehicle',
-                  _selectedOwnership == 'COMPANY',
-                  () => setState(() => _selectedOwnership = 'COMPANY'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
-            TextField(
-              controller: _odometerController,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                labelText: 'Current Odometer Reading',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              onChanged: (_) => setState(() {}),
-            ),
-            const SizedBox(height: 24),
-            _buildPhotoSelector(
-              'Take Odometer Photo',
-              _odometerPhoto,
-              () async {
-                final url = await widget.onCapture();
-                if (url != null) setState(() => _odometerPhoto = url);
-              },
-            ),
-            const SizedBox(height: 48),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-                onPressed:
-                    canStart
-                        ? () async {
-                          setState(() => _isSubmitting = true);
-                          try {
-                            await SupabaseService.updateTripStart(
-                              expenseId: widget.expenseId,
-                              vehicleType: _selectedVehicle!,
-                              ownership: _selectedOwnership!,
-                              odometer: double.parse(_odometerController.text),
-                              photoUrl: _odometerPhoto,
-                            );
-                            widget.onStarted();
-                          } catch (e) {
-                            setState(() => _isSubmitting = false);
-                          }
-                        }
-                        : null,
-                child:
-                    _isSubmitting
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : const Text(
-                          'Start Trip',
-                          style: TextStyle(color: Colors.white),
-                        ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _choiceChip(String label, bool isSelected, VoidCallback onSelected) {
-    return Expanded(
-      child: ChoiceChip(
-        label: Center(child: Text(label)),
-        selected: isSelected,
-        onSelected: (_) => onSelected(),
-        selectedColor: AppColors.primary.withOpacity(0.2),
-        labelStyle: TextStyle(
-          color: isSelected ? AppColors.primary : AppColors.textGray,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPhotoSelector(
-    String label,
-    String? photoUrl,
-    VoidCallback onTap,
-  ) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        decoration: BoxDecoration(
-          border: Border.all(color: AppColors.textGray.withOpacity(0.2)),
-          borderRadius: BorderRadius.circular(12),
-          color: Colors.black.withOpacity(0.02),
-        ),
-        constraints: const BoxConstraints(maxHeight: 200),
-        child:
-            photoUrl != null
-                ? ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.network(photoUrl, fit: BoxFit.contain),
-                )
-                : Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.camera_alt_rounded,
-                      color: AppColors.primary,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      label,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textGray,
-                      ),
-                    ),
-                  ],
-                ),
-      ),
-    );
-  }
-}
 
 class _AddExpenseDialogContent extends StatefulWidget {
   final String expenseId;
@@ -1005,167 +681,3 @@ class _AddExpenseDialogContentState extends State<_AddExpenseDialogContent> {
   }
 }
 
-class _EndTripDialogContent extends StatefulWidget {
-  final String expenseId;
-  final double startOdometer;
-  final VoidCallback onEnded;
-  final Future<String?> Function() onCapture;
-
-  const _EndTripDialogContent({
-    required this.expenseId,
-    required this.startOdometer,
-    required this.onEnded,
-    required this.onCapture,
-  });
-
-  @override
-  State<_EndTripDialogContent> createState() => _EndTripDialogContentState();
-}
-
-class _EndTripDialogContentState extends State<_EndTripDialogContent> {
-  final _odometerController = TextEditingController();
-  String? _odometerPhoto;
-  bool _isSubmitting = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final double endOdo = double.tryParse(_odometerController.text) ?? 0.0;
-    final double distance = endOdo - widget.startOdometer;
-    
-    final bool canEnd =
-        _odometerController.text.isNotEmpty &&
-        endOdo >= widget.startOdometer &&
-        _odometerPhoto != null &&
-        !_isSubmitting;
-
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-        left: 24,
-        right: 24,
-        top: 24,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            'End Trip',
-            style: GoogleFonts.outfit(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 24),
-          TextField(
-            controller: _odometerController,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'End Odometer Reading',
-              border: OutlineInputBorder(),
-            ),
-            onChanged: (_) => setState(() {}),
-          ),
-          if (_odometerController.text.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              distance >= 0 
-                ? 'Total Distance: ${distance.toStringAsFixed(1)} KM'
-                : 'Reading must be >= ${widget.startOdometer}',
-              style: TextStyle(
-                color: distance >= 0 ? AppColors.primary : Colors.red,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-              ),
-            ),
-          ],
-          const SizedBox(height: 16),
-          _buildPhotoSelector(
-            'Take End Odometer Photo',
-            _odometerPhoto,
-            () async {
-              final url = await widget.onCapture();
-              if (url != null) setState(() => _odometerPhoto = url);
-            },
-          ),
-          const SizedBox(height: 32),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.redAccent,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-              onPressed:
-                  canEnd
-                      ? () async {
-                        setState(() => _isSubmitting = true);
-                        try {
-                          await SupabaseService.updateTripEnd(
-                            expenseId: widget.expenseId,
-                            odometer: double.parse(_odometerController.text),
-                            photoUrl: _odometerPhoto,
-                          );
-                          Navigator.pop(context);
-                          widget.onEnded();
-                        } catch (e) {
-                          setState(() => _isSubmitting = false);
-                        }
-                      }
-                      : null,
-              child:
-                  _isSubmitting
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text(
-                        'End Trip & Finish Tracking',
-                        style: TextStyle(color: Colors.white),
-                      ),
-            ),
-          ),
-          const SizedBox(height: 24),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPhotoSelector(
-    String label,
-    String? photoUrl,
-    VoidCallback onTap,
-  ) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        decoration: BoxDecoration(
-          border: Border.all(color: AppColors.textGray.withOpacity(0.2)),
-          borderRadius: BorderRadius.circular(12),
-          color: Colors.black.withOpacity(0.02),
-        ),
-        constraints: const BoxConstraints(maxHeight: 200),
-        child:
-            photoUrl != null
-                ? ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.network(photoUrl, fit: BoxFit.contain),
-                )
-                : Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.camera_alt_rounded,
-                      color: AppColors.primary,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      label,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textGray,
-                      ),
-                    ),
-                  ],
-                ),
-      ),
-    );
-  }
-}

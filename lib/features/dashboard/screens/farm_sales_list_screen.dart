@@ -198,103 +198,35 @@ class _FarmSalesListScreenState extends State<FarmSalesListScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.75,
-        decoration: const BoxDecoration(
-          color: AppColors.background,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        ),
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(widget.mode == 'COLLECTION' ? 'Select Farm for Collection' : 'Select Farm for Stock', 
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textBlack)
-                  ),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.grey.withOpacity(0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      icon: const Icon(Icons.close_rounded, size: 20), 
-                      onPressed: () => Navigator.pop(context),
-                      color: AppColors.textGray,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: _availableFarms.isEmpty 
-                ? const Center(child: Text('No farms available', style: TextStyle(color: AppColors.textGray)))
-                : ListView.separated(
-                  padding: const EdgeInsets.only(left: 20, right: 20, bottom: 40),
-                  itemCount: _availableFarms.length,
-                  separatorBuilder: (context, index) => const SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    final farm = _availableFarms[index];
-                    return Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.black.withOpacity(0.04)),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.02),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          )
-                        ]
-                      ),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        leading: Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(Icons.agriculture_rounded, color: AppColors.primary, size: 24),
-                        ),
-                        title: Text(farm['name'] ?? 'Unknown Farm', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                        subtitle: Text(farm['farmers']?['name'] ?? 'No Farmer', style: const TextStyle(color: AppColors.textGray, fontSize: 13)),
-                        trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textGray),
-                        onTap: () {
-                          Navigator.pop(context); // close bottom sheet
-                          if (widget.mode == 'COLLECTION') {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => AddCollectionScreen(
-                                  farmId: farm['id'].toString(),
-                                  farmName: farm['name'] ?? 'Unknown Farm',
-                                  farmerName: farm['farmers']?['name'],
-                                ),
-                              ),
-                            ).then((_) => _processData()); // Refresh after return
-                          } else {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => AddStockEntryScreen(
-                                  farmId: farm['id'].toString(),
-                                  farmName: farm['name'] ?? 'Unknown Farm',
-                                ),
-                              ),
-                            ).then((_) => _processData()); // Refresh after return
-                          }
-                        },
-                      ),
-                    );
-                  },
+      builder: (context) => _SelectionFlow(
+        mode: widget.mode,
+        onComplete: (farmer, farm, crop) {
+          Navigator.pop(context); // close bottom sheet
+          if (widget.mode == 'COLLECTION') {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => AddCollectionScreen(
+                  farmId: farm['id'].toString(),
+                  farmName: farm['name'] ?? 'Unknown Farm',
+                  farmerName: farmer['name'],
+                  cropId: crop?['id']?.toString(),
+                  cropName: crop?['name']?.toString(),
                 ),
-            ),
-          ],
-        ),
+              ),
+            ).then((_) => _processData());
+          } else {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => AddStockEntryScreen(
+                  farmId: farm['id'].toString(),
+                  farmName: farm['name'] ?? 'Unknown Farm',
+                ),
+              ),
+            ).then((_) => _processData());
+          }
+        },
       ),
     );
   }
@@ -467,3 +399,197 @@ class _FarmSalesListScreenState extends State<FarmSalesListScreen> {
   }
 }
 
+class _SelectionFlow extends StatefulWidget {
+  final String mode;
+  final Function(Map<String, dynamic> farmer, Map<String, dynamic> farm, Map<String, dynamic>? crop) onComplete;
+
+  const _SelectionFlow({required this.mode, required this.onComplete});
+
+  @override
+  State<_SelectionFlow> createState() => _SelectionFlowState();
+}
+
+class _SelectionFlowState extends State<_SelectionFlow> {
+  String _step = 'FARMER'; // FARMER, FARM, CROP
+  List<Map<String, dynamic>> _farmers = [];
+  List<Map<String, dynamic>> _farms = [];
+  List<Map<String, dynamic>> _crops = [];
+  
+  Map<String, dynamic>? _selectedFarmer;
+  Map<String, dynamic>? _selectedFarm;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFarmers();
+  }
+
+  Future<void> _loadFarmers() async {
+    final farmers = await SupabaseService.getFarmers();
+    if (mounted) {
+      setState(() {
+        _farmers = farmers;
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadFarms(dynamic farmerId) async {
+    setState(() => _isLoading = true);
+    final farms = await SupabaseService.getFarmsByFarmer(farmerId);
+    if (mounted) {
+      setState(() {
+        _farms = farms;
+        _step = 'FARM';
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadCrops(dynamic farmId) async {
+    setState(() => _isLoading = true);
+    final crops = await SupabaseService.getCrops(farmId);
+    if (mounted) {
+      setState(() {
+        _crops = crops;
+        _step = 'CROP';
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    String title = 'Select Farmer';
+    if (_step == 'FARM') title = 'Select Farm';
+    if (_step == 'CROP') title = 'Select Crop';
+
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.75,
+      decoration: const BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Row(
+              children: [
+                if (_step != 'FARMER')
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+                    onPressed: () {
+                      setState(() {
+                        if (_step == 'CROP') _step = 'FARM';
+                        else if (_step == 'FARM') _step = 'FARMER';
+                      });
+                    },
+                  ),
+                Expanded(
+                  child: Text(title, 
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textBlack)
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded), 
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+          ),
+          if (_isLoading)
+            const Expanded(child: Center(child: CircularProgressIndicator()))
+          else
+            Expanded(
+              child: _buildList(),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildList() {
+    if (_step == 'FARMER') {
+      return ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        itemCount: _farmers.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          final f = _farmers[index];
+          return _selectionTile(
+            title: f['name'] ?? 'Unknown',
+            subtitle: f['phone'] ?? 'No Phone',
+            icon: Icons.person_rounded,
+            onTap: () {
+              setState(() {
+                _selectedFarmer = f;
+              });
+              _loadFarms(f['id']);
+            },
+          );
+        },
+      );
+    } else if (_step == 'FARM') {
+      return ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        itemCount: _farms.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          final farm = _farms[index];
+          return _selectionTile(
+            title: farm['name'] ?? 'Unknown Farm',
+            subtitle: farm['location'] ?? 'No Location',
+            icon: Icons.agriculture_rounded,
+            onTap: () {
+              setState(() {
+                _selectedFarm = farm;
+              });
+              _loadCrops(farm['id']);
+            },
+          );
+        },
+      );
+    } else {
+      return ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        itemCount: _crops.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          final crop = _crops[index];
+          return _selectionTile(
+            title: crop['name'] ?? 'Unknown Crop',
+            subtitle: '${crop['area'] ?? '-'} ${crop['area_unit'] ?? ''}',
+            icon: Icons.eco_rounded,
+            onTap: () => widget.onComplete(_selectedFarmer!, _selectedFarm!, crop),
+          );
+        },
+      );
+    }
+  }
+
+  Widget _selectionTile({required String title, required String subtitle, required IconData icon, required VoidCallback onTap}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.black.withOpacity(0.04)),
+      ),
+      child: ListTile(
+        leading: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: AppColors.primary.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: AppColors.primary, size: 20),
+        ),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+        subtitle: Text(subtitle, style: const TextStyle(color: AppColors.textGray, fontSize: 13)),
+        trailing: const Icon(Icons.chevron_right_rounded),
+        onTap: onTap,
+      ),
+    );
+  }
+}

@@ -602,7 +602,7 @@ class _AddCropScreenState extends State<AddCropScreen> {
                                     Expanded(
                                       child: _buildUnitTextField(
                                         controller: _acreController,
-                                        label: 'Scale/Acre',
+                                        label: 'Area/Scale',
                                         units: _acreUnits,
                                         selectedUnit: _selectedAcreUnit,
                                         onUnitChanged:

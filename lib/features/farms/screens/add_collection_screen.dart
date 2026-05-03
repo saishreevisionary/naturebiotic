@@ -10,12 +10,16 @@ class AddCollectionScreen extends StatefulWidget {
   final String farmId;
   final String farmName;
   final String? farmerName;
+  final String? cropId;
+  final String? cropName;
 
   const AddCollectionScreen({
     super.key,
     required this.farmId,
     required this.farmName,
     this.farmerName,
+    this.cropId,
+    this.cropName,
   });
 
   @override
@@ -144,9 +148,11 @@ class _AddCollectionScreenState extends State<AddCollectionScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
-                                'Collection for',
-                                style: TextStyle(
+                              Text(
+                                widget.cropName != null 
+                                  ? 'Collection for ${widget.cropName}' 
+                                  : 'Collection for',
+                                style: const TextStyle(
                                     fontSize: 11, color: AppColors.textGray),
                               ),
                               Text(

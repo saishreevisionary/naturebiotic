@@ -152,7 +152,7 @@ class _ExecutiveListScreenState extends State<ExecutiveListScreen> {
   }
 
   void _showOptions(Map<String, dynamic> member) {
-    final bool isExecutive = member['role'] == 'executive' || member['role'] == 'telecaller';
+    final bool isExecutive = member['role'] == 'executive' || member['role'] == 'telecaller' || member['role'] == 'manager';
     
     showModalBottomSheet(
       context: context,
