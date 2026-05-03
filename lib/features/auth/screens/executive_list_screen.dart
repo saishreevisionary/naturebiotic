@@ -3,6 +3,7 @@ import 'package:nature_biotic/core/theme.dart';
 import 'package:nature_biotic/services/supabase_service.dart';
 import 'package:nature_biotic/features/auth/screens/executive_assignment_screen.dart';
 import 'package:nature_biotic/features/attendance/screens/attendance_history_screen.dart';
+import 'package:nature_biotic/core/widgets/animations.dart';
 
 class ExecutiveListScreen extends StatefulWidget {
   const ExecutiveListScreen({super.key});
@@ -13,6 +14,7 @@ class ExecutiveListScreen extends StatefulWidget {
 
 class _ExecutiveListScreenState extends State<ExecutiveListScreen> {
   List<Map<String, dynamic>> _teamMembers = [];
+  Map<String, double> _salesStats = {};
   bool _isLoading = true;
 
   @override
@@ -24,9 +26,11 @@ class _ExecutiveListScreenState extends State<ExecutiveListScreen> {
   Future<void> _loadTeamMembers() async {
     try {
       final data = await SupabaseService.getTeamMembers();
+      final stats = await SupabaseService.getTeamSalesStats();
       if (mounted) {
         setState(() {
           _teamMembers = data;
+          _salesStats = stats;
           _isLoading = false;
         });
       }
@@ -62,85 +66,178 @@ class _ExecutiveListScreenState extends State<ExecutiveListScreen> {
                     itemBuilder: (context, index) {
                       final member = _teamMembers[index];
                       final role = member['role'] ?? 'unknown';
-                      return InkWell(
-                        onTap: () {
-                          _showOptions(member);
-                        },
-                        borderRadius: BorderRadius.circular(16),
-                        child: Container(
-                          margin: const EdgeInsets.only(bottom: 16),
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: AppColors.secondary),
-                          ),
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                backgroundColor: AppColors.secondary,
-                                backgroundImage:
-                                    member['avatar_url'] != null
-                                        ? NetworkImage(member['avatar_url'])
-                                        : null,
-                                child:
-                                    member['avatar_url'] == null
-                                        ? Text(
-                                          member['full_name']?[0] ?? 'U',
-                                          style: const TextStyle(
-                                            color: AppColors.primary,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        )
-                                        : null,
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      member['full_name'] ?? 'N/A',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                      ),
-                                    ),
-                                    Row(
-                                      children: [
-                                        Text(
-                                          '@${member['username'] ?? 'unknown'}',
-                                          style: const TextStyle(
-                                            color: AppColors.textGray,
-                                            fontSize: 12,
-                                          ),
+                      final target = (member['sales_target'] ?? 0.0).toDouble();
+                      final achieved = _salesStats[member['id']] ?? 0.0;
+                      final pending = (target - achieved).clamp(0.0, double.infinity);
+                      final progress = target > 0 ? (achieved / target).clamp(0.0, 1.0) : 0.0;
+                      final isExecutive = role == 'executive' || role == 'telecaller';
+
+                      return EntranceAnimation(
+                        child: InkWell(
+                          onTap: () => _showOptions(member),
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 20),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.03),
+                                  blurRadius: 15,
+                                  offset: const Offset(0, 5),
+                                ),
+                              ],
+                              border: Border.all(color: AppColors.primary.withOpacity(0.05)),
+                            ),
+                            child: Column(
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.all(20),
+                                  child: Row(
+                                    children: [
+                                      Hero(
+                                        tag: 'avatar_${member['id']}',
+                                        child: CircleAvatar(
+                                          radius: 28,
+                                          backgroundColor: AppColors.secondary,
+                                          backgroundImage: member['avatar_url'] != null
+                                              ? NetworkImage(member['avatar_url'])
+                                              : null,
+                                          child: member['avatar_url'] == null
+                                              ? Text(
+                                                  member['full_name']?[0] ?? 'U',
+                                                  style: const TextStyle(
+                                                    color: AppColors.primary,
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 20,
+                                                  ),
+                                                )
+                                              : null,
                                         ),
-                                        const SizedBox(width: 8),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: AppColors.primary.withOpacity(0.1),
-                                            borderRadius: BorderRadius.circular(4),
-                                          ),
-                                          child: Text(
-                                            role.toUpperCase(),
-                                            style: const TextStyle(
-                                              color: AppColors.primary,
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold,
+                                      ),
+                                      const SizedBox(width: 16),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              member['full_name'] ?? 'N/A',
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w900,
+                                                fontSize: 18,
+                                                color: AppColors.textBlack,
+                                                letterSpacing: -0.5,
+                                              ),
                                             ),
-                                          ),
+                                            const SizedBox(height: 4),
+                                            Row(
+                                              children: [
+                                                Text(
+                                                  '@${member['username'] ?? 'unknown'}',
+                                                  style: TextStyle(
+                                                    color: AppColors.textGray.withOpacity(0.6),
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 12),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                  decoration: BoxDecoration(
+                                                    color: AppColors.primary.withOpacity(0.08),
+                                                    borderRadius: BorderRadius.circular(6),
+                                                  ),
+                                                  child: Text(
+                                                    role.toUpperCase(),
+                                                    style: const TextStyle(
+                                                      color: AppColors.primary,
+                                                      fontSize: 9,
+                                                      fontWeight: FontWeight.w900,
+                                                      letterSpacing: 0.5,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const Icon(
+                                        Icons.arrow_forward_ios_rounded,
+                                        color: AppColors.textGray,
+                                        size: 16,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (isExecutive) ...[
+                                  Container(
+                                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                                    child: Column(
+                                      children: [
+                                        const Divider(height: 1),
+                                        const SizedBox(height: 16),
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            _targetMiniStat('Target', '₹${target.toStringAsFixed(0)}'),
+                                            _targetMiniStat('Achieved', '₹${achieved.toStringAsFixed(0)}', color: Colors.green),
+                                            _targetMiniStat('Pending', '₹${pending.toStringAsFixed(0)}', color: Colors.orange),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 16),
+                                        Stack(
+                                          children: [
+                                            Container(
+                                              height: 6,
+                                              width: double.infinity,
+                                              decoration: BoxDecoration(
+                                                color: AppColors.background,
+                                                borderRadius: BorderRadius.circular(3),
+                                              ),
+                                            ),
+                                            FractionallySizedBox(
+                                              widthFactor: progress,
+                                              child: Container(
+                                                height: 6,
+                                                decoration: BoxDecoration(
+                                                  gradient: const LinearGradient(
+                                                    colors: [AppColors.primary, AppColors.accent],
+                                                  ),
+                                                  borderRadius: BorderRadius.circular(3),
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: AppColors.primary.withOpacity(0.3),
+                                                      blurRadius: 4,
+                                                      offset: const Offset(0, 2),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.end,
+                                          children: [
+                                            Text(
+                                              '${(progress * 100).toStringAsFixed(1)}% Completed',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w900,
+                                                color: AppColors.primary.withOpacity(0.7),
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ],
                                     ),
-                                  ],
-                                ),
-                              ),
-                              const Icon(
-                                Icons.chevron_right_rounded,
-                                color: AppColors.textGray,
-                              ),
-                            ],
+                                  ),
+                                ],
+                              ],
+                            ),
                           ),
                         ),
                       );
@@ -431,6 +528,32 @@ class _ExecutiveListScreenState extends State<ExecutiveListScreen> {
               ),
             ],
           ),
+    );
+  }
+
+  Widget _targetMiniStat(String label, String value, {Color? color}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: TextStyle(
+            fontSize: 9,
+            fontWeight: FontWeight.w900,
+            color: AppColors.textGray.withOpacity(0.4),
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w900,
+            color: color ?? AppColors.textBlack,
+          ),
+        ),
+      ],
     );
   }
 }

@@ -17,6 +17,7 @@ class FarmPdfFolderScreen extends StatefulWidget {
 class _FarmPdfFolderScreenState extends State<FarmPdfFolderScreen> {
   bool _isLoading = true;
   bool _hasError = false;
+  bool _isGridView = true;
   NavMode _mode = NavMode.farms;
   List<Map<String, dynamic>> _farms = [];
   List<Map<String, dynamic>> _allReports = [];
@@ -122,6 +123,12 @@ class _FarmPdfFolderScreenState extends State<FarmPdfFolderScreen> {
             ? IconButton(icon: const Icon(Icons.arrow_back_rounded), onPressed: _goBack)
             : null,
         actions: [
+          if (_mode == NavMode.farms)
+            IconButton(
+              onPressed: () => setState(() => _isGridView = !_isGridView),
+              icon: Icon(_isGridView ? Icons.view_list_rounded : Icons.grid_view_rounded),
+              tooltip: _isGridView ? 'Switch to List View' : 'Switch to Grid View',
+            ),
           IconButton(onPressed: _loadData, icon: const Icon(Icons.refresh_rounded)),
         ],
       ),
@@ -129,7 +136,9 @@ class _FarmPdfFolderScreenState extends State<FarmPdfFolderScreen> {
           ? const Center(child: CircularProgressIndicator())
           : _hasError
               ? _buildErrorUI()
-              : _mode == NavMode.farms ? _buildFarmsGrid() : _buildReportsList(),
+              : _mode == NavMode.farms 
+                  ? (_isGridView ? _buildFarmsGrid() : _buildFarmsList()) 
+                  : _buildReportsList(),
     );
   }
 
@@ -237,6 +246,69 @@ class _FarmPdfFolderScreenState extends State<FarmPdfFolderScreen> {
         );
       },
     );
+  }
+
+  Widget _buildFarmsList() {
+    if (_farms.isEmpty) {
+      return const Center(child: Text('No farm folders found.'));
+    }
+
+    final bool isWide = MediaQuery.of(context).size.width > 900;
+
+    Widget content = ListView.builder(
+      padding: const EdgeInsets.all(24),
+      itemCount: _farms.length,
+      itemBuilder: (context, index) {
+        final farm = _farms[index];
+        final reportCount = _allReports.where((r) => r['farm_id'].toString() == farm['id'].toString()).length;
+
+        return EntranceAnimation(
+          delay: index * 30,
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4)),
+              ],
+            ),
+            child: ListTile(
+              onTap: () => _openFolder(farm),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              leading: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFA000).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.folder_shared_rounded, color: Color(0xFFFFA000), size: 24),
+              ),
+              title: Text(
+                farm['farmers']?['name'] ?? 'Unnamed Farmer',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+              ),
+              subtitle: Text(
+                '${farm['name'] ?? 'Farm'} • $reportCount Files',
+                style: const TextStyle(fontSize: 12, color: AppColors.textGray),
+              ),
+              trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textGray),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (isWide) {
+      return Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1100),
+          child: content,
+        ),
+      );
+    }
+
+    return content;
   }
 
   Widget _buildReportsList() {

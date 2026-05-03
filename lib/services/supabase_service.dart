@@ -241,6 +241,63 @@ class SupabaseService {
     }
   }
 
+  static Future<Map<String, double>> getTeamSalesStats() async {
+    try {
+      final now = DateTime.now();
+      final startOfMonth = DateTime(now.year, now.month, 1).toIso8601String();
+      
+      // Fetch all relevant transactions for this month
+      final txResponse = await client.from('stock_transactions')
+          .select('executive_id, transaction_type, quantity, item_name, unit')
+          .gte('created_at', startOfMonth)
+          .inFilter('transaction_type', ['RECEIVED', 'RETURN']);
+
+      if (txResponse == null) return {};
+      
+      // Fetch products for pricing
+      final products = await getHierarchicalDropdownOptions('product_name');
+      
+      final Map<String, double> stats = {};
+      final List<Map<String, dynamic>> transactions = List<Map<String, dynamic>>.from(txResponse);
+
+      for (var tx in transactions) {
+        final execId = tx['executive_id']?.toString();
+        if (execId == null) continue;
+
+        final type = tx['transaction_type'];
+        final itemName = tx['item_name']?.toString().trim().toLowerCase();
+        final rawUnit = tx['unit']?.toString().trim().toLowerCase() ?? '';
+        final unit = rawUnit.split(' {₹')[0].trim();
+        final qty = double.tryParse(tx['quantity']?.toString() ?? '0') ?? 0.0;
+
+        // Find price
+        final product = products.firstWhere(
+          (p) => p['label']?.toString().trim().toLowerCase() == itemName,
+          orElse: () => {},
+        );
+
+        if (product.isNotEmpty) {
+          final variants = List<Map<String, dynamic>>.from(product['variants'] ?? []);
+          final variant = variants.firstWhere(
+            (v) => v['label']?.toString().trim().toLowerCase() == unit,
+            orElse: () => {},
+          );
+
+          if (variant.isNotEmpty) {
+            final price = double.tryParse(variant['offer_price']?.toString() ?? '0') ?? 0.0;
+            final amount = price * qty;
+
+            stats[execId] = (stats[execId] ?? 0.0) + (type == 'RECEIVED' ? amount : -amount);
+          }
+        }
+      }
+      return stats;
+    } catch (e) {
+      debugPrint('Error in getTeamSalesStats: $e');
+      return {};
+    }
+  }
+
   static Future<List<Map<String, dynamic>>> getTeamMembers() async {
     try {
       final user = client.auth.currentUser;

@@ -251,6 +251,99 @@ class _AddCropScreenState extends State<AddCropScreen> {
     super.dispose();
   }
 
+  Future<void> _showQuickAddVariety() async {
+    if (_selectedCropId == null) return;
+
+    final varietyController = TextEditingController();
+    final lifeController = TextEditingController();
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Quick Add Variety'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: varietyController,
+                  decoration: const InputDecoration(
+                    labelText: 'Variety Name',
+                    hintText: 'e.g. G-4 or Local',
+                  ),
+                  autofocus: true,
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: lifeController,
+                  decoration: const InputDecoration(
+                    labelText: 'Expected Life (Optional)',
+                    hintText: 'e.g. 6 Months',
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Add'),
+              ),
+            ],
+          ),
+    );
+
+    if (result == true && varietyController.text.isNotEmpty) {
+      setState(() => _isLoading = true);
+      try {
+        await SupabaseService.addMasterVariety(
+          _selectedCropId!,
+          varietyController.text.trim(),
+          lifeController.text.trim(),
+        );
+
+        // Reload master data to get the new variety with its ID
+        await _loadMasterData();
+
+        // Find the newly added variety to select it
+        final updatedCrop = _masterCrops.firstWhere(
+          (c) => c['id'] == _selectedCropId,
+        );
+        final updatedVarieties = List<Map<String, dynamic>>.from(
+          updatedCrop['master_crop_varieties'] ?? [],
+        );
+
+        final newVar = updatedVarieties.firstWhere(
+          (v) => v['variety_name'] == varietyController.text.trim(),
+        );
+
+        if (mounted) {
+          setState(() {
+            _selectedVarietyId = newVar['id'];
+            _lifeController.text = lifeController.text.trim();
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Variety added and selected'),
+              backgroundColor: AppColors.primary,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    }
+  }
+
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedCropId == null || _selectedVarietyId == null) {
@@ -529,9 +622,38 @@ class _AddCropScreenState extends State<AddCropScreen> {
                                               }
                                             });
                                           },
-                                  validator:
-                                      (v) => v == null ? 'Required' : null,
+                                  validator: (v) => v == null ? 'Required' : null,
                                 ),
+                                if (_selectedCropId != null &&
+                                    (_masterCrops.firstWhere(
+                                          (c) => c['id'] == _selectedCropId,
+                                          orElse: () => {},
+                                        )['master_crop_varieties'] as List?)
+                                        ?.isEmpty ==
+                                        true)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 12.0),
+                                    child: TextButton.icon(
+                                      onPressed: _showQuickAddVariety,
+                                      icon: const Icon(
+                                        Icons.add_circle_outline_rounded,
+                                        size: 18,
+                                      ),
+                                      label: const Text(
+                                        'No varieties found. Add one now?',
+                                        style: TextStyle(fontSize: 12),
+                                      ),
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: Colors.orange[800],
+                                        backgroundColor: Colors.orange[50],
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                               ],
                             ),
                           ),

@@ -20,7 +20,7 @@ class ExecutiveStockDetailScreen extends StatefulWidget {
 
 class _ExecutiveStockDetailScreenState extends State<ExecutiveStockDetailScreen> {
   bool _isLoading = true;
-  Map<String, double> _stockInHand = {};
+  Map<String, Map<String, double>> _stockInHand = {};
   List<Map<String, dynamic>> _history = [];
 
   @override
@@ -32,7 +32,7 @@ class _ExecutiveStockDetailScreenState extends State<ExecutiveStockDetailScreen>
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
-      final stock = await SupabaseService.getExecutiveStock(userId: widget.executiveId);
+      final stock = await SupabaseService.getDetailedExecutiveStock(userId: widget.executiveId);
       final history = await SupabaseService.getExecutiveTransactions(widget.executiveId);
       
       if (mounted) {
@@ -49,6 +49,26 @@ class _ExecutiveStockDetailScreenState extends State<ExecutiveStockDetailScreen>
 
   @override
   Widget build(BuildContext context) {
+    final bool isWide = MediaQuery.of(context).size.width > 900;
+    
+    Widget content = CustomScrollView(
+      slivers: [
+        _buildSummarySection(isWide),
+        _buildInventorySection(isWide),
+        _buildHistorySection(isWide),
+        const SliverToBoxAdapter(child: SizedBox(height: 100)),
+      ],
+    );
+
+    if (isWide) {
+      content = Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1100),
+          child: content,
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -61,21 +81,18 @@ class _ExecutiveStockDetailScreenState extends State<ExecutiveStockDetailScreen>
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _loadData,
-              child: CustomScrollView(
-                slivers: [
-                  _buildSummarySection(),
-                  _buildInventorySection(),
-                  _buildHistorySection(),
-                  const SliverToBoxAdapter(child: SizedBox(height: 100)),
-                ],
-              ),
+              child: content,
             ),
     );
   }
 
-  Widget _buildSummarySection() {
+  Widget _buildSummarySection(bool isWide) {
     double totalUnits = 0;
-    _stockInHand.forEach((key, value) => totalUnits += value);
+    _stockInHand.forEach((product, variants) {
+      variants.forEach((unit, qty) {
+        if (qty > 0) totalUnits += qty;
+      });
+    });
 
     return SliverToBoxAdapter(
       child: EntranceAnimation(
@@ -143,7 +160,7 @@ class _ExecutiveStockDetailScreenState extends State<ExecutiveStockDetailScreen>
     );
   }
 
-  Widget _buildInventorySection() {
+  Widget _buildInventorySection(bool isWide) {
     return SliverToBoxAdapter(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -167,38 +184,86 @@ class _ExecutiveStockDetailScreenState extends State<ExecutiveStockDetailScreen>
               padding: const EdgeInsets.symmetric(horizontal: 24),
               itemCount: _stockInHand.length,
               itemBuilder: (context, index) {
-                final key = _stockInHand.keys.elementAt(index);
-                final qty = _stockInHand[key];
+                final productName = _stockInHand.keys.elementAt(index);
+                final variants = _stockInHand[productName]!;
+                
+                double productTotal = 0;
+                variants.forEach((_, q) {
+                  if (q > 0) productTotal += q;
+                });
+
                 return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(16),
+                  margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4)),
                     ],
+                    border: Border.all(color: Colors.black.withOpacity(0.03)),
                   ),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withOpacity(0.1),
-                          shape: BoxShape.circle,
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(Icons.inventory_2_outlined, color: AppColors.primary, size: 20),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Text(
+                                productName,
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              ),
+                            ),
+                            Text(
+                              productTotal.toStringAsFixed(0),
+                              style: const TextStyle(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 20,
+                              ),
+                            ),
+                          ],
                         ),
-                        child: const Icon(Icons.inventory_2_outlined, color: AppColors.primary, size: 20),
                       ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Text(key, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      ),
-                      Text(
-                        '$qty',
-                        style: const TextStyle(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
+                      const Divider(height: 1),
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Wrap(
+                          spacing: 24,
+                          runSpacing: 12,
+                          children: variants.entries.where((v) => v.value > 0).map((v) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  v.key,
+                                  style: TextStyle(
+                                    color: AppColors.textGray.withOpacity(0.6),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                Text(
+                                  v.value.toStringAsFixed(0),
+                                  style: const TextStyle(
+                                    color: AppColors.textBlack,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ],
+                            );
+                          }).toList(),
                         ),
                       ),
                     ],
@@ -211,7 +276,7 @@ class _ExecutiveStockDetailScreenState extends State<ExecutiveStockDetailScreen>
     );
   }
 
-  Widget _buildHistorySection() {
+  Widget _buildHistorySection(bool isWide) {
     return SliverToBoxAdapter(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

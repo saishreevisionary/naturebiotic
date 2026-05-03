@@ -26,20 +26,19 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
   bool _isLoadingData = true;
 
   final _itemNameController = TextEditingController();
-  final _quantityController = TextEditingController();
-  final _unitController = TextEditingController(text: 'Units');
-  final _vendorNameController = TextEditingController();
   final _buyerNameController = TextEditingController();
 
   String? _selectedExecutiveId;
   String? _userRole;
   List<Map<String, dynamic>> _staffMembers = [];
   Map<int, String> _productVendors = {};
+  List<String> _allVendors = [];
   Map<String, Map<String, double>> _detailedStock = {};
 
   // Product Dropdown Data
   List<Map<String, dynamic>> _masterProducts = [];
   List<_StockItem> _items = [];
+  int? _editingIndex = 0; // Track which item is currently being edited
 
   @override
   void initState() {
@@ -80,11 +79,15 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
         setState(() {
           _masterProducts = products;
           _productVendors = vendorMap;
+          _allVendors = vendorMappings
+              .map((m) => (m['label'] as String?)?.trim() ?? '')
+              .where((v) => v.isNotEmpty)
+              .toSet()
+              .toList();
 
           // If editing, populate the form
           if (widget.initialData != null) {
             final data = widget.initialData!;
-            _vendorNameController.text = data['vendor_name'] ?? '';
             _selectedExecutiveId = data['executive_id'];
 
             _items = [];
@@ -95,6 +98,7 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
                   product: p,
                   qty: data['quantity']?.toString(),
                   unit: data['unit']?.toString(),
+                  vendor: data['vendor_name']?.toString(),
                 );
                 
                 final variants = List<Map<String, dynamic>>.from(p['variants'] ?? []);
@@ -146,7 +150,7 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
 
   Future<void> _submit() async {
     // Custom validation check
-    if (widget.transactionType == 'DELIVERY' && _userRole == 'store') {
+    if (widget.transactionType == 'DELIVERY' && (_userRole == 'store' || _userRole == 'manager' || _userRole == 'admin')) {
       if (_selectedExecutiveId == null && _buyerNameController.text.trim().isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Please select a staff member or enter buyer name'), backgroundColor: Colors.red),
@@ -215,7 +219,7 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
       final transactionId = const Uuid().v4();
 
       final isDirectPurchase = widget.transactionType == 'DELIVERY' && 
-                               _userRole == 'store' && 
+                               (_userRole == 'store' || _userRole == 'manager' || _userRole == 'admin') && 
                                _selectedExecutiveId == null &&
                                _buyerNameController.text.trim().isNotEmpty;
 
@@ -230,7 +234,10 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
           'quantity': double.parse(item.quantityController.text),
           'unit': item.unitController.text,
           'executive_id': isDirectPurchase ? null : _selectedExecutiveId,
-          'vendor_name': isDirectPurchase ? _buyerNameController.text.trim() : _vendorNameController.text,
+          'vendor_name':
+              isDirectPurchase
+                  ? _buyerNameController.text.trim()
+                  : item.vendorController.text.trim(),
           'status': (widget.transactionType == 'PURCHASE' || isDirectPurchase) ? 'ACCEPTED' : 'PENDING',
           'created_by': user?.id,
           'created_at': widget.initialData?['created_at'] ?? DateTime.now().toIso8601String(),
@@ -294,15 +301,7 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
                   padding: const EdgeInsets.all(24),
                   children: [
                     if (widget.transactionType == 'PURCHASE') ...[
-                      _buildSectionTitle('Vendor Details'),
-                      const SizedBox(height: 16),
-                      _textField(
-                        _vendorNameController,
-                        'Vendor Name',
-                        'Supplier Name',
-                        Icons.store_rounded,
-                      ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 8),
                     ],
 
                     if (widget.transactionType == 'DELIVERY' ||
@@ -317,12 +316,12 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
                         _dropdownField(),
                         const SizedBox(height: 24),
                         
-                        if (_userRole == 'store' && widget.transactionType == 'DELIVERY') ...[
-                          _buildSectionTitle('Direct Purchase (Optional)'),
+                        if ((_userRole == 'store' || _userRole == 'manager' || _userRole == 'admin') && widget.transactionType == 'DELIVERY') ...[
+                          _buildSectionTitle('Direct Sale from Store'),
                           const SizedBox(height: 8),
                           Text(
-                            'Enter buyer name ONLY if selling directly from store without an executive.',
-                            style: TextStyle(fontSize: 11, color: Colors.grey[600], fontStyle: FontStyle.italic),
+                            'To sell directly to a farmer/customer from the store, leave "Staff Member" empty and enter Buyer Name below.',
+                            style: TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w500),
                           ),
                           const SizedBox(height: 12),
                           AbsorbPointer(
@@ -345,16 +344,34 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
 
                     _buildSectionTitle('Product Items'),
                     const SizedBox(height: 16),
-                    ..._items.asMap().entries.map((entry) => _buildItemCard(entry.key, entry.value)),
+                    ..._items.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final item = entry.value;
+                      
+                      if (_editingIndex == index) {
+                        return _buildItemEntry(index, item);
+                      } else {
+                        return _buildItemSummary(index, item);
+                      }
+                    }),
                     
                     const SizedBox(height: 8),
-                    TextButton.icon(
-                      onPressed: () => setState(() => _items.add(_StockItem())),
-                      icon: const Icon(Icons.add_circle_outline_rounded),
-                      label: const Text('Add Another Product'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppColors.primary,
-                        padding: const EdgeInsets.all(12),
+                    Center(
+                      child: TextButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            _items.add(_StockItem());
+                            _editingIndex = _items.length - 1;
+                          });
+                        },
+                        icon: const Icon(Icons.add_circle_outline_rounded),
+                        label: const Text('Add Another Product'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          backgroundColor: AppColors.primary.withOpacity(0.05),
+                        ),
                       ),
                     ),
 
@@ -408,39 +425,6 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
     );
   }
 
-  Widget _buildQuantityUnitFields() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 16),
-        _buildSectionTitle('Inventory Details'),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: _textField(
-                _quantityController,
-                'Quantity',
-                '0.0',
-                Icons.numbers_rounded,
-                isNumeric: true,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: _textField(
-                _unitController,
-                'Unit',
-                'Select Product Size',
-                Icons.straighten_rounded,
-                readOnly: true,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
 
   Widget _textField(
     TextEditingController controller,
@@ -494,7 +478,7 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
         }
       },
       validator: (val) {
-        if (widget.transactionType == 'DELIVERY' && _userRole == 'store') {
+        if (widget.transactionType == 'DELIVERY' && (_userRole == 'store' || _userRole == 'manager' || _userRole == 'admin')) {
           return null;
         }
         return val == null ? 'Please select a staff member' : null;
@@ -502,57 +486,156 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
     );
   }
 
-  Widget _buildItemCard(int index, _StockItem item) {
+  Widget _buildItemSummary(int index, _StockItem item) {
+    final productName = item.product?['label'] ?? 'Select Product';
+    final variantName = item.variant?['label'] ?? '';
+    final qty = item.quantityController.text.isEmpty ? '0' : item.quantityController.text;
+    final vendor = item.vendorController.text.isEmpty ? 'No Vendor' : item.vendorController.text;
+
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: AppColors.secondary.withOpacity(0.2)),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        leading: Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: AppColors.primary.withOpacity(0.1),
+            shape: BoxShape.circle,
+          ),
+          child: Center(
+            child: Text(
+              '${index + 1}',
+              style: const TextStyle(
+                color: AppColors.primary,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ),
+        title: Text(
+          productName,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+        ),
+        subtitle: Text(
+          '${variantName.isNotEmpty ? "$variantName • " : ""}$vendor',
+          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                const Text('QTY', style: TextStyle(fontSize: 8, color: Colors.grey, fontWeight: FontWeight.bold)),
+                Text(
+                  qty,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primary,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              icon: const Icon(Icons.edit_note_rounded, color: AppColors.primary, size: 22),
+              onPressed: () => setState(() => _editingIndex = index),
+              visualDensity: VisualDensity.compact,
+            ),
+          ],
+        ),
+        onTap: () => setState(() => _editingIndex = index),
+      ),
+    );
+  }
+
+  Widget _buildItemEntry(int index, _StockItem item) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.secondary.withOpacity(0.3)),
+        border: Border.all(color: AppColors.primary.withOpacity(0.5), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Item #${index + 1}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
-              if (_items.length > 1)
-                IconButton(
-                  onPressed: () => setState(() => _items.removeAt(index)),
-                  icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
-                ),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'Item #${index + 1}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text('Editing...', style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.grey)),
+                ],
+              ),
+              Row(
+                children: [
+                  if (_items.length > 1)
+                    IconButton(
+                      onPressed: () {
+                        setState(() {
+                          _items.removeAt(index);
+                          _editingIndex = null;
+                        });
+                      },
+                      icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
+                    ),
+                  IconButton(
+                    onPressed: () => setState(() => _editingIndex = null),
+                    icon: const Icon(Icons.check_circle_outline_rounded, color: Colors.green, size: 24),
+                  ),
+                ],
+              ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           _buildProductDropdownFor(item),
+          const SizedBox(height: 12),
+          _buildVendorFieldFor(item),
           if (item.product != null) ...[
             const SizedBox(height: 12),
             _buildVariantDropdownFor(item),
           ],
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _textField(
-                  item.quantityController,
-                  'Quantity',
-                  '0.0',
-                  Icons.numbers_rounded,
-                  isNumeric: true,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _textField(
-                  item.unitController,
-                  'Unit',
-                  'Size',
-                  Icons.straighten_rounded,
-                  readOnly: true,
-                ),
-              ),
-            ],
+          _textField(
+            item.quantityController,
+            'Quantity',
+            '0.0',
+            Icons.numbers_rounded,
+            isNumeric: true,
           ),
         ],
       ),
@@ -581,9 +664,7 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
           item.variant = null;
           item.unitController.text = 'Units';
           if (val != null && _productVendors.containsKey(val['id'])) {
-             if (_vendorNameController.text.isEmpty) {
-               _vendorNameController.text = _productVendors[val['id']]!;
-             }
+            item.vendorController.text = _productVendors[val['id']]!;
           }
         });
       },
@@ -618,6 +699,82 @@ class _StockTransactionFormState extends State<StockTransactionForm> {
       },
     );
   }
+
+  Widget _buildVendorFieldFor(_StockItem item) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return RawAutocomplete<String>(
+          textEditingController: item.vendorController,
+          focusNode: FocusNode(),
+          optionsBuilder: (TextEditingValue textEditingValue) {
+            if (textEditingValue.text.isEmpty) {
+              return _allVendors;
+            }
+            return _allVendors.where((String option) {
+              return option.toLowerCase().contains(
+                textEditingValue.text.toLowerCase(),
+              );
+            });
+          },
+          onSelected: (String selection) {
+            item.vendorController.text = selection;
+          },
+          fieldViewBuilder: (
+            context,
+            controller,
+            focusNode,
+            onFieldSubmitted,
+          ) {
+            return TextFormField(
+              controller: controller,
+              focusNode: focusNode,
+              decoration: InputDecoration(
+                labelText: 'Vendor Name',
+                hintText: 'Select or type supplier',
+                prefixIcon: const Icon(Icons.store_rounded, size: 20),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                filled: true,
+                fillColor: Colors.white,
+              ),
+              onFieldSubmitted: (String value) {
+                onFieldSubmitted();
+              },
+              validator: (value) {
+                return value == null || value.isEmpty ? 'Required' : null;
+              },
+            );
+          },
+          optionsViewBuilder: (context, onSelected, options) {
+            return Align(
+              alignment: Alignment.topLeft,
+              child: Material(
+                elevation: 4.0,
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  width: constraints.maxWidth,
+                  constraints: const BoxConstraints(maxHeight: 200),
+                  child: ListView.builder(
+                    padding: EdgeInsets.zero,
+                    shrinkWrap: true,
+                    itemCount: options.length,
+                    itemBuilder: (BuildContext context, int index) {
+                      final String option = options.elementAt(index);
+                      return ListTile(
+                        title: Text(option),
+                        onTap: () => onSelected(option),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 }
 
 class _StockItem {
@@ -625,14 +782,17 @@ class _StockItem {
   Map<String, dynamic>? variant;
   final quantityController = TextEditingController();
   final unitController = TextEditingController(text: 'Units');
-  
-  _StockItem({this.product, this.variant, String? qty, String? unit}) {
+  final vendorController = TextEditingController();
+
+  _StockItem({this.product, this.variant, String? qty, String? unit, String? vendor}) {
     if (qty != null) quantityController.text = qty;
     if (unit != null) unitController.text = unit;
+    if (vendor != null) vendorController.text = vendor;
   }
 
   void dispose() {
     quantityController.dispose();
     unitController.dispose();
+    vendorController.dispose();
   }
 }
