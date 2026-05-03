@@ -73,6 +73,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   List<Map<String, dynamic>> _allCrops = [];
   List<Map<String, dynamic>> _allReports = [];
   List<Map<String, dynamic>> _allProducts = [];
+  List<Map<String, dynamic>> _allCollections = [];
   List<Map<String, dynamic>> _recentActivities = [];
   List<Map<String, dynamic>> _filteredTransactions = [];
   List<Map<String, dynamic>> _reminders = [];
@@ -111,6 +112,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     setState(() => _isLoading = true);
     try {
       final profile = await SupabaseService.getProfile();
+      SupabaseService.syncAllDropdownOptions(); // Cache all dropdowns for offline use
       final isAdmin = profile?['role'] == 'admin';
       final isManager = profile?['role'] == 'manager';
       final isExecutive = profile?['role'] == 'executive';
@@ -131,6 +133,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       final reports = await SupabaseService.getReports();
       final remoteTransactions =
           await SupabaseService.getAllStockTransactions();
+      final collections = await SupabaseService.getAllCollections();
 
       List<Map<String, dynamic>> localTransactions = [];
       if (!kIsWeb) {
@@ -186,6 +189,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           _allCrops = crops ?? [];
           _allReports = reports ?? [];
           _allTransactions = transactions ?? [];
+          _allCollections = collections ?? [];
           _allProducts = products ?? [];
           _salesTarget = (profile?['sales_target'] ?? 0.0).toDouble();
 
@@ -304,47 +308,19 @@ class _DashboardScreenState extends State<DashboardScreen>
     _totalItemsSold = itemsSold.toInt();
     _totalItemsReturned = itemsReturned.toInt();
 
-    // Calculate collections from ALL transactions in period (Collections happen on RECEIVED types)
-    totalCollection = _allTransactions
-        .where((tx) {
-          final isPeriod =
-              tx['created_at'] != null && _isInPeriod(tx, startDate, endDate);
-          final type = tx['transaction_type']?.toString().toUpperCase();
-          final isReceived = type == 'RECEIVED';
-
-          final txExecId = tx['executive_id']?.toString().toLowerCase();
-          final currentId = currentUserId?.toString().toLowerCase();
-          final isOwner =
-              txExecId == currentId ||
-              (tx['status'] == 'PENDING' && txExecId == null);
-
-          final isExecutive = _isAdmin ? true : isOwner;
-          return isPeriod && isReceived && isExecutive;
-        })
-        .fold(0.0, (sum, tx) {
-          // For RECEIVED (Payments), we prefer 'collected_amount' (local-only),
-          // but fallback to parsing the packed unit string "... {₹2000}" (Supabase)
-          double amt =
-              double.tryParse(tx['collected_amount']?.toString() ?? '0') ?? 0.0;
-
-          if (amt == 0 &&
-              tx['unit'] != null &&
-              tx['unit'].toString().contains('{₹')) {
-            try {
-              final unitStr = tx['unit'].toString();
-              final start = unitStr.indexOf('{₹') + 2;
-              final end = unitStr.indexOf('}', start);
-              if (end != -1) {
-                amt = double.tryParse(unitStr.substring(start, end)) ?? 0.0;
-              }
-            } catch (_) {}
-          }
-
-          return sum + amt;
-        });
+    // Calculate collections from dedicated farm_collections table
+    totalCollection = _allCollections.where((c) {
+      final periodOk = _isInPeriod(c, startDate, endDate);
+      if (!_isAdmin) {
+        final creatorId = c['created_by']?.toString().toLowerCase();
+        final currentId = currentUserId?.toString().toLowerCase();
+        return periodOk && creatorId == currentId;
+      }
+      return periodOk;
+    }).fold(0.0, (sum, c) => sum + (double.tryParse(c['amount']?.toString() ?? '0') ?? 0.0));
 
     _totalCollection = totalCollection;
-    _totalOutstanding = revenue - totalCollection;
+    _totalOutstanding = _totalSalesRevenue - totalCollection;
 
     // Target Logic for field staff (Executive, Telecaller, Manager)
     if (!_isAdmin && (_isExecutive || _isTelecaller || _isManager)) {
@@ -2031,7 +2007,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                   MaterialPageRoute(
                     builder: (context) => FarmSalesListScreen(
                       initialTransactions: _allTransactions,
+                      initialCollections: _allCollections,
                       allProducts: _allProducts,
+                      allFarms: _allFarms,
                       mode: 'SALES',
                     ),
                   ),
@@ -2055,6 +2033,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   MaterialPageRoute(
                     builder: (context) => FarmSalesListScreen(
                       initialTransactions: _allTransactions,
+                      initialCollections: _allCollections,
                       allProducts: _allProducts,
                       allFarms: _allFarms,
                       mode: 'OUTSTANDING',
@@ -2076,6 +2055,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   MaterialPageRoute(
                     builder: (context) => FarmSalesListScreen(
                       initialTransactions: _allTransactions,
+                      initialCollections: _allCollections,
                       allProducts: _allProducts,
                       allFarms: _allFarms,
                       mode: 'COLLECTION',

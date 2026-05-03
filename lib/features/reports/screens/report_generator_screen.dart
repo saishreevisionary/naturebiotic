@@ -439,50 +439,12 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
 
       for (var item in problemItems) {
         if (item.trim().isEmpty) continue;
-
-        if (item.contains('{img:')) {
-          final itemName = item.split('{img:')[0].trim();
-          final imageUrl = item.split('{img:')[1].replaceAll('}', '').trim();
-
-          problemWidgets.add(
-            Container(
-              width: 260,
-              margin: const EdgeInsets.only(bottom: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    itemName,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                  ),
-                  const SizedBox(height: 8),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.network(
-                      imageUrl,
-                      height: 160,
-                      width: 260,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        height: 150,
-                        width: 250,
-                        color: Colors.grey[100],
-                        child: const Icon(Icons.image_not_supported_rounded, color: Colors.grey),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        } else {
-          problemWidgets.add(
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text('• ${item.trim()}', style: const TextStyle(fontSize: 14)),
-            ),
-          );
-        }
+        problemWidgets.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: _parseTextWithImages('• ${item.trim()}', fontSize: 14),
+          ),
+        );
       }
 
       cropSections.add(
@@ -540,8 +502,8 @@ class _ReportGeneratorScreenState extends State<ReportGeneratorScreen> {
             borderRadius: BorderRadius.circular(8),
             child: Image.network(
               url,
-              height: 120,
-              width: 200,
+              height: 200,
+              width: 300,
               fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) => const Icon(Icons.broken_image, color: Colors.grey),
             ),

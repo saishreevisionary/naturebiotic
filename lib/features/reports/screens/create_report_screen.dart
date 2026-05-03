@@ -604,21 +604,29 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
       // Handle Signature Upload
       String? signatureUrl;
       final signatureBytes = await _signatureController.toPngBytes();
-      if (signatureBytes != null) {
+      final isOfflineMode = await SupabaseService.isOffline();
+      
+      if (signatureBytes != null && !isOfflineMode) {
         final sigFileName = 'sig_${DateTime.now().millisecondsSinceEpoch}.png';
-        signatureUrl = await SupabaseService.uploadImage(signatureBytes, sigFileName, 'reports');
+        try {
+          signatureUrl = await SupabaseService.uploadImage(signatureBytes, sigFileName, 'reports');
+        } catch (e) {
+          debugPrint('Error uploading signature: $e');
+        }
       }
 
       // Handle Problem Image Uploads (Aggregated)
       Map<String, String> uploadedImageUrls = {};
-      for (var entry in allProblemImages.entries) {
-        if (entry.value != null) {
-          try {
-            final fileName = '${DateTime.now().millisecondsSinceEpoch}_${allProblemImageNames[entry.key] ?? 'image.jpg'}';
-            final url = await SupabaseService.uploadImage(entry.value!, fileName, 'reports');
-            uploadedImageUrls[entry.key] = url;
-          } catch (e) {
-            debugPrint('Error uploading image for ${entry.key}: $e');
+      if (!isOfflineMode) {
+        for (var entry in allProblemImages.entries) {
+          if (entry.value != null) {
+            try {
+              final fileName = '${DateTime.now().millisecondsSinceEpoch}_${allProblemImageNames[entry.key] ?? 'image.jpg'}';
+              final url = await SupabaseService.uploadImage(entry.value!, fileName, 'reports');
+              uploadedImageUrls[entry.key] = url;
+            } catch (e) {
+              debugPrint('Error uploading image for ${entry.key}: $e');
+            }
           }
         }
       }
@@ -641,6 +649,16 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
       }
       combinedCost += 'Grand Total: ₹$grandTotal';
 
+      // Collect images that failed to upload to save them locally
+      Map<String, Uint8List> failedImages = {};
+      if (allProblemImages.isNotEmpty) {
+        allProblemImages.forEach((key, bytes) {
+          if (bytes != null && !uploadedImageUrls.containsKey(key)) {
+            failedImages[key] = bytes;
+          }
+        });
+      }
+
       final reportData = {
         'farm_id': _selectedFarmId,
         'crop_id': _selectedCropId, // Use the last crop ID as the primary reference
@@ -652,6 +670,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
         'follow_up_date': _nextVisitDate?.toIso8601String(),
         'created_at': DateTime.now().toIso8601String(),
         '_local_signature': signatureUrl == null ? signatureBytes : null,
+        '_local_images': failedImages.isNotEmpty ? failedImages : null,
       };
 
       if (kIsWeb) {

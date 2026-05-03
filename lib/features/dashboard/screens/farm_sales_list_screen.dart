@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 
 class FarmSalesListScreen extends StatefulWidget {
   final List<Map<String, dynamic>> initialTransactions;
+  final List<Map<String, dynamic>> initialCollections;
   final List<Map<String, dynamic>> allProducts;
   final List<Map<String, dynamic>> allFarms;
   final String mode; // 'SALES', 'COLLECTION', 'OUTSTANDING'
@@ -16,6 +17,7 @@ class FarmSalesListScreen extends StatefulWidget {
   const FarmSalesListScreen({
     super.key, 
     required this.initialTransactions,
+    this.initialCollections = const [],
     required this.allProducts,
     this.allFarms = const [],
     this.mode = 'SALES',
@@ -103,6 +105,28 @@ class _FarmSalesListScreenState extends State<FarmSalesListScreen> {
         }
         grouped[farmId]!['total_collection'] += amt;
       }
+    }
+
+    // 2. Process Dedicated Collections
+    for (var col in widget.initialCollections) {
+      final farmId = col['farm_id']?.toString();
+      if (farmId == null) continue;
+
+      if (!grouped.containsKey(farmId)) {
+        grouped[farmId] = {
+          'farm_id': farmId,
+          'farm_name': 'Farm #$farmId',
+          'farmer_name': 'Searching...',
+          'location': '...',
+          'total_revenue': 0.0,
+          'total_collection': 0.0,
+          'total_items': 0.0,
+          'total_returned': 0.0,
+        };
+      }
+
+      final amt = double.tryParse(col['amount']?.toString() ?? '0') ?? 0.0;
+      grouped[farmId]!['total_collection'] += amt;
     }
 
     setState(() {

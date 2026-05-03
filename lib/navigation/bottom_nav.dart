@@ -59,6 +59,8 @@ class _BottomNavState extends State<BottomNav> {
         SupabaseService.getHierarchicalDropdownOptions('product_name'),
         SupabaseService.getHierarchicalDropdownOptions('product_vendor_map'),
         SupabaseService.getAllStockTransactions(),
+        SupabaseService.getMasterCrops(),
+        SupabaseService.syncAllDropdownOptions(),
       ]);
       debugPrint('PREFETCH: Critical data cached successfully.');
     } catch (e) {

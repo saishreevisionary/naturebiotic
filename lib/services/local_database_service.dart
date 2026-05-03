@@ -510,6 +510,12 @@ class LocalDatabaseService {
     );
   }
 
+  static Future<void> deleteData(String tableName, String id) async {
+    final db = await database;
+    if (db == null) return;
+    await db.delete(tableName, where: 'id = ?', whereArgs: [id]);
+  }
+
   static Future<Map<String, dynamic>?> getTodayAttendance() async {
     final db = await database;
     if (db == null) return null;

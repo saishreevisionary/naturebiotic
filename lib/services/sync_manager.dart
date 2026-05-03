@@ -124,6 +124,14 @@ class SyncManager {
           debugPrint('SYNC: Executing $operation for $tableName:$recordId');
           await _processSyncItem(tableName, operation, payload);
           await LocalDatabaseService.updateSyncStatus(queueId, 'SYNCED');
+          
+          // CRITICAL: If this was an INSERT, delete the temporary local record from the source table
+          // so that the next fetch gets the authoritative synced version from Supabase.
+          if (operation == 'INSERT') {
+            await LocalDatabaseService.deleteData(tableName, recordId);
+            debugPrint('SYNC: Deleted local temporary record $tableName:$recordId');
+          }
+          
           debugPrint('SYNC SUCCESS: $tableName:$recordId');
         } catch (e) {
           debugPrint('SYNC FAILURE: $tableName:$recordId: $e');
@@ -194,39 +202,57 @@ class SyncManager {
       if (cleanPayload.containsKey('_local_images') &&
           cleanPayload['_local_images'] != null) {
         Map<String, dynamic> localImages;
-        if (cleanPayload['_local_images'] is String) {
-          localImages = Map<String, dynamic>.from(
-            jsonDecode(cleanPayload['_local_images']),
-          );
-        } else {
-          localImages = Map<String, dynamic>.from(
-            cleanPayload['_local_images'],
-          );
+        try {
+          if (cleanPayload['_local_images'] is String) {
+            localImages = Map<String, dynamic>.from(
+              jsonDecode(cleanPayload['_local_images']),
+            );
+          } else {
+            localImages = Map<String, dynamic>.from(
+              cleanPayload['_local_images'],
+            );
+          }
+        } catch (e) {
+          debugPrint('SYNC: Error decoding _local_images: $e');
+          localImages = {};
         }
 
         Map<String, String> uploadedUrls = {};
+        String problemStr = cleanPayload['problem'] ?? '';
 
         for (var entry in localImages.entries) {
           if (entry.value != null) {
             final List<int> bytes = List<int>.from(entry.value);
-            final fileName = 'img_${DateTime.now().millisecondsSinceEpoch}.jpg';
-            final url = await SupabaseService.uploadImage(
-              Uint8List.fromList(bytes),
-              fileName,
-              'reports',
-            );
-            uploadedUrls[entry.key] = url;
+            final fileName = 'img_${DateTime.now().millisecondsSinceEpoch}_${entry.key.hashCode}.jpg';
+            
+            // Individual image retry logic
+            String? url;
+            int retries = 0;
+            while (url == null && retries < 3) {
+              try {
+                debugPrint('SYNC: Uploading image ${entry.key} (Attempt ${retries + 1})...');
+                url = await SupabaseService.uploadImage(
+                  Uint8List.fromList(bytes),
+                  fileName,
+                  'reports',
+                ).timeout(const Duration(seconds: 60));
+              } catch (e) {
+                retries++;
+                debugPrint('SYNC: Image upload failed (${entry.key}): $e');
+                if (retries >= 3) break;
+                await Future.delayed(Duration(seconds: 2 * retries));
+              }
+            }
+
+            if (url != null) {
+              uploadedUrls[entry.key] = url;
+              // Replace in string immediately to be safe
+              final displayKey = entry.key.contains('_') ? entry.key.split('_').last : entry.key;
+              problemStr = problemStr.replaceAll(entry.key, '$displayKey {img: $url}');
+            }
           }
         }
 
-        // Reconstruct problem string with remote URLs
-        String problemStr = cleanPayload['problem'] ?? '';
-        for (var entry in uploadedUrls.entries) {
-          problemStr = problemStr.replaceFirst(
-            RegExp(r'\{img: .*?\}'),
-            '{img: ${entry.value}}',
-          );
-        }
         cleanPayload['problem'] = problemStr;
         cleanPayload.remove('_local_images');
       } else {
